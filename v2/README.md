@@ -57,3 +57,26 @@ O launcher grava fitdr36s/fitd-r36s.log. Via SSH:
 O build-diagnostics.txt registra dependências e os símbolos de GLIBC/GLIBCXX. O pacote só inclui libstdc++, libgcc e libatomic quando presentes. Glibc, loader ELF, EGL/GLES, GBM e drivers DRM devem vir do firmware, nunca de um sistema diferente.
 
 Riscos: falta de DRM master, incompatibilidade dos shaders, troca de buffers EGL/KMSDRM e comportamento do controle. Ainda não é um lançamento certificado no PortMaster, nem uma otimização de LOD.
+
+
+## Versao DEBUG para descobrir por que nao abre
+A compilacao **FITD-R36S-AARCH64-DEBUG** gera o ZIP interno fitdr36s-aarch64-debug.zip. Ela registra mensagens de inicializacao do SDL3 e bgfx, cria contexto GLES, reporta biblioteca ELF e detecta deadlock se o renderizador nao responder em 30 segundos. A build usa simbolos minimos de depuracao e conserva o motor original.
+
+Instalacao: extraia o ZIP interno na pasta ports, substituindo o launcher e o arquivo fitdr36s/fitd.aarch64 anteriores. Preserve os dados originais do jogo em fitdr36s/data e todas as pastas do jogo.
+
+Por padrao o modo diagnostico esta ATIVADO (FITD_DEBUG=1). Execute FITD-R36S-ARM64.sh pelo menu PortMaster/Ports normalmente. Se o jogo nao abrir, mesmo saindo imediatamente, procure no cartao:
+
+    /roms/ports/fitdr36s/logs/fitd-debug.log
+
+Se seus jogos ficam em /roms2, use /roms2/ports/fitdr36s/logs/fitd-debug.log. A ultima execucao anterior e guardada no arquivo fitd-debug-previous.log. Envie fitd-debug.log junto com fitdr36s/build-diagnostics.txt para analise. Os logs podem conter nome de caminhos, dispositivos e outros detalhes do sistema: confira antes de compartilhar publicamente.
+
+Se o jogo travar totalmente e voce desligar o console, o arquivo fitd-debug.log ainda guarda as ultimas etapas impressas antes do travamento (desde que a gravacao no cartao tenha sido concluida).
+
+Opcional, somente para testes via SSH se o R36S tiver gdb instalado:
+
+    cd /roms/ports
+    FITD_GDB=1 ./FITD-R36S-ARM64.sh
+
+Isso tenta incluir backtraces das threads no mesmo log. Se o gdb nao estiver presente, o launcher executa sem o depurador. FITD_DEBUG=0 reduz verbosidade SDL, mantendo diagnósticos basicos.
+
+O script nao exige root, nao instala bibliotecas no sistema e nao altera EGL/GLIBC da firmware.

@@ -1,14 +1,14 @@
 {
   "version": 4,
-  "name": "fitdr36s-aarch64-experimental.zip",
+  "name": "fitdr36s-aarch64-debug.zip",
   "items": [
     "FITD-R36S-ARM64.sh",
     "fitdr36s"
   ],
   "items_opt": [],
   "attr": {
-    "title": "FITD - Alone in the Dark (R36S ARM64)",
-    "desc": "Experimental (unverified) port of yaz0r/FITD for R36S RK3326 AArch64 dArkOSRE.",
+    "title": "FITD - R36S ARM64 (DEBUG)",
+    "desc": "Experimental diagnostic build with EGL/SDL3/bgfx initialization and system logs.",
     "inst": "Copy your original game files to fitdr36s/data and launch. No copyrighted game data supplied.",
     "genres": [
       "adventure"
