@@ -1,0 +1,46 @@
+name: FITD R36S - ARMHF PortMaster
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/fitd-r36s.yml"
+      - "build/**"
+      - "port/**"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  armhf:
+    name: ARMHF Debian Bullseye (glibc 2.31)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+    steps:
+      - name: Checkout builder
+        uses: actions/checkout@v4
+      - name: Enable ARM QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm
+      - name: Build FITD, SDL12-compat and GL4ES on ARMHF
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p output
+          docker run --rm --platform linux/arm/v7 \
+            -v "$GITHUB_WORKSPACE:/workspace" \
+            -w /workspace \
+            debian:bullseye bash ./build/armhf.sh
+      - name: Package PortMaster archive
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cp port/port.json output/port.json
+          ( cd output && zip -yr "$GITHUB_WORKSPACE/FITD-R36S-PortMaster-ARMHF.zip" . )
+          unzip -l FITD-R36S-PortMaster-ARMHF.zip
+      - name: Upload result
+        uses: actions/upload-artifact@v4
+        with:
+          name: FITD-R36S-PortMaster-ARMHF
+          path: FITD-R36S-PortMaster-ARMHF.zip
+          if-no-files-found: error
+          retention-days: 30
