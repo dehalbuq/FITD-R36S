@@ -1,0 +1,18 @@
+[controls]
+back = esc
+start = enter
+up = up
+down = down
+left = left
+right = right
+left_analog_up = up
+left_analog_down = down
+left_analog_left = left
+left_analog_right = right
+a = space
+b = enter
+x = esc
+y = space
+l1 = space
+r1 = enter
+r2 = esc
