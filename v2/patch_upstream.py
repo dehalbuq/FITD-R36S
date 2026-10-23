@@ -155,3 +155,103 @@ gamepad = r"""
 """
 file.write_text(value.replace(marker, gamepad + marker, 1))
 print("AArch64 SDL3/GLES3 patch applied:", root)
+
+
+# Diagnostics apply after the original ARM64 patches above, so failures remain
+# source-pinned and do not silently modify unrecognized upstream revisions.
+replace_one("FitdLib/osystemSDL.cpp",
+    '#include <backends/imgui_impl_sdl3.h>',
+    '#include <backends/imgui_impl_sdl3.h>\n#include <cstdio>\n#include <cstdlib>')
+replace_one("FitdLib/osystemSDL.cpp",
+    '    startOfRender = SDL_CreateSemaphore(0);',
+    '    setvbuf(stdout, nullptr, _IONBF, 0);\n'
+    '    setvbuf(stderr, nullptr, _IONBF, 0);\n'
+    '    fprintf(stderr, "[FITD-R36S] stage=FitdInit started\\n");\n'
+    '    startOfRender = SDL_CreateSemaphore(0);')
+replace_one("FitdLib/osystemSDL.cpp",
+    '    osystem_init();',
+    '    fprintf(stderr, "[FITD-R36S] stage=SDL_Init begin\\n");\n'
+    '    osystem_init();\n'
+    '    fprintf(stderr, "[FITD-R36S] stage=SDL_Init OK video=%s\\n", '
+    'SDL_GetCurrentVideoDriver() ? SDL_GetCurrentVideoDriver() : "none");')
+replace_one("FitdLib/osystemSDL.cpp",
+    '    if (!SDL_Init(SDL_INIT_VIDEO))',
+    '    const char* debugMode = std::getenv("FITD_DEBUG");\n'
+    '    if (!debugMode || debugMode[0] != \'0\') {\n'
+    '        SDL_SetLogPriorities(SDL_LOG_PRIORITY_DEBUG);\n'
+    '        fprintf(stderr, "[FITD-R36S] SDL log priority=DEBUG\\n");\n'
+    '    }\n'
+    '    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD))')
+replace_one("FitdLib/osystemSDL.cpp",
+    '        assert(0);',
+    '        fprintf(stderr, "[FITD-R36S] FATAL: SDL initialization failed\\n");\n'
+    '        std::exit(11);')
+replace_one("FitdLib/osystemSDL.cpp",
+    '    gR36sContext = SDL_GL_CreateContext(gWindowBGFX);',
+    '    fprintf(stderr, "[FITD-R36S] stage=SDL_CreateWindow OK 640x480\\n");\n'
+    '    gR36sContext = SDL_GL_CreateContext(gWindowBGFX);')
+replace_one("FitdLib/osystemSDL.cpp",
+    '    SDL_GL_MakeCurrent(gWindowBGFX, nullptr);',
+    '    int glMajor = 0, glMinor = 0;\n'
+    '    SDL_GL_GetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, &glMajor);\n'
+    '    SDL_GL_GetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, &glMinor);\n'
+    '    fprintf(stderr, "[FITD-R36S] stage=SDL_GL_CreateContext OK GLES=%d.%d ctx=%p\\n", '
+    'glMajor, glMinor, static_cast<void*>(gR36sContext));\n'
+    '    if (!SDL_GL_MakeCurrent(gWindowBGFX, nullptr))\n'
+    '        fprintf(stderr, "[FITD-R36S] warning: SDL_GL_MakeCurrent(detach): %s\\n", SDL_GetError());')
+replace_one("FitdLib/osystemSDL.cpp",
+    '    detectGame();',
+    '    fprintf(stderr, "[FITD-R36S] stage=detectGame begin\\n");\n'
+    '    detectGame();\n'
+    '    fprintf(stderr, "[FITD-R36S] stage=detectGame OK\\n");')
+replace_one("FitdLib/osystemSDL.cpp",
+    'static int SDLCALL r36sGameThread(void*) { return FitdMain(0, nullptr); }',
+    'static int SDLCALL r36sGameThread(void*) {\n'
+    '    fprintf(stderr, "[FITD-R36S] stage=FitdMain worker started\\n");\n'
+    '    const int rc = FitdMain(0, nullptr);\n'
+    '    fprintf(stderr, "[FITD-R36S] stage=FitdMain worker returned rc=%d\\n", rc);\n'
+    '    fflush(stderr);\n'
+    '    return rc;\n'
+    '}')
+replace_one("FitdLib/osystemSDL.cpp",
+    '    unsigned long int t_start = SDL_GetTicks();',
+    '    fprintf(stderr, "[FITD-R36S] stage=SDL event loop starting\\n");\n'
+    '    unsigned long int t_start = SDL_GetTicks();')
+replace_one("FitdLib/osystemSDL.cpp",
+    '        SDL_WaitSemaphore(endOfRender);',
+    '        if (!SDL_WaitSemaphoreTimeout(endOfRender, 30000)) {\n'
+    '            fprintf(stderr, "[FITD-R36S] FATAL: waited 30 seconds for rendering thread; SDL=%s\\n", '
+    'SDL_GetError());\n'
+    '            fflush(stderr);\n'
+    '            std::exit(12);\n'
+    '        }')
+
+replace_one("FitdLib/bgfxGlue.cpp",
+    '    createBgfxInitParams();',
+    '    fprintf(stderr, "[FITD-R36S] stage=bgfx create parameters\\n");\n'
+    '    createBgfxInitParams();')
+replace_one("FitdLib/bgfxGlue.cpp",
+    '    initparam.platformData.context = SDL_GL_GetCurrentContext();',
+    '    fprintf(stderr, "[FITD-R36S] stage=bgfx GLES context current=%p\\n", '
+    'SDL_GL_GetCurrentContext());\n'
+    '    initparam.platformData.context = SDL_GL_GetCurrentContext();')
+replace_one("FitdLib/bgfxGlue.cpp",
+    '    if (!bgfx::init(initparam)) {',
+    '    fprintf(stderr, "[FITD-R36S] stage=bgfx::init begin\\n");\n'
+    '    if (!bgfx::init(initparam)) {')
+replace_one("FitdLib/bgfxGlue.cpp",
+    '    imguiCreate();',
+    '    fprintf(stderr, "[FITD-R36S] stage=bgfx::init OK renderer=%s\\n", '
+    'bgfx::getRendererName(bgfx::getRendererType()));\n'
+    '    imguiCreate();')
+replace_one("FitdLib/bgfxGlue.cpp",
+    '    bgfx::frame();\n#ifdef FITD_R36S',
+    '    static bool loggedFirstFrame = false;\n'
+    '    if (!loggedFirstFrame) fprintf(stderr, "[FITD-R36S] stage=first bgfx::frame begin\\n");\n'
+    '    bgfx::frame();\n'
+    '    if (!loggedFirstFrame) {\n'
+    '        fprintf(stderr, "[FITD-R36S] stage=first bgfx::frame OK\\n");\n'
+    '        loggedFirstFrame = true;\n'
+    '    }\n'
+    '#ifdef FITD_R36S')
+print("R36S diagnostic instrumentation installed")
