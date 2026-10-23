@@ -52,6 +52,10 @@ replace_one("FitdLib/osystemSDL.cpp",
     '    }')
 
 replace_one("FitdLib/bgfxGlue.cpp",
+    '#include "SDL3/SDL.h"',
+    '#include "SDL3/SDL.h"\n#include <cstdio>')
+
+replace_one("FitdLib/bgfxGlue.cpp",
     '    createBgfxInitParams();',
     '    createBgfxInitParams();\n'
     '#ifdef FITD_R36S\n'
