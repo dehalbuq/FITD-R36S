@@ -7,7 +7,14 @@ cd "$ROOT"
 if [ "$(dpkg --print-architecture)" != armhf ]; then
   echo "FATAL: expected armhf, got $(dpkg --print-architecture)" >&2; exit 2
 fi
-apt-get update
+# Bullseye LTS EOL: official security package indices on the live mirror return 404.
+# Use Debian's archived, signed Bullseye and security snapshots instead.
+printf '%s\n' \
+ 'deb [check-valid-until=no] http://archive.debian.org/debian bullseye main' \
+ 'deb [check-valid-until=no] http://archive.debian.org/debian-archive/debian-security bullseye-security main' \
+ > /etc/apt/sources.list
+rm -f /etc/apt/sources.list.d/*.list
+apt-get -o Acquire::Check-Valid-Until=false update
 apt-get install -y --no-install-recommends \
  build-essential qt5-qmake cmake pkg-config python3 git file binutils \
  libsdl1.2-dev libsdl-mixer1.2-dev libsdl2-dev \
