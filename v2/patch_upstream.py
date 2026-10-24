@@ -260,9 +260,9 @@ replace_one("FitdLib/bgfxGlue.cpp",
 # All FITD pixel shaders include palette.sh, so one fix covers every program.
 replace_one("FitdLib/shaders/palette.sh",
     'USAMPLER2D(s_paletteTexture, 1);',
-    '#if BGFX_SHADER_LANGUAGE_GLSL >= 300\\n'
-    'precision highp usampler2D;\\n'
-    '#endif\\n'
+    '#if BGFX_SHADER_LANGUAGE_GLSL >= 300\n'
+    'precision highp usampler2D;\n'
+    '#endif\n'
     'USAMPLER2D(s_paletteTexture, 1);')
 print("R36S shader precision fix installed")
 
