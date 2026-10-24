@@ -586,3 +586,50 @@ replace_one("FitdLib/input.cpp",
     'EXIT: START+SELECT (or Enter+Escape) held',
     'EXIT: START+SELECT or A+B (or Enter+Escape) held')
 print("R36S post-bgfx pixel probe / draw stats / A+B exit installed")
+
+
+
+# Diagnostic: the R36S can draw RGB and magenta through SDL/GL, while bgfx
+# reports real draw calls but SDL's default framebuffer reads as black.
+# Make BGFX itself clear a *separate, last* diagnostic view (ID 30) to GREEN
+# for 10 seconds after the game starts. The view is explicitly attached to
+# the default framebuffer and runs after normal game view 0. If green appears,
+# BGFX scanout is good and the source game geometry/textures/shaders are next.
+replace_one("FitdLib/bgfxGlue.cpp",
+    '    static bool loggedFirstFrame = false;',
+    '''    static bool loggedFirstFrame = false;
+#ifdef FITD_R36S
+    static Uint64 r36sBgfxTestStarted = SDL_GetTicks();
+    static bool r36sBgfxTestFinished = false;
+    if (SDL_GetTicks() - r36sBgfxTestStarted < 10000u) {
+        // Use view 30 so its clear executes after the game view 0.
+        bgfx::setViewName(30, "R36S BGFX Green Probe");
+        bgfx::setViewFrameBuffer(30, BGFX_INVALID_HANDLE);
+        bgfx::setViewRect(30, 0, 0, uint16_t(outputResolution[0]), uint16_t(outputResolution[1]));
+        bgfx::setViewClear(30, BGFX_CLEAR_COLOR, 0x00ff00ff);
+        bgfx::touch(30);
+        if (SDL_GetTicks() - r36sBgfxTestStarted < 40u) {
+            fprintf(stderr, "[FITD-R36S] BGFX GREEN VIEW: should be visible after magenta ends\\n");
+        }
+    } else if (!r36sBgfxTestFinished) {
+        fprintf(stderr, "[FITD-R36S] BGFX GREEN VIEW: stopped, showing native game output\\n");
+        r36sBgfxTestFinished = true;
+    }
+#endif''')
+# Read more than the center pixel: all-black center alone is not conclusive.
+replace_one("FitdLib/bgfxGlue.cpp",
+    '        glRead(320, 240, 1, 1, 0x1908u, 0x1401u, before); // GL_RGBA, GL_UNSIGNED_BYTE',
+    '''        glRead(320, 240, 1, 1, 0x1908u, 0x1401u, before); // GL_RGBA, GL_UNSIGNED_BYTE
+        const int xs[3] = {64, 320, 576};
+        const int ys[3] = {48, 240, 432};
+        int nonblack = 0;
+        for (int iy = 0; iy < 3; ++iy) {
+            for (int ix = 0; ix < 3; ++ix) {
+                unsigned char pix[4] = {0, 0, 0, 0};
+                glRead(xs[ix], ys[iy], 1, 1, 0x1908u, 0x1401u, pix);
+                if (pix[0] > 8 || pix[1] > 8 || pix[2] > 8)
+                    ++nonblack;
+            }
+        }
+        fprintf(stderr, "[FITD-R36S] COLOR GRID: frame=%u nonblack=%d/9\\n", frame, nonblack);''')
+print("R36S BGFX GREEN overlay + 9-pixel scanout diagnostics installed")
