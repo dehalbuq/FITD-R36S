@@ -983,8 +983,5 @@ replace_one("FitdLib/osystemSDL.cpp",
     if (!SDL_GL_SetSwapInterval(r36sSwapInterval)) {''')
 replace_one("FitdLib/osystemSDL.cpp",
     'stage=SDL swap interval=1',
-    'stage=SDL swap interval=%d')
-replace_one("FitdLib/osystemSDL.cpp",
-    '''fprintf(stderr, "[FITD-R36S] stage=SDL swap interval=%d\\\\n");''',
-    '''fprintf(stderr, "[FITD-R36S] stage=SDL swap interval=%d\\\\n", r36sSwapInterval);''')
+    'stage=SDL swap interval configured')
 print("R36S v3: 10 save slots, actual Abandon quit, music/SFX states, honest HIGH graphics, optional FPS 0-120 and vsync")
