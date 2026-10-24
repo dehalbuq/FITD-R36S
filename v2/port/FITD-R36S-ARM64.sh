@@ -23,8 +23,7 @@ exec >> "$LOG" 2>&1
 # WARNING: FITD is an old 25Hz engine; >25 may increase gameplay speed.
 # R36S renders ~58.5 FPS, while script/animation time uses a 25Hz clock.
 export FITD_FPS_LIMIT="${FITD_FPS_LIMIT:-60}"
-# Fixed real-time 25Hz game clock; choose 'legacy' to compare old behavior.
-export FITD_GAME_CLOCK="${FITD_GAME_CLOCK:-fixed}"
+# Original engine timing retained: NPC bug predates the 60 FPS change.
 # Enemy/AI movement trace, logs every two seconds.
 export FITD_AI_TRACE="${FITD_AI_TRACE:-1}"
 # Log real FPS and milliseconds spent in bgfx and KMS/SDL swap every 5 seconds.

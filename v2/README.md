@@ -214,3 +214,11 @@ Artefato **FITD-R36S-AARCH64-NPC-CLOCK-FIX** (ZIP fitdr36s-aarch64-npc-clock-fix
 - `FITD_AI_TRACE=1` ativado para diagnostico (a cada 2 s escreve `AI TRACE` e `AI ACTOR` com id, sala, track, coordenadas, velocidade e colisao). Para desligar use 0.
 
 Teste na **mesma cena**: iniciar novo jogo (ou salvar ANTES da aparicao do monstro), deixar `FITD_FPS_LIMIT=60`, comparar primeiro `FITD_GAME_CLOCK=fixed` e, se ainda estiver preso, `FITD_GAME_CLOCK=legacy`. Enviar logs mostrando o mesmo monstro antes e depois de ficar preso. A taxa visual de 60 Hz pode incluir frames com pose igual a anterior; a interpolacao suave de personagens a 60 Hz preservando a simulacao a 25 Hz sera uma evolucao separada. Guarde a versao anterior jogavel e backup de SAVE*.ITD.
+
+
+## 2026-10-24 — Reorientacao de debug do monstro da janela
+Usuario esclareceu que o monstro ja ficava enroscado **antes** do aumento de FPS para 60. Portanto, NAO associar esse bug ao relogio acelerado sem evidencia. A tentativa anterior de `NPC-CLOCK-FIX` **nao compilou** (`mainLoop.cpp` nao possuia cabecalhos SDL3; `SDL_getenv` e `Uint64` nao encontrados). Nunca instalar essa build. 
+
+Novo artifact **FITD-R36S-AARCH64-NPC-AI-TRACE**, ZIP interno `fitdr36s-aarch64-npc-ai-trace.zip`: preserva render ~58,5 FPS, a temporizacao original do FITD (como na versao PERF-PROFILE ja validada pelo usuario), a logica `LM_SPECIAL flow=1` original sem alteracoes, os shaders R8U corrigidos, musica, menus e saves. Apenas adiciona `#include SDL3/SDL.h` em `mainLoop.cpp` e telemetria NPC. Com `FITD_AI_TRACE=1` escreve `AI TRACE` e `AI ACTOR` cada 2 segundos: id, sala, scripts de vida, modo de trajeto, waypoint, posicao X/Z, movimento X/Z, velocidade, animacao e colisao; um inimigo parado pode ser diagnosticado observando valores repetidos. `FITD_AI_TRACE=0` desliga as mensagens.
+
+Teste a cena original sem empurrar o armario na frente da janela. Se o monstro estiver travado sem obstrucao proposital, capture mais 15 a 30 segundos do mesmo local e envie `fitdr36s/logs/fitd-debug.log`. Comparar id do inimigo, modo de trajetoria, posicao, speed e colisoes. Nao alterar precocemente IA/colisao nem reescalar o relogio do jogo.
