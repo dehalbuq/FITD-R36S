@@ -1406,7 +1406,7 @@ static long long r36sHorizontalOverlapArea(const ZVStruct* a, const ZVStruct* b)
 
 '''
 src=src.replace(anchor,helper+anchor,1)
-a=src.index(anchor)
+a=src.index("int CheckObjectCol(int actorIdx, ZVStruct* zvPtr)")
 b=src.index("void take(int objIdx)",a)
 head,body,tail=src[:a],src[a:b],src[b:]
 needle='''        if (currentActor->indexInWorld == -1 ||
