@@ -267,3 +267,55 @@ replace_one("FitdLib/shaders/palette.sh",
 print("R36S shader precision fix installed")
 
 print("R36S diagnostic instrumentation installed")
+
+
+# R36S runtime findings: KMSDRM pageflip returns EINVAL on the RK3326 kernel.
+# Keep SDL_GL_SwapWindow: bgfx sees an externally owned EGL context and its
+# GlContext::swap() does not present that SDL-owned surface.
+# First request supported vsync behavior instead of KMS async pageflips.
+replace_one("FitdLib/osystemSDL.cpp",
+    '    int glMajor = 0, glMinor = 0;',
+    '    if (!SDL_GL_SetSwapInterval(1)) {'
+    ' fprintf(stderr, "[FITD-R36S] warning: cannot enable swap interval 1: %s\\n", SDL_GetError());'
+    ' } else {'
+    ' fprintf(stderr, "[FITD-R36S] stage=SDL swap interval=1\\n");'
+    ' }\n'
+    '    int glMajor = 0, glMinor = 0;')
+
+# On this kernel drmModeSetCrtc succeeds but drmModePageFlip fails with -EINVAL.
+# SDL 3.2.14's KMSDRM error path only logs and continues, leaving the display
+# stuck on its first framebuffer. Use a conservative modeset fallback per frame.
+# This costs extra modeset work/possible tearing but enables first visual tests.
+replace_one("ThirdParty/SDL/src/video/kmsdrm/SDL_kmsdrmopengles.c",
+    '''        } else {
+            SDL_LogError(SDL_LOG_CATEGORY_VIDEO, "Could not queue pageflip: %d", ret);
+        }''',
+    '''        } else if (ret == -EINVAL) {
+            static bool r36s_pageflip_fallback_logged = false;
+            if (!r36s_pageflip_fallback_logged) {
+                SDL_LogWarn(SDL_LOG_CATEGORY_VIDEO,
+                    "FITD-R36S: drmModePageFlip returned -EINVAL; switching to drmModeSetCrtc fallback");
+                r36s_pageflip_fallback_logged = true;
+            }
+            ret = KMSDRM_drmModeSetCrtc(viddata->drm_fd,
+                                        dispdata->crtc->crtc_id,
+                                        fb_info->fb_id, 0, 0,
+                                        &dispdata->connector->connector_id, 1,
+                                        &dispdata->mode);
+            if (ret != 0) {
+                return SDL_SetError("FITD-R36S: drmModeSetCrtc fallback failed (%d)", ret);
+            }
+            windata->waiting_for_flip = false;
+        } else {
+            SDL_LogError(SDL_LOG_CATEGORY_VIDEO, "Could not queue pageflip: %d", ret);
+        }''')
+
+# Avoid unsigned-vector % in the noise shader. On the Mali GLES compiler the
+# translation can become a mod() call with integer arguments, which GLSL ES
+# does not overload; use floor-based wrapping instead.
+replace_one("FitdLib/shaders/noise_ps.sc",
+    '    uvec2 noiseSampler = uvec2(v_screenSpacePosition.xy * v_screenSpacePosition.z) % uvec2(255, 255);',
+    '''    vec2 noisePosition = floor(v_screenSpacePosition.xy * v_screenSpacePosition.z);
+    vec2 noiseWrapped = noisePosition - floor(noisePosition / 255.0) * 255.0;
+    ivec2 noiseSampler = ivec2(noiseWrapped);''')
+print("R36S KMSDRM EINVAL fallback and noise shader fix installed")

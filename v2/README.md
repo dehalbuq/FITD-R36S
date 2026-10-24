@@ -87,3 +87,20 @@ O log do R36S mostrou que a deteccao de Alone in the Dark funcionou, mas a GPU r
 A versao **FITD-R36S-AARCH64-GLES3-FIX** incorpora a declaracao **precision highp usampler2D;** no shader compartilhado palette.sh (condicional para GLSL >= 300). O pacote ainda inclui o modo DEBUG e o launcher que produz **fitdr36s/logs/fitd-debug.log**. Baixe especificamente o artefato desta nova execucao, nao o DEBUG anterior, e copie novamente o executavel/launcher sem apagar a pasta data.
 
 Importante: o arquivo **fitd-r36s.log** com "Compiled the Oct 23 2026 at 22:49:31" e da versao anterior, que nao incluia os novos diagnosticos. No proximo teste, envie **fitd-debug.log** gerado pelo launcher atualizado. Compilacao verde nao garante sucesso em runtime na Mali-G31.
+
+
+## RK3326/Mali-G31: tela preta apos corrigir shader palette
+Em testes reais enviados pelo usuario, o dArkOSRE AArch64 com kernel 4.4.189 abre SDL3/KMSDRM, cria EGL/GLES 3, detecta Alone in the Dark e inicializa bgfx. Entretanto, SDL3 3.2.14 reporta centenas de "Could not queue pageflip: -22" (EINVAL) e em seguida bgfx aborta com "No matching overload for function 'mod' found". A versao anterior tambem exibiu tela preta.
+
+**Build experimental: FITD-R36S-AARCH64-KMSDRM-FIX** / ZIP interno fitdr36s-aarch64-kmsdrm-fix.zip.
+
+Correcao em tres partes:
+1. Tenta SDL_GL_SetSwapInterval(1) para evitar DRM_MODE_PAGE_FLIP_ASYNC em kernels que nao o aceitam.
+2. No SDL3 KMSDRM embutido, se drmModePageFlip retornar -EINVAL, faz o fallback para drmModeSetCrtc do framebuffer mais recente e imprime um aviso unico. Esse fallback pode causar tearing, custo de CPU ou incompatibilidade com outros firmwares. Nao altera drivers do sistema e somente afeta o SDL estaticamente integrado ao jogo.
+3. Substitui o modulo vetorial de inteiros (operador %) no shader noise_ps.sc por calculo float com floor(), evitando um overload inexistente de mod() no GLSL ES gerado.
+
+bgfx foi inicializado com contexto EGL **externo ao bgfx**, criado pelo SDL3. Nesse modo, o proprio bgfx nao realiza a apresentacao do buffer SDL; manter SDL_GL_SwapWindow e necessario. Nao remover a chamada. A pagina preta ainda pode ter outras causas a investigar.
+
+Preserve /roms/ports/fitdr36s/data e instale o novo ZIP extraindo o arquivo interno em /roms/ports. Teste o launcher e envie fitdr36s/logs/fitd-debug.log, particularmente as mensagens "SDL swap interval", "FITD-R36S: drmModePageFlip", "BGFX FATAL" e "Exit code". Se a tela permanecer preta sem crash, encerre o jogo, aguarde a gravacao do log e envie o arquivo.
+
+Observacao: compilacao CI verde comprova apenas que o port ARM64 compila; nao valida o KMSDRM do R36S.
