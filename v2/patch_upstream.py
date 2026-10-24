@@ -1035,14 +1035,14 @@ replace_one("ThirdParty/SDL/src/video/kmsdrm/SDL_kmsdrmopengles.c",
 # separately, once per 5 seconds. No glReadPixels, synchronizing queries, or
 # additional drawing is used.
 replace_one("FitdLib/bgfxGlue.cpp",
-    '''    bgfx::frame();
-#ifdef FITD_R36S''',
+    '    bgfx::frame();',
     '''#ifdef FITD_R36S
     const Uint64 r36sBgfxBegin = SDL_GetPerformanceCounter();
 #endif
     bgfx::frame();
 #ifdef FITD_R36S
-    const Uint64 r36sBgfxEnd = SDL_GetPerformanceCounter();''')
+    const Uint64 r36sBgfxEnd = SDL_GetPerformanceCounter();
+#endif''')
 replace_one("FitdLib/bgfxGlue.cpp",
     '''        const char* gpuTrace = SDL_getenv("FITD_GPU_TRACE");''',
     '''        const Uint64 r36sSwapBegin = SDL_GetPerformanceCounter();
