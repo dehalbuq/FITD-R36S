@@ -536,7 +536,8 @@ static void r36sInspectFrameBeforeSwap()
 
     int fbo = 0;
     glGetInteger(0x8CA6u, &fbo); // GL_FRAMEBUFFER_BINDING
-    bool probe = SDL_GetTicks() - firstFrameAt < 3500u;
+    const char* r36sMagenta = SDL_getenv("FITD_MAGENTA_TEST");
+    bool probe = r36sMagenta && r36sMagenta[0] == '1' && SDL_GetTicks() - firstFrameAt < 3500u;
     bool sample = probe && (frame == 1 || frame == 25 || frame == 75);
     sample = sample || (frame % 250 == 0);
 
@@ -589,33 +590,6 @@ print("R36S post-bgfx pixel probe / draw stats / A+B exit installed")
 
 
 
-# Diagnostic: the R36S can draw RGB and magenta through SDL/GL, while bgfx
-# reports real draw calls but SDL's default framebuffer reads as black.
-# Make BGFX itself clear a *separate, last* diagnostic view (ID 30) to GREEN
-# for 10 seconds after the game starts. The view is explicitly attached to
-# the default framebuffer and runs after normal game view 0. If green appears,
-# BGFX scanout is good and the source game geometry/textures/shaders are next.
-replace_one("FitdLib/bgfxGlue.cpp",
-    '    static bool loggedFirstFrame = false;',
-    '''    static bool loggedFirstFrame = false;
-#ifdef FITD_R36S
-    static Uint64 r36sBgfxTestStarted = SDL_GetTicks();
-    static bool r36sBgfxTestFinished = false;
-    if (SDL_GetTicks() - r36sBgfxTestStarted < 10000u) {
-        // Use view 30 so its clear executes after the game view 0.
-        bgfx::setViewName(30, "R36S BGFX Green Probe");
-        bgfx::setViewFrameBuffer(30, BGFX_INVALID_HANDLE);
-        bgfx::setViewRect(30, 0, 0, uint16_t(outputResolution[0]), uint16_t(outputResolution[1]));
-        bgfx::setViewClear(30, BGFX_CLEAR_COLOR, 0x00ff00ff);
-        bgfx::touch(30);
-        if (SDL_GetTicks() - r36sBgfxTestStarted < 40u) {
-            fprintf(stderr, "[FITD-R36S] BGFX GREEN VIEW: should be visible after magenta ends\\n");
-        }
-    } else if (!r36sBgfxTestFinished) {
-        fprintf(stderr, "[FITD-R36S] BGFX GREEN VIEW: stopped, showing native game output\\n");
-        r36sBgfxTestFinished = true;
-    }
-#endif''')
 # Read more than the center pixel: all-black center alone is not conclusive.
 replace_one("FitdLib/bgfxGlue.cpp",
     '        glRead(320, 240, 1, 1, 0x1908u, 0x1401u, before); // GL_RGBA, GL_UNSIGNED_BYTE',
@@ -633,3 +607,29 @@ replace_one("FitdLib/bgfxGlue.cpp",
         }
         fprintf(stderr, "[FITD-R36S] COLOR GRID: frame=%u nonblack=%d/9\\n", frame, nonblack);''')
 print("R36S BGFX GREEN overlay + 9-pixel scanout diagnostics installed")
+
+
+# Root-cause candidate for GPU BLACK FRAMES despite successful bgfx draws:
+# GLES3 integer color texture formats (R8UI / bgfx R8U) cannot use GL_LINEAR.
+# On this bgfx revision the nearest-only fallback is *skipped* for GLES3
+# (renderer_gl.cpp TextureGL::setSamplerState: if (!m_gles3 && !s_textureFilter)).
+# All 8-bit indexed FITD textures and EVERY binding must use GL_NEAREST.
+file = root / "FitdLib/rendererBGFX.cpp"
+value = file.read_text()
+old = "bgfx::TextureFormat::R8U);"
+if value.count(old) != 3:
+    raise RuntimeError("Unexpected R8U allocation signature, expected 3")
+value = value.replace(old, "bgfx::TextureFormat::R8U, BGFX_SAMPLER_POINT);")
+old = "bgfx::TextureFormat::R8U, 0, bgfx::copy("
+if value.count(old) != 2:
+    raise RuntimeError("Unexpected R8U initialized texture signature, expected 2")
+value = value.replace(old, "bgfx::TextureFormat::R8U, BGFX_SAMPLER_POINT, bgfx::copy(")
+# 13 source bindings of the background, UI, palette, noise and mask R8U
+# textures. Sampler override makes the fix explicit even with an
+# implementation that ignores the texture's original creation flags.
+pattern = r'(bgfx::setTexture\(\s*\d+\s*,\s*[^,()]+\s*,\s*(?:g_backgroundTexture|g_uiLayerTexture|g_paletteTexture|noiseTexture|maskTextures\[roomId\]\[maskId\]\.maskTexture))\s*\);'
+value, matches = re.subn(pattern, r'\1, BGFX_SAMPLER_POINT);', value)
+if matches != 13:
+    raise RuntimeError(f"Expected 13 integer-texture bindings, got {matches}")
+file.write_text(value)
+print("R36S R8U integer texture nearest-only fix: allocations=5 bindings=13")
