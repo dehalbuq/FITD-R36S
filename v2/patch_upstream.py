@@ -1233,3 +1233,105 @@ replace_one("FitdLib/animAction.cpp",
             if(touchedActor == -1) // no one has been touched''')
 
 print("R36S ballistic ray condition fixed; ghost special collisions disabled; shot telemetry enabled")
+
+
+
+# Trace the actual cause of follow-NPC root-motion loss. A running-in-place
+# actor can have animation root motion == 0, or movement canceled by static
+# or actor collision. Record those as separate quantities; do not bypass
+# any gameplay physics in this diagnostic build.
+replace_one("FitdLib/anim.cpp",
+    '#include "hybrid.h"',
+    '''#include "hybrid.h"
+#ifdef FITD_R36S
+#include "SDL3/SDL.h"
+#include <cstdio>
+#endif''')
+replace_one("FitdLib/anim.cpp",
+    '''\tmemcpy(localTable,currentProcessedActorPtr->COL,6);
+\t
+\tif(stepX || stepY || stepZ) // start of movement management''',
+    '''\tmemcpy(localTable,currentProcessedActorPtr->COL,6);
+#ifdef FITD_R36S
+    const bool r36sNpcMotion = SDL_getenv("FITD_NPC_MOTION_TRACE") &&
+        SDL_getenv("FITD_NPC_MOTION_TRACE")[0] == '1' &&
+        currentProcessedActorPtr->trackMode == 2 &&
+        currentProcessedActorPtr->speed >= 4;
+    const int r36sRequestedStepX = stepX;
+    const int r36sRequestedStepZ = stepZ;
+    int r36sWallHits = 0;
+#endif
+\t
+\tif(stepX || stepY || stepZ) // start of movement management''')
+replace_one("FitdLib/anim.cpp",
+    '''\t\t\tint numCol = AsmCheckListCol(&zvLocal, &roomDataTable[currentProcessedActorPtr->room]);
+\t\t\tfor(int i=0;i<numCol;i++)''',
+    '''\t\t\tint numCol = AsmCheckListCol(&zvLocal, &roomDataTable[currentProcessedActorPtr->room]);
+#ifdef FITD_R36S
+            r36sWallHits = numCol;
+#endif
+\t\t\tfor(int i=0;i<numCol;i++)''')
+replace_one("FitdLib/anim.cpp",
+    '''\t\tcurrentProcessedActorPtr->stepX = stepX + oldStepX;
+\t\tcurrentProcessedActorPtr->stepY = stepY + oldStepY;''',
+    '''#ifdef FITD_R36S
+        if (r36sNpcMotion) {
+            static Uint64 r36sNextMoveSample[NUM_MAX_OBJECT] = {};
+            const Uint64 r36sNow = SDL_GetTicks();
+            if (r36sNow >= r36sNextMoveSample[currentProcessedActorIdx]) {
+                r36sNextMoveSample[currentProcessedActorIdx] = r36sNow + 2000;
+                fprintf(stderr,
+                    "[FITD-R36S] NPC MOTION: id=%d world=%d room=%d mode=%d anim=%d frame=%d root=%d,%d requested=%d,%d resolved=%d,%d walls=%d objects=%d dyn=%d beta=%d\\n",
+                    currentProcessedActorIdx, currentProcessedActorPtr->indexInWorld,
+                    currentProcessedActorPtr->room, currentProcessedActorPtr->trackMode,
+                    currentProcessedActorPtr->ANIM, currentProcessedActorPtr->frame,
+                    animStepX, animStepZ, r36sRequestedStepX, r36sRequestedStepZ,
+                    stepX, stepZ, r36sWallHits, numCol,
+                    currentProcessedActorPtr->dynFlags, currentProcessedActorPtr->beta);
+            }
+        }
+#endif
+\t\tcurrentProcessedActorPtr->stepX = stepX + oldStepX;
+\t\tcurrentProcessedActorPtr->stepY = stepY + oldStepY;''')
+
+# Capture whether a missed shot hit a genuine static obstacle first, and
+# its location/type. Do not allow bullets to ignore legitimate walls.
+file = root / "FitdLib/main.cpp"
+src = file.read_text()
+a = src.index("int checkLineProjectionWithActors(")
+b = src.index("void PutAtObjet(", a)
+head, body, tail = src[:a], src[a:b], src[b:]
+needle = 'if(AsmCheckListCol(&localZv, &roomDataTable[room]) > 0)'
+if body.count(needle) != 1:
+    raise RuntimeError("Shot ray wall guard not found")
+body = body.replace(needle, '''const int r36sBulletWallCount = AsmCheckListCol(&localZv, &roomDataTable[room]);
+        if(r36sBulletWallCount > 0)''')
+needle = '''        if(r36sBulletWallCount > 0)
+\t\t{
+\t\t\tfoundFlag = -1;'''
+if body.count(needle) != 1:
+    raise RuntimeError("Ray wall block does not match")
+body = body.replace(needle, '''        if(r36sBulletWallCount > 0)
+\t\t{
+#ifdef FITD_R36S
+            if (SDL_getenv("FITD_SHOT_TRACE") && SDL_getenv("FITD_SHOT_TRACE")[0] == '1') {
+                const hardColStruct* blocking = hardColTable[0];
+                fprintf(stderr,
+                    "[FITD-R36S] RAY WALL: room=%d atXZ=%d,%d step=%u wallCount=%d type=%d param=%d\\n",
+                    room, X, Z, r36sBulletSteps, r36sBulletWallCount,
+                    blocking ? blocking->type : -1, blocking ? blocking->parameter : -1);
+            }
+#endif
+\t\t\tfoundFlag = -1;''')
+needle = '\treturn(foundFlag);\n}'
+if body.count(needle) != 1:
+    raise RuntimeError("Ray return match changed")
+body = body.replace(needle, '''#ifdef FITD_R36S
+    if (SDL_getenv("FITD_SHOT_TRACE") && SDL_getenv("FITD_SHOT_TRACE")[0] == '1')
+        fprintf(stderr, "[FITD-R36S] RAY RESULT: hit=%d endXZ=%d,%d steps=%u room=%d\\n",
+            foundFlag, X, Z, r36sBulletSteps, room);
+#endif
+\treturn(foundFlag);
+}''')
+file.write_text(head + body + tail)
+print("R36S follow-NPC root/wall/object diagnostics and bullet wall-stop reasons enabled")
