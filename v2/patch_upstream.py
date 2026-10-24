@@ -319,3 +319,27 @@ replace_one("FitdLib/shaders/noise_ps.sc",
     vec2 noiseWrapped = noisePosition - floor(noisePosition / 255.0) * 255.0;
     ivec2 noiseSampler = ivec2(noiseWrapped);''')
 print("R36S KMSDRM EINVAL fallback and noise shader fix installed")
+
+
+# Dump the *actual* final GLSL ES source fed into glShaderSource when Mali
+# reports L0001. Shader compile errors alone only report line numbers, not
+# which injected macro or source fragment caused those lines.
+replace_one("ThirdParty/bgfx.cmake/bgfx/src/renderer_gl.cpp",
+    '#include "bgfx_p.h"',
+    '#include "bgfx_p.h"\n#if defined(FITD_R36S)\n#include <stdio.h>\n#endif')
+replace_one("ThirdParty/bgfx.cmake/bgfx/src/renderer_gl.cpp",
+    'if (0 == compiled)\n\t\t\t{\n\t\t\t\tbx::LineReader lineReader(code);',
+    'if (0 == compiled)\n\t\t\t{\n'
+    '#if defined(FITD_R36S)\n'
+    '                fprintf(stderr, "[FITD-R36S] FATAL: GPU rejected GLSL shader type=0x%x bytes=%d\\n",'
+    ' (unsigned)m_type, (int)code.getLength());\n'
+    '                bx::LineReader r36sShaderLines(code);\n'
+    '                for (int r36sLine = 1; !r36sShaderLines.isDone(); ++r36sLine) {\n'
+    '                    bx::StringView r36sText = r36sShaderLines.next();\n'
+    '                    fprintf(stderr, "[R36S-GLSL] %04d | %.*s\\n",'
+    ' r36sLine, r36sText.getLength(), r36sText.getPtr());\n'
+    '                }\n'
+    '                fflush(stderr);\n'
+    '#endif\n'
+    '\t\t\t\tbx::LineReader lineReader(code);')
+print("R36S GLSL source diagnostics installed")
