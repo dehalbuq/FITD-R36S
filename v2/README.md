@@ -244,3 +244,16 @@ Novo pacote **FITD-R36S-AARCH64-WINDOW-NPC-DIAGNOSTICS**, ZIP interno `fitdr36s-
 - `FITD_FPS_LIMIT=60`, SDL3 GLES3 e jogo original preservados; `FITD_AI_TRACE=1` existente continua.
 
 **Passos:** guardar saves / versao que funciona, testar o inimigo preso e disparar duas vezes de frente para ele, enviar `fitdr36s/logs/fitd-debug.log` contendo `NPC MOTION`, `RAY WALL`, `RAY RESULT`, `SHOT`. Se a colisao for realmente a janela, localizar hardCol especifica para desativar SOMENTE quando evento de janela destruida for acionado; nao desativar paredes globalmente.
+
+
+## 2026-10-24 — Correção experimental da janela após o log NPC MOTION
+
+Build **FITD-R36S-AARCH64-WINDOW-OVERLAP-RECOVERY**, zip `fitdr36s-aarch64-window-overlap-recovery.zip`. O log do usuário `fitd-debug(20261024-165312).log` comprovou que o monstro `world=21` na sala 0 tem `trackMode=2, speed=4`, a animação produz deslocamento (`requested=73,-40`), mas `resolved=0,0`, `walls=1`, `objects=1` de modo persistente em `roomXZ=50,4882`. O ator está sobreposto ao objeto `world=7` em `roomXZ=0,5000`, e três tiros no monstro retornam `hit=5` no objeto `world=7`. Em outra cena análoga, o monstro `world=57` fica enroscado junto de objeto `world=51` na sala 4. O usuário confirmou ainda que o monstro causa dano e pode ser derrotado com golpes, e os FPS se mantêm ~58,5.
+
+**Mudanças cirúrgicas habilitadas com `FITD_WINDOW_RECOVERY=1` no launcher (padrão deste pacote):**
+- Uma janela específica (sala 0, world7; sala 4, world51) se torna **sem colisão de ator e sem absorção de tiros** SOMENTE quando seu monstro correspondente (world21/world57) aparece na mesma sala, próximo dela (menos de 900 unidades em cada eixo) e já está seguindo o jogador (trackMode=2, speed>=4). A passagem fica liberada até encerrar a sessão. A janela permanece sólida antes da sequência de quebra; não é uma liberação de todos os objetos.
+- `GereCollision`: se o seguidor dessas duas janelas **já está sobreposto** a uma caixa de colisão, permite apenas passos que **reduzem a área da sobreposição XZ**; passos que entram mais fundo na parede seguem bloqueados. Isso pode libertar o monstro nascido dentro de uma caixa, sem dar passagem livre geral.
+- Registros limitados: `WINDOW PASS`, `NPC UNSTICK`. `NPC MOTION`, `SHOT`, `RAY RESULT` permanecem disponíveis para verificar o resultado.
+- Para comparação A/B, alterar `FITD_WINDOW_RECOVERY=0` e reiniciar o jogo. Manter os dados do game e `SAVE*.ITD` intactos. O pacote anterior WIN-NPC-DIAGNOSTICS já foi compilado e é o backup antes da tentativa.
+
+**Não é confirmação de correção em hardware**: o patch experimental deve ser compilado e testado na cena original antes de considerá-lo definitivo. Se a janela for um objeto que possua outro papel no roteiro, esta regra específica pode afetá-lo; a ativação por evento follow procura limitar essa possibilidade. Não desativar colisões físicas gerais.

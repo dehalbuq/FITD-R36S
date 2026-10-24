@@ -30,6 +30,8 @@ export FITD_AI_TRACE="${FITD_AI_TRACE:-1}"
 export FITD_NPC_MOTION_TRACE="${FITD_NPC_MOTION_TRACE:-1}"
 # For each shot, report hard wall stop vs actual target hit.
 export FITD_SHOT_TRACE="${FITD_SHOT_TRACE:-1}"
+# Experimental fix for two window encounters only (0=old behavior).
+export FITD_WINDOW_RECOVERY="${FITD_WINDOW_RECOVERY:-1}"
 # Log real FPS and milliseconds spent in bgfx and KMS/SDL swap every 5 seconds.
 export FITD_PERF_TRACE="${FITD_PERF_TRACE:-1}"
 # Set to 0 to try disabling vsync; default 1 preserves stable SDL KMSDRM scanout.
