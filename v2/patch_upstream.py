@@ -343,3 +343,41 @@ replace_one("ThirdParty/bgfx.cmake/bgfx/src/renderer_gl.cpp",
     '#endif\n'
     '\t\t\t\tbx::LineReader lineReader(code);')
 print("R36S GLSL source diagnostics installed")
+
+
+# Debug trace isolated the remaining Mali shader failure to sphere_ps.sc:
+# glsl-optimizer corrupted switch(material) into invalid GLSL such as
+# "(0 == tmpvar_7) tmpvar_8 = bool(1);".
+# Preserve the original material effects without a switch/case statement,
+# and replace cos(asin(y)) with sqrt(1-y*y) inside the rendered hemisphere.
+replace_one("FitdLib/shaders/sphere_ps.sc",
+    '''    switch(material) {
+    case 0: // flat
+        gl_FragColor = getColor(bank, color);
+        break;
+    case 2: //transparent
+        gl_FragColor = getColor(bank, color);
+        gl_FragColor.w = 0.5f;
+        break;
+    case 3: //marbre
+        float angle = asin(normalizedPosition.y);
+        distanceToCircleOnScanline = ((normalizedPosition.x / cos(angle)) / 2.f) + 0.5f;
+        color = int((distanceToCircleOnScanline) * 15.f);
+        gl_FragColor = getColor(bank, color);
+        break;
+    default:
+        gl_FragColor = getColor(bank, color);
+        break;
+    }''',
+    '''    // Mali GLES / glsl-optimizer does not safely translate GLSL switch here.
+    if (material == 3) {
+        float circleHalfWidth = sqrt(max(1.0 - normalizedPosition.y * normalizedPosition.y, 0.0001));
+        distanceToCircleOnScanline = (normalizedPosition.x / circleHalfWidth) * 0.5 + 0.5;
+        color = int(distanceToCircleOnScanline * 15.0);
+    }
+    vec4 resultColor = getColor(bank, color);
+    if (material == 2) {
+        resultColor.w = 0.5;
+    }
+    gl_FragColor = resultColor;''')
+print("R36S sphere shader GLSL switch removal installed")
