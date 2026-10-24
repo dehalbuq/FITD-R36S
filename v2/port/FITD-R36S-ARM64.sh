@@ -96,7 +96,20 @@ if [ "${FITD_GDB:-0}" = "1" ]; then
         "$BIN" || rc=$?
     fi
 else
-    "$BIN" || rc=$?
+    # Diagnostic build: safety exit to avoid an indefinite black-screen lock.
+    # FITD_TEST_TIMEOUT=0 disables the timer for later normal gameplay.
+    TEST_TIMEOUT="${FITD_TEST_TIMEOUT:-90}"
+    export FITD_VIDEO_TEST="${FITD_VIDEO_TEST:-1}"
+    if command -v timeout >/dev/null 2>&1 && [ "$TEST_TIMEOUT" -gt 0 ] 2>/dev/null; then
+        printf 'Safety timeout enabled: %s seconds; RGB video test: %s\n' "$TEST_TIMEOUT" "$FITD_VIDEO_TEST"
+        timeout --signal=TERM --kill-after=5s "${TEST_TIMEOUT}s" "$BIN" || rc=$?
+        if [ "$rc" -eq 124 ]; then
+            printf 'FITD-R36S: automatic diagnostic timeout reached; game terminated safely.\n'
+        fi
+    else
+        printf 'Safety timeout disabled or unavailable\n'
+        "$BIN" || rc=$?
+    fi
 fi
 printf '\n== Executavel terminou ==\nExit code: %s\n' "$rc"
 date
