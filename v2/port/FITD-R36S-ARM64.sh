@@ -22,6 +22,8 @@ exec >> "$LOG" 2>&1
 # Maximum requested render FPS. Change 30 to 25 (original timing) or 0 (uncapped).
 # WARNING: FITD is an old 25Hz engine; >25 may increase gameplay speed.
 export FITD_FPS_LIMIT="${FITD_FPS_LIMIT:-30}"
+# Log real FPS and milliseconds spent in bgfx and KMS/SDL swap every 5 seconds.
+export FITD_PERF_TRACE="${FITD_PERF_TRACE:-1}"
 # Set to 0 to try disabling vsync; default 1 preserves stable SDL KMSDRM scanout.
 export FITD_VSYNC="${FITD_VSYNC:-1}"
 export FITD_DEBUG="${FITD_DEBUG:-0}"
@@ -36,6 +38,13 @@ printf 'Script: %s\nBinario: %s\nDados: %s\n' "$0" "$BIN" "$DATA"
 printf 'FITD_DEBUG=%s FITD_GDB=%s SDL_VIDEODRIVER=%s SDL_AUDIODRIVER=%s\n' \
     "$FITD_DEBUG" "${FITD_GDB:-0}" "$SDL_VIDEODRIVER" "$SDL_AUDIODRIVER"
 printf '\n== Hardware / ABI ==\n'
+if [ "${FITD_PERF_TRACE:-0}" = 1 ]; then
+    printf 'FITD_PERF_TRACE=1 FITD_FPS_LIMIT=%s FITD_VSYNC=%s\n' "$FITD_FPS_LIMIT" "$FITD_VSYNC"
+    for f in /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq /sys/class/thermal/thermal_zone0/temp; do
+        if [ -r "$f" ]; then printf '%s=' "$f"; cat "$f"; fi
+    done
+fi
+
 uname -a || true
 if command -v getconf >/dev/null 2>&1; then getconf GNU_LIBC_VERSION || true; fi
 if [ -f /proc/device-tree/model ]; then

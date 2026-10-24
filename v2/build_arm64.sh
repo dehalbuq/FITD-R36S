@@ -13,8 +13,8 @@ cmake -S work/source -B work/arm64 -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_C_FLAGS="-DFITD_R36S=1 -DBGFX_CONFIG_MULTITHREADED=0 -DBGFX_CONFIG_RENDERER_OPENGL=0 -DBGFX_CONFIG_RENDERER_OPENGLES=30" \
     -DCMAKE_CXX_FLAGS="-DFITD_R36S=1 -DBGFX_CONFIG_MULTITHREADED=0 -DBGFX_CONFIG_RENDERER_OPENGL=0 -DBGFX_CONFIG_RENDERER_OPENGLES=30" \
-    -DCMAKE_C_FLAGS_RELEASE="-O2 -g1 -fno-omit-frame-pointer -DNDEBUG -march=armv8-a" \
-    -DCMAKE_CXX_FLAGS_RELEASE="-O2 -g1 -fno-omit-frame-pointer -DNDEBUG -march=armv8-a" \
+    -DCMAKE_C_FLAGS_RELEASE="-O3 -mtune=cortex-a35 -fomit-frame-pointer -DNDEBUG -march=armv8-a" \
+    -DCMAKE_CXX_FLAGS_RELEASE="-O3 -mtune=cortex-a35 -fomit-frame-pointer -DNDEBUG -march=armv8-a" \
     -DSDL_KMSDRM=ON \
     -DSDL_SHARED=OFF -DSDL_STATIC=ON
 cmake --build work/arm64 --target Fitd --parallel 2
@@ -43,6 +43,6 @@ for lib in libstdc++.so.6 libgcc_s.so.1 libatomic.so.1; do
 done
 (
   cd "$PORT"
-  zip -qr "$ROOT/work/fitdr36s-aarch64-save-quit-fps.zip" .
+  zip -qr "$ROOT/work/fitdr36s-aarch64-perf-profile.zip" .
 )
-echo "PORT READY: $ROOT/work/fitdr36s-aarch64-save-quit-fps.zip"
+echo "PORT READY: $ROOT/work/fitdr36s-aarch64-perf-profile.zip"

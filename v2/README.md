@@ -190,3 +190,16 @@ Novo artefato: **FITD-R36S-AARCH64-MUSIC-CONTROLS-PERF**, ZIP interno **fitdr36s
 - Mantidos correção R8U+NEAREST, suporte EGL/KMSDRM, sintetizador OPL2, botoes mapeados e log. Para desempenho, `FITD_GPU_TRACE` desligado (evita leituras bloqueantes de GL). `FITD_TEST_TIMEOUT=0` sem auto-saida.
 
 Nao existe garantia que FPS ilimitado aumente o FPS real, pois o RK3326 usa workaround `drmModeSetCrtc` na falha de pageflip; tambem FPS de render nao foi desacoplado do passo de simulacao da engine de 25Hz. Recomenda-se testar 30, depois 0 com atencao a jogabilidade, sem alterar clock e hardware. O menu de 10 slots e a funcao abandonar precisam ser testados no console.
+
+
+## 2026-10-24 — Perfil real de desempenho RK3326 (hardware jà funcionando)
+O jogo reproduz cenarios, musica AdLib e SFX, e o menu de salvar/carregar e sair funcionam, mas o personagem se move lentamente. O log anterior registra `FPS limit=30`, NAO FPS real. Prova `renderer=OpenGL ES 3.0`: a GPU Mali foi acelerada pelo bgfx, portanto instalar GL4ES ou desligar a GPU nao e o caminho.
+
+Artefato **FITD-R36S-AARCH64-PERF-PROFILE**, ZIP interno `fitdr36s-aarch64-perf-profile.zip`.
+
+1. **Compilador CPU**: aplica `-O3 -mtune=cortex-a35 -fomit-frame-pointer -DNDEBUG -march=armv8-a` em vez de `-O2 -g1 -fno-omit-frame-pointer` em toda a compilacao nativa ARM64. Sem `-ffast-math`; preservar compatibilidade numerica. Possivel ganho em caminhos CPU-bound, nao garantido se travado no DRM.
+2. **DRM fallback**: apos detectar `drmModePageFlip=-EINVAL` pela primeira vez, evita tentar novamente o ioctl invalido a cada quadro, mantendo o `drmModeSetCrtc` que comprovadamente apresenta a imagem nesse kernel. Continua aplicando modeset a cada quadro (ponto que pode ser gargalo).
+3. **Medicao**: `FITD_PERF_TRACE=1` ativa mensagens `[FITD-R36S] PERF: actual_fps=N limit=M bgfx_ms=P swap_ms=Q frames=X` a cada 5s. Medicoes usam somente SDL_GetPerformanceCounter, sem leitura bloqueante de GPU. O launcher mostra frequencia/governador do CPU, se o sistema fornecer. Recomenda-se coletar 30 s de jogo no mesmo local sem menu, variando `FITD_FPS_LIMIT=25`, `30` e `0`. `FITD_VSYNC=0` e um experimento separado, pois pode causar tearing e problemas de exibicao no KMSDRM.
+4. **Limite de FPS**: 30 segue padrao. Mais quadros nao implicam a mesma velocidade de movimentos: engine original avanca logica por chamadas a `process_events` com relogio nominal de 25Hz. Se o FPS real cair a 10-15, as animacoes tambem podem aparentar lentidao. Antes de mexer em movimento/animacao, usar telemetry para distinguir gargalo na GPU, bgfx ou em DRM/CPU.
+
+Esta versao experimental nao garante mais FPS. Preserve `fitdr36s/data` e os `SAVE*.ITD`, e mantenha o ZIP anterior funcional como backup. O uso de `-O3` deve ser validado no hardware porque pode alterar otimizacoes de codigo legado.
