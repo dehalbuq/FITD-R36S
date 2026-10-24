@@ -687,7 +687,7 @@ void osystem_playAdlib()
     }
 }
 '''
-value, adlib_count = re.subn(r'void osystem_playAdlib\(\)\s*\{\s*#if 0.*?#endif\s*\}', adlib_source, value, count=1, flags=re.S)
+value, adlib_count = re.subn(r'void osystem_playAdlib\(\)\s*\{\s*#if 0.*?#endif\s*\}', lambda m: adlib_source, value, count=1, flags=re.S)
 if adlib_count != 1:
     raise RuntimeError(f"AdLib OpenAL block not found: {adlib_count}")
 file.write_text(value)
