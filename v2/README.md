@@ -80,3 +80,10 @@ Opcional, somente para testes via SSH se o R36S tiver gdb instalado:
 Isso tenta incluir backtraces das threads no mesmo log. Se o gdb nao estiver presente, o launcher executa sem o depurador. FITD_DEBUG=0 reduz verbosidade SDL, mantendo diagnósticos basicos.
 
 O script nao exige root, nao instala bibliotecas no sistema e nao altera EGL/GLIBC da firmware.
+
+## Corrigido: BGFX FATAL usampler2D no Mali-G31
+O log do R36S mostrou que a deteccao de Alone in the Dark funcionou, mas a GPU rejeitou o shader GLSL ES 3.0 na declaracao s_paletteTexture: "S0032: no default precision defined for variable 's_paletteTexture'" (exit 134). A compilacao anterior nao detectava esse problema porque o shader era compilado no driver GPU durante a execucao.
+
+A versao **FITD-R36S-AARCH64-GLES3-FIX** incorpora a declaracao **precision highp usampler2D;** no shader compartilhado palette.sh (condicional para GLSL >= 300). O pacote ainda inclui o modo DEBUG e o launcher que produz **fitdr36s/logs/fitd-debug.log**. Baixe especificamente o artefato desta nova execucao, nao o DEBUG anterior, e copie novamente o executavel/launcher sem apagar a pasta data.
+
+Importante: o arquivo **fitd-r36s.log** com "Compiled the Oct 23 2026 at 22:49:31" e da versao anterior, que nao incluia os novos diagnosticos. No proximo teste, envie **fitd-debug.log** gerado pelo launcher atualizado. Compilacao verde nao garante sucesso em runtime na Mali-G31.
