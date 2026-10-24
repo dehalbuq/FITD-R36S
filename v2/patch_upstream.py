@@ -499,7 +499,7 @@ static void r36sInspectFrameBeforeSwap()
 
     const bgfx::Stats* stats = bgfx::getStats();
     if (frame == 1 || frame % 125 == 0) {
-        fprintf(stderr, "[FITD-R36S] BGFX STATS: frames=%u draws=%u compute=%u views=%u textures=%u programs=%u output=%ux%u\\\\n",
+        fprintf(stderr, "[FITD-R36S] BGFX STATS: frames=%u draws=%u compute=%u views=%u textures=%u programs=%u output=%ux%u\\n",
             frame,
             stats ? stats->numDraw : 0,
             stats ? stats->numCompute : 0,
@@ -545,7 +545,7 @@ static void r36sInspectFrameBeforeSwap()
         // Switch to the SDL window's default framebuffer for direct sampling.
         glBindFB(0x8D40u, 0u); // GL_FRAMEBUFFER
         glRead(320, 240, 1, 1, 0x1908u, 0x1401u, before); // GL_RGBA, GL_UNSIGNED_BYTE
-        fprintf(stderr, "[FITD-R36S] PIXEL BEFORE MAGENTA: frame=%u fbo=%d RGBA=%u,%u,%u,%u glerr=0x%x\\\\n",
+        fprintf(stderr, "[FITD-R36S] PIXEL BEFORE MAGENTA: frame=%u fbo=%d RGBA=%u,%u,%u,%u glerr=0x%x\\n",
             frame, fbo, before[0], before[1], before[2], before[3], glGetError ? glGetError() : 0u);
     }
     if (probe) {
@@ -559,7 +559,7 @@ static void r36sInspectFrameBeforeSwap()
         if (frame == 1 || frame == 25 || frame == 75) {
             unsigned char after[4] = {0};
             glRead(320, 240, 1, 1, 0x1908u, 0x1401u, after);
-            fprintf(stderr, "[FITD-R36S] MAGENTA PRESENTATION TEST: frame=%u expected magenta RGBA=%u,%u,%u,%u glerr=0x%x\\\\n",
+            fprintf(stderr, "[FITD-R36S] MAGENTA PRESENTATION TEST: frame=%u expected magenta RGBA=%u,%u,%u,%u glerr=0x%x\\n",
                 frame, after[0], after[1], after[2], after[3], glGetError ? glGetError() : 0u);
         }
         glSetColor(original[0], original[1], original[2], original[3]);
@@ -572,7 +572,7 @@ static void r36sInspectFrameBeforeSwap()
 void EndFrame()''')
 replace_one("FitdLib/bgfxGlue.cpp",
     '        if (!SDL_GL_SwapWindow(gWindowBGFX)) {',
-    '        r36sInspectFrameBeforeSwap();\\\\n        if (!SDL_GL_SwapWindow(gWindowBGFX)) {')
+    '        r36sInspectFrameBeforeSwap();\\n        if (!SDL_GL_SwapWindow(gWindowBGFX)) {')
 replace_one("FitdLib/input.cpp",
     '''    const bool r36sPadQuit = pad &&
         SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_START) &&
