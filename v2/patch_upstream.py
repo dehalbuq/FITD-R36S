@@ -1087,83 +1087,18 @@ print("R36S DRM rejected-pageflip cache + 5s hardware performance metrics instal
 
 
 
-# Gameplay correctness at 60 Hz video: the upstream engine hardcodes 25 Hz
-# game time and used "at least one tick per video frame", which runs all
-# timers/animations 2.3x too fast when rendering ~58.5 FPS on the R36S.
-# Use a monotonic elapsed-time accumulator that emits 0, 1, or multiple
-# fixed 25Hz simulation ticks. Gameplay still renders every 60Hz frame.
-# FITD_GAME_CLOCK=legacy restores the old behavior for A/B comparisons.
-replace_one("FitdLib/osystemSDL.cpp",
-    '    u32 numFramesToAdvance = (SDL_GetTicks() - lastFrameTime) / (1000 / FRAMES_PER_SECOND);',
-    '''#ifdef FITD_R36S
-    const char* clockMode = SDL_getenv("FITD_GAME_CLOCK");
-    if (!clockMode || SDL_strcmp(clockMode, "legacy") != 0) {
-        static Uint64 previousCounter = 0;
-        static double pendingMilliseconds = 0.0;
-        const Uint64 now = SDL_GetPerformanceCounter();
-        const double freq = static_cast<double>(SDL_GetPerformanceFrequency());
-        if (previousCounter == 0) {
-            previousCounter = now;
-        }
-        double elapsedMs = 1000.0 * static_cast<double>(now - previousCounter) / freq;
-        previousCounter = now;
-        // Pauses/debugger/menu changes must not cause a massive gameplay leap.
-        if (elapsedMs > 200.0) elapsedMs = 200.0;
-        pendingMilliseconds += elapsedMs;
-        u32 gameTicks = static_cast<u32>(pendingMilliseconds / 40.0);
-        if (gameTicks > 5) gameTicks = 5;
-        pendingMilliseconds -= static_cast<double>(gameTicks) * 40.0;
-        return gameTicks;
-    }
-#endif
-    u32 numFramesToAdvance = (SDL_GetTicks() - lastFrameTime) / (1000 / FRAMES_PER_SECOND);''')
-replace_one("FitdLib/tatou.cpp",
-    '    assert(timeIncrease);',
-    '''#ifdef FITD_R36S
-    // Rendering at 60 Hz is valid even if no 25Hz game tick is due yet.
-    // Process input and draw normally; advance scripted time only when due.
-#else
-    assert(timeIncrease);
-#endif''')
-
-# Defensive fix for the unimplemented flow special effect. On stock FITD,
-# LM_SPECIAL mode 1 creates an AF_SPECIAL actor with ANIM/frame not initialized
-# and may dereference HIT_BY out of range. The shader/animation code later sees
-# this bogus actor. Skip only this known unimplemented effect, not the enemy.
-replace_one("FitdLib/life.cpp",
-    '''                case 1: // flow
-                {''',
-    '''                case 1: // flow
-#ifdef FITD_R36S
-                {
-                    static bool r36sMissingFlowLogged = false;
-                    if (!r36sMissingFlowLogged) {
-                        fprintf(stderr, "[FITD-R36S] AI: skipping unimplemented LM_SPECIAL flow=1 without creating a ghost actor\\n");
-                        r36sMissingFlowLogged = true;
-                    }
-                    break;
-                }
-#else
-                {''')
-replace_one("FitdLib/life.cpp",
-    '''                    currentProcessedActorPtr = currentLifeActorPtr;
-
-
-                    break;
-                }
-                case 4: // cigar smoke''',
-    '''                    currentProcessedActorPtr = currentLifeActorPtr;
-
-
-                    break;
-                }
-#endif
-                case 4: // cigar smoke''')
+# Enemy movement bug is reported even at 25-30 FPS; keep the proven
+# original game clock and upstream LM_SPECIAL logic unchanged. Gather
+# diagnostics first, then patch the actual actor/path/collision cause.
 
 # Actor diagnostics, once every two seconds in the *active* room. Logs one
 # line per visible AI actor so a stationary enemy can be classified:
 # track/path mode vs collision, script state, animation frame, speed.
 # Disabled by default; set FITD_AI_TRACE=1 in launcher for testing.
+replace_one("FitdLib/mainLoop.cpp",
+    '#include "common.h"',
+    '#include "common.h"\n#ifdef FITD_R36S\n#include "SDL3/SDL.h"\n#include <cstdio>\n#endif')
+
 replace_one("FitdLib/mainLoop.cpp",
     '''        updatePendingEvents();
     }
@@ -1199,4 +1134,4 @@ replace_one("FitdLib/mainLoop.cpp",
     }
 
     //  mainLoopVar1 = 0;''')
-print("R36S 60Hz video / 25Hz clock, safe missing-flow handler and AI movement traces installed")
+print("R36S diagnostic-only AI actor/track/collision trace installed (game logic unchanged)")
