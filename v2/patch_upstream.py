@@ -633,3 +633,135 @@ if matches != 13:
     raise RuntimeError(f"Expected 13 integer-texture bindings, got {matches}")
 file.write_text(value)
 print("R36S R8U integer texture nearest-only fix: allocations=5 bindings=13")
+
+
+
+# Playability patch: the original AdLib output was a commented-out OpenAL
+# implementation. Route the existing YM3812 PCM to SoLoud's already-working
+# audio backend instead. OPL synth is 44.1kHz signed mono 16-bit, whereas
+# SoLoud custom sources must yield planar floating-point mono samples.
+file = root / "FitdLib/osystemAL_adlib.cpp"
+value = file.read_text()
+value = value.replace('#include "osystemAL.h"',
+    '#include "osystemAL.h"\n#include "soloud.h"\n#include <cstdio>')
+adlib_source = r'''
+extern SoLoud::Soloud* gSoloud;
+class R36sAdlibSource;
+class R36sAdlibInstance final : public SoLoud::AudioSourceInstance {
+public:
+    explicit R36sAdlibInstance(R36sAdlibSource*) {}
+    virtual unsigned int getAudio(float* output, unsigned int count, unsigned int) override {
+        unsigned int filled = 0;
+        while (filled < count) {
+            const unsigned int n = (count - filled > 512u) ? 512u : count - filled;
+            int16_t pcm[512] = {};
+            musicUpdate(nullptr, reinterpret_cast<uint8*>(pcm), static_cast<int>(n * 2u));
+            for (unsigned int i = 0; i < n; ++i) {
+                output[filled + i] = static_cast<float>(pcm[i]) / 32768.0f;
+            }
+            filled += n;
+        }
+        return count;
+    }
+    virtual bool hasEnded() override { return false; }
+};
+class R36sAdlibSource final : public SoLoud::AudioSource {
+public:
+    R36sAdlibSource() {
+        mBaseSamplerate = 44100;
+        mChannels = 1;
+    }
+    virtual SoLoud::AudioSourceInstance* createInstance() override {
+        return new R36sAdlibInstance(this);
+    }
+};
+static R36sAdlibSource s_r36sAdlibSource;
+static bool s_r36sAdlibStarted = false;
+void osystem_playAdlib()
+{
+    if (!s_r36sAdlibStarted && gSoloud) {
+        const SoLoud::handle voice = gSoloud->play(s_r36sAdlibSource);
+        fprintf(stderr, "[FITD-R36S] AdLib/OPL2 music stream started, voice=%u\n",
+            (unsigned int)voice);
+        s_r36sAdlibStarted = true;
+    }
+}
+'''
+value, adlib_count = re.subn(r'void osystem_playAdlib\(\)\s*\{\s*#if 0.*?#endif\s*\}', adlib_source, value, count=1, flags=re.S)
+if adlib_count != 1:
+    raise RuntimeError(f"AdLib OpenAL block not found: {adlib_count}")
+file.write_text(value)
+print("R36S AdLib -> SoLoud music synth enabled")
+
+# The stock getSignature returns zero even after successful YM3812Init, which
+# marks musicEnabled=0 in OpenProgram. Report genuine OPL initialization.
+replace_one("FitdLib/music.cpp",
+    '    return callMusicDrv(8,NULL);',
+    '    return OPLinitialized ? 1 : 0;')
+replace_one("FitdLib/main.cpp",
+    '''\tif(!initMusicDriver())
+\t{
+\t\tmusicConfigured = 0;
+\t\tmusicEnabled = 0;
+\t}''',
+    '''\tif(!initMusicDriver())
+\t{
+\t\tmusicConfigured = 0;
+\t\tmusicEnabled = 0;
+\t}
+#ifdef FITD_R36S
+    else {
+        musicConfigured = 1;
+        musicEnabled = 1;
+        fprintf(stderr, "[FITD-R36S] YM3812/OPL2 initialized successfully\\n");
+    }
+#endif''')
+
+# The console reports shoulders on SDL gamepad but some firmware START/SELECT
+# presses appear only on raw joystick buttons (6 and 7). Add redundant routes:
+# R1 or START/raw7 -> options, L1 or SELECT/raw6 -> inventory.
+replace_one("FitdLib/input.cpp",
+    '''        if (SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_START)) key = 0x1B;''',
+    '''        SDL_Joystick* raw = SDL_GetGamepadJoystick(pad);
+        const bool startRaw = raw && SDL_GetJoystickButton(raw, 7);
+        const bool selectRaw = raw && SDL_GetJoystickButton(raw, 6);
+        const bool options = SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_START) ||
+                             SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER) ||
+                             startRaw;
+        const bool inventory = SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_BACK) ||
+                               SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER) ||
+                               selectRaw;
+        if (options) key = 0x1B;
+        else if (inventory) key = 0x1C;''')
+
+# Avoid spamming thousands of button lines unless explicitly tracing inputs.
+replace_one("FitdLib/input.cpp",
+    'fprintf(stderr, "[FITD-R36S] gamepad button pressed: %d\\n", (int)event.gbutton.button);',
+    'if (std::getenv("FITD_INPUT_TRACE")) fprintf(stderr, "[FITD-R36S] gamepad button pressed: %d\\n", (int)event.gbutton.button);')
+replace_one("FitdLib/input.cpp",
+    'fprintf(stderr, "[FITD-R36S] joystick button pressed: %d\\n", (int)event.jbutton.button);',
+    'if (std::getenv("FITD_INPUT_TRACE")) fprintf(stderr, "[FITD-R36S] joystick button pressed: %d\\n", (int)event.jbutton.button);')
+
+# Remove the costly synchronous GPU glReadPixels readbacks unless opted in.
+replace_one("FitdLib/bgfxGlue.cpp",
+    '        r36sInspectFrameBeforeSwap();',
+    '''        const char* gpuTrace = SDL_getenv("FITD_GPU_TRACE");
+        if (gpuTrace && gpuTrace[0] == '1') r36sInspectFrameBeforeSwap();''')
+# Hide periodic log noise unless explicitly troubleshooting.
+replace_one("FitdLib/bgfxGlue.cpp",
+    'if (r36sFrameCounter % 125u == 0u) {',
+    'if (SDL_getenv("FITD_GPU_TRACE") && r36sFrameCounter % 125u == 0u) {')
+
+# Keep the original 25Hz DOS-era timing as default, but allow a profile
+# override. At >=30, engine clock may advance faster because game time uses
+# a 25Hz minimum-tick fallback; do not silently enable that mode.
+replace_one("FitdLib/bgfxGlue.cpp",
+    '    gFrameLimit = 25;',
+    '''    gFrameLimit = 25;
+    const char* r36sFps = SDL_getenv("FITD_FPS_LIMIT");
+    if (r36sFps) {
+        int value = SDL_atoi(r36sFps);
+        if (value >= 20 && value <= 35) gFrameLimit = value;
+    }
+    fprintf(stderr, "[FITD-R36S] FPS limit=%d\\n", gFrameLimit);''')
+print("R36S controls/options, quiet GPU diagnostics and optional FPS mode installed")
