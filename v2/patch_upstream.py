@@ -1406,6 +1406,12 @@ static long long r36sHorizontalOverlapArea(const ZVStruct* a, const ZVStruct* b)
 
 '''
 src=src.replace(anchor,helper+anchor,1)
+# CheckObjectCol is located BEFORE GereCollision, where the implementation
+# above is inserted. Declare the function first so both collision and the
+# later raycast can call it in C++.
+forward = "#ifdef FITD_R36S\\nstatic bool r36sWindowColliderPassable(int candidate);\\n#endif\\n"
+src=src.replace("int CheckObjectCol(int actorIdx, ZVStruct* zvPtr)",
+                forward.replace("\\\\n", "\\n") + "int CheckObjectCol(int actorIdx, ZVStruct* zvPtr)", 1)
 a=src.index("int CheckObjectCol(int actorIdx, ZVStruct* zvPtr)")
 b=src.index("void take(int objIdx)",a)
 head,body,tail=src[:a],src[a:b],src[b:]
