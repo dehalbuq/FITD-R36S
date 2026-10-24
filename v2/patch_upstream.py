@@ -478,3 +478,111 @@ replace_one("FitdLib/bgfxGlue.cpp",
         }
     }''')
 print("R36S video scanout test + emergency exit + frame diagnostics installed")
+
+
+
+# GPU readback and presentation isolation test. The already successful RGB
+# startup test proves SDL/EGL/KMSDRM can display pixels in the initial context.
+# This diagnostic checks whether bgfx actually submits draw calls and whether
+# pixel data survives to the SDL-owned window surface after bgfx::frame().
+# A three-second magenta fullscreen probe is drawn *after* bgfx::frame(),
+# allowing device testing without disassembling commercial game files.
+replace_one("FitdLib/bgfxGlue.cpp",
+    'void EndFrame()',
+    '''#ifdef FITD_R36S
+static void r36sInspectFrameBeforeSwap()
+{
+    static Uint64 firstFrameAt = 0;
+    static unsigned frame = 0;
+    if (firstFrameAt == 0) firstFrameAt = SDL_GetTicks();
+    ++frame;
+
+    const bgfx::Stats* stats = bgfx::getStats();
+    if (frame == 1 || frame % 125 == 0) {
+        fprintf(stderr, "[FITD-R36S] BGFX STATS: frames=%u draws=%u compute=%u views=%u textures=%u programs=%u output=%ux%u\\\\n",
+            frame,
+            stats ? stats->numDraw : 0,
+            stats ? stats->numCompute : 0,
+            stats ? stats->numViews : 0,
+            stats ? stats->numTextures : 0,
+            stats ? stats->numPrograms : 0,
+            stats ? stats->width : 0,
+            stats ? stats->height : 0);
+    }
+
+    using GetInt = void (*)(unsigned, int*);
+    using GetFloat = void (*)(unsigned, float*);
+    using BindFramebuffer = void (*)(unsigned, unsigned);
+    using ClearColor = void (*)(float, float, float, float);
+    using Clear = void (*)(unsigned);
+    using ReadPixels = void (*)(int, int, int, int, unsigned, unsigned, void*);
+    using IsEnabled = unsigned char (*)(unsigned);
+    using EnableDisable = void (*)(unsigned);
+    using GetError = unsigned (*)();
+
+    GetInt glGetInteger = reinterpret_cast<GetInt>(SDL_GL_GetProcAddress("glGetIntegerv"));
+    GetFloat glGetFloat = reinterpret_cast<GetFloat>(SDL_GL_GetProcAddress("glGetFloatv"));
+    BindFramebuffer glBindFB = reinterpret_cast<BindFramebuffer>(SDL_GL_GetProcAddress("glBindFramebuffer"));
+    ClearColor glSetColor = reinterpret_cast<ClearColor>(SDL_GL_GetProcAddress("glClearColor"));
+    Clear glClearBuffer = reinterpret_cast<Clear>(SDL_GL_GetProcAddress("glClear"));
+    ReadPixels glRead = reinterpret_cast<ReadPixels>(SDL_GL_GetProcAddress("glReadPixels"));
+    IsEnabled glIsEnabled = reinterpret_cast<IsEnabled>(SDL_GL_GetProcAddress("glIsEnabled"));
+    EnableDisable glDisable = reinterpret_cast<EnableDisable>(SDL_GL_GetProcAddress("glDisable"));
+    EnableDisable glEnable = reinterpret_cast<EnableDisable>(SDL_GL_GetProcAddress("glEnable"));
+    GetError glGetError = reinterpret_cast<GetError>(SDL_GL_GetProcAddress("glGetError"));
+
+    if (!glGetInteger || !glBindFB || !glRead || !glSetColor || !glClearBuffer)
+        return;
+
+    int fbo = 0;
+    glGetInteger(0x8CA6u, &fbo); // GL_FRAMEBUFFER_BINDING
+    bool probe = SDL_GetTicks() - firstFrameAt < 3500u;
+    bool sample = probe && (frame == 1 || frame == 25 || frame == 75);
+    sample = sample || (frame % 250 == 0);
+
+    if (sample) {
+        unsigned char before[4] = {0};
+        // Switch to the SDL window's default framebuffer for direct sampling.
+        glBindFB(0x8D40u, 0u); // GL_FRAMEBUFFER
+        glRead(320, 240, 1, 1, 0x1908u, 0x1401u, before); // GL_RGBA, GL_UNSIGNED_BYTE
+        fprintf(stderr, "[FITD-R36S] PIXEL BEFORE MAGENTA: frame=%u fbo=%d RGBA=%u,%u,%u,%u glerr=0x%x\\\\n",
+            frame, fbo, before[0], before[1], before[2], before[3], glGetError ? glGetError() : 0u);
+    }
+    if (probe) {
+        float original[4] = {0.f, 0.f, 0.f, 1.f};
+        if (glGetFloat) glGetFloat(0x0C22u, original); // GL_COLOR_CLEAR_VALUE
+        const bool hadScissor = glIsEnabled && glIsEnabled(0x0C11u); // GL_SCISSOR_TEST
+        if (glDisable) glDisable(0x0C11u);
+        glBindFB(0x8D40u, 0u);
+        glSetColor(1.f, 0.f, 1.f, 1.f);
+        glClearBuffer(0x00004000u); // GL_COLOR_BUFFER_BIT
+        if (frame == 1 || frame == 25 || frame == 75) {
+            unsigned char after[4] = {0};
+            glRead(320, 240, 1, 1, 0x1908u, 0x1401u, after);
+            fprintf(stderr, "[FITD-R36S] MAGENTA PRESENTATION TEST: frame=%u expected magenta RGBA=%u,%u,%u,%u glerr=0x%x\\\\n",
+                frame, after[0], after[1], after[2], after[3], glGetError ? glGetError() : 0u);
+        }
+        glSetColor(original[0], original[1], original[2], original[3]);
+        if (hadScissor && glEnable) glEnable(0x0C11u);
+    }
+    glBindFB(0x8D40u, static_cast<unsigned>(fbo));
+}
+#endif
+
+void EndFrame()''')
+replace_one("FitdLib/bgfxGlue.cpp",
+    '        if (!SDL_GL_SwapWindow(gWindowBGFX)) {',
+    '        r36sInspectFrameBeforeSwap();\\\\n        if (!SDL_GL_SwapWindow(gWindowBGFX)) {')
+replace_one("FitdLib/input.cpp",
+    '''    const bool r36sPadQuit = pad &&
+        SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_START) &&
+        SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_BACK);''',
+    '''    const bool r36sPadQuit = pad &&
+        ((SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_START) &&
+          SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_BACK)) ||
+         (SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_SOUTH) &&
+          SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_EAST)));''')
+replace_one("FitdLib/input.cpp",
+    'EXIT: START+SELECT (or Enter+Escape) held',
+    'EXIT: START+SELECT or A+B (or Enter+Escape) held')
+print("R36S post-bgfx pixel probe / draw stats / A+B exit installed")
