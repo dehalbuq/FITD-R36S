@@ -1348,9 +1348,9 @@ print("R36S follow-NPC root/wall/object diagnostics and bullet wall-stop reasons
 # monster is near and actively following the player.
 file = root / "FitdLib/main.cpp"
 src = file.read_text()
-anchor = "int CheckObjectCol(int actorIdx, ZVStruct* zvPtr)"
+anchor = "void GereCollision("
 if src.count(anchor) != 1:
-    raise RuntimeError("Window recovery could not find CheckObjectCol")
+    raise RuntimeError("Window recovery could not find GereCollision")
 helper = '''
 #ifdef FITD_R36S
 static bool r36sWindowColliderPassable(int candidate)
