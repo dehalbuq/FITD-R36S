@@ -1,6 +1,6 @@
 #!/bin/bash
 # FITD / R36S / dArkOSRE ARM64 diagnostic launcher.
-# FITD_DEBUG=1 (default) collects SDL debug logs and startup stages.
+# FITD_DEBUG=1 optionally collects SDL debug logs and startup stages.
 # FITD_GDB=1 optionally uses gdb if installed on the R36S.
 set -u
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
@@ -19,6 +19,11 @@ if ! touch "$LOG" 2>/dev/null; then
 fi
 exec >> "$LOG" 2>&1
 
+# Maximum requested render FPS. Change 30 to 25 (original timing) or 0 (uncapped).
+# WARNING: FITD is an old 25Hz engine; >25 may increase gameplay speed.
+export FITD_FPS_LIMIT="${FITD_FPS_LIMIT:-30}"
+# Set to 0 to try disabling vsync; default 1 preserves stable SDL KMSDRM scanout.
+export FITD_VSYNC="${FITD_VSYNC:-1}"
 export FITD_DEBUG="${FITD_DEBUG:-0}"
 export SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-kmsdrm}"
 export SDL_AUDIODRIVER="${SDL_AUDIODRIVER:-alsa}"

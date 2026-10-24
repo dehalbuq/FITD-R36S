@@ -1,6 +1,6 @@
 # FITD moderno para R36S / dArkOSRE (ARM64)
 
-**Estado: experimental, sem jogo rodando validado no console.** A versão anterior ARMHF/GL4ES na raiz do repositório foi preservada. Esta nova tentativa fica em v2/.
+**Estado: jogo e efeitos musicais/som validado no R36S dArkOSRE; melhorias de menus e FPS ainda experimentais.** A versão anterior ARMHF/GL4ES na raiz do repositório foi preservada. Esta nova tentativa fica em v2/.
 
 ## Origem do motor
 Fonte: https://github.com/yaz0r/FITD
@@ -178,3 +178,15 @@ Novo artefato: **FITD-R36S-AARCH64-MUSIC-CONTROLS-PERF**, ZIP interno **fitdr36s
 **Desempenho**: desligados por padrao `FITD_GPU_TRACE` (glReadPixels e 9 leituras sincronas da GPU, muito caras), `FITD_INPUT_TRACE` e SDL debug. Limite inicial 25 FPS para preservar ritmo do jogo original, ajustavel `FITD_FPS_LIMIT=30` (20–35; valores acima de 25 podem acelerar a logica pois o game foi escrito para clock de 25Hz). Melhor avaliar 25 sem instrumentacao primeiro e so depois testar 30. Manter vsync KMSDRM para compatibilidade, sem mudar GPU modeset. O launcher NAO encerra mais a sessao depois de 90 segundos: `FITD_TEST_TIMEOUT=0` por padrao; usar por exemplo `FITD_TEST_TIMEOUT=120` para teste se desejar.
 
 **Instalacao**: sobrepor os arquivos do pacote em /roms/ports mantendo `fitdr36s/data`, incluindo saves originais. Sem arquivos comerciais no ZIP. A compilacao CI so garante compatibilidade de build; musica, controles e FPS precisam ser validados no R36S.
+
+
+## 2026-10-24 — Save slots, abandonar, configuracoes verdadeiras e FPS livre
+**Artefato: FITD-R36S-AARCH64-SAVE-QUIT-FPS**, ZIP interno `fitdr36s-aarch64-save-quit-fps.zip`.
+
+- `parseAllSaves()` original retornava sempre 0, `makeSave()` escrevia sempre `SAVE0.ITD`. Substituidos por menu de 10 slots (colunas 0..4 e 5..9), os arquivos existentes aparecem SALVO e vazios VAZIO. As setas/analógico mudam a selecao, A/B confirmam, R1/START cancelam. O menu de salvamento agora chama `makeSaveFile(slot)` e o carregamento so permite slots existentes. **Cuidado:** se escolher slot ocupado ao salvar, o arquivo sera sobrescrito. Preserve todos os `SAVE*.ITD` ao atualizar.
+- `Abandonar` (ultima linha do menu, indice 6) agora encerra o executavel com `std::_Exit(0)`. Este comportamento sai ao launcher Ports em vez de retornar ao menu inicial de personagens. Continua existindo A+B ou START+SELECT segurados como saida de seguranca.
+- Entradas `Musica` e `Efeitos` agora sao acionaveis e representam o estado real. A musica pausa/despausa o canal sintetizado OPL2 no SoLoud. Efeitos sao silenciados na rotina de samples quando desativados. Texto de qualidade grafica ajustado para `ALTO` (indice 50) porque o codigo base nao possui presets de grafico por nivel: o valor anterior `BAIXO` era apenas string fixa. Essa escolha permanece informativa e nao muda shaders/texturas.
+- `FITD_FPS_LIMIT=30` passa a ser a configuracao padrao no launcher, comparado com 25 anteriormente; para manter velocidade original use `25`; para destravar o limite software use `0` (atenção: nao necessariamente chega a 60 devido a Mali/KMSDRM e pode acelerar animacoes/logica). A variavel aceita 20..120 e 0. `FITD_VSYNC=1` como padrao; altere para 0 para testar sem sincronizacao, que pode rasgar a tela ou nao ser suportado pelo firmware.
+- Mantidos correção R8U+NEAREST, suporte EGL/KMSDRM, sintetizador OPL2, botoes mapeados e log. Para desempenho, `FITD_GPU_TRACE` desligado (evita leituras bloqueantes de GL). `FITD_TEST_TIMEOUT=0` sem auto-saida.
+
+Nao existe garantia que FPS ilimitado aumente o FPS real, pois o RK3326 usa workaround `drmModeSetCrtc` na falha de pageflip; tambem FPS de render nao foi desacoplado do passo de simulacao da engine de 25Hz. Recomenda-se testar 30, depois 0 com atencao a jogabilidade, sem alterar clock e hardware. O menu de 10 slots e a funcao abandonar precisam ser testados no console.
