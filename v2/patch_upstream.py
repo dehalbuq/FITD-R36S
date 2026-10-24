@@ -963,9 +963,8 @@ void r36sSetMusicEnabled(bool enabled)
 old = 'const SoLoud::handle voice = gSoloud->play(s_r36sAdlibSource);'
 if value.count(old) != 1:
     raise RuntimeError("AdLib play handle not found")
-value = value.replace(old, 'const SoLoud::handle voice = gSoloud->play(s_r36sAdlibSource);\\n        s_r36sAdlibVoice = voice;')
-# Above uses literal backslash+n in the Python text; convert to actual newline.
-value = value.replace(';\\\\n        s_r36sAdlibVoice', ';\\n        s_r36sAdlibVoice')
+value = value.replace(old, '''const SoLoud::handle voice = gSoloud->play(s_r36sAdlibSource);
+        s_r36sAdlibVoice = voice;''')
 file.write_text(value)
 
 # Remove the 25/35 FPS hard cap when explicitly requested, with 0=uncapped.
