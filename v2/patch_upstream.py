@@ -572,7 +572,7 @@ static void r36sInspectFrameBeforeSwap()
 void EndFrame()''')
 replace_one("FitdLib/bgfxGlue.cpp",
     '        if (!SDL_GL_SwapWindow(gWindowBGFX)) {',
-    '        r36sInspectFrameBeforeSwap();\\n        if (!SDL_GL_SwapWindow(gWindowBGFX)) {')
+    '        r36sInspectFrameBeforeSwap();\n        if (!SDL_GL_SwapWindow(gWindowBGFX)) {')
 replace_one("FitdLib/input.cpp",
     '''    const bool r36sPadQuit = pad &&
         SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_START) &&
