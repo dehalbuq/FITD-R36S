@@ -1138,7 +1138,7 @@ replace_one("FitdLib/life.cpp",
                 {
                     static bool r36sMissingFlowLogged = false;
                     if (!r36sMissingFlowLogged) {
-                        fprintf(stderr, "[FITD-R36S] AI: skipping unimplemented LM_SPECIAL flow=1 without creating a ghost actor\\\\n");
+                        fprintf(stderr, "[FITD-R36S] AI: skipping unimplemented LM_SPECIAL flow=1 without creating a ghost actor\\n");
                         r36sMissingFlowLogged = true;
                     }
                     break;
@@ -1176,7 +1176,7 @@ replace_one("FitdLib/mainLoop.cpp",
             const Uint64 r36sNow = SDL_GetTicks();
             if (r36sNow >= r36sNextAiTrace) {
                 r36sNextAiTrace = r36sNow + 2000;
-                fprintf(stderr, "[FITD-R36S] AI TRACE: room=%d player=%d timeGlobal=%u timer=%u\\\\n",
+                fprintf(stderr, "[FITD-R36S] AI TRACE: room=%d player=%d timeGlobal=%u timer=%u\\n",
                     currentRoom, currentCameraTargetActor, timeGlobal, timer);
                 unsigned shown = 0;
                 for (int actorId = 0; actorId < NUM_MAX_OBJECT && shown < 16; ++actorId) {
@@ -1185,7 +1185,7 @@ replace_one("FitdLib/mainLoop.cpp",
                         actor.indexInWorld < 0 || actor.room != currentRoom ||
                         (actor.life == -1 && !(actor.objectType & AF_ANIMATED))) continue;
                     fprintf(stderr,
-                        "[FITD-R36S] AI ACTOR: id=%d world=%d life=%d mode=%d track=%d pos=%d speed=%d anim=%d frame=%d roomXZ=%d,%d stepXZ=%d,%d beta=%d hard=%d col=%d\\\\n",
+                        "[FITD-R36S] AI ACTOR: id=%d world=%d life=%d mode=%d track=%d pos=%d speed=%d anim=%d frame=%d roomXZ=%d,%d stepXZ=%d,%d beta=%d hard=%d col=%d\\n",
                         actorId, actor.indexInWorld, actor.life, actor.trackMode,
                         actor.trackNumber, actor.positionInTrack, actor.speed,
                         actor.ANIM, actor.frame, actor.roomX, actor.roomZ,
