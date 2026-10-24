@@ -1336,3 +1336,143 @@ body = body.replace(needle, '''#ifdef FITD_R36S
 }''')
 file.write_text(head + body + tail)
 print("R36S follow-NPC root/wall/object diagnostics and bullet wall-stop reasons enabled")
+
+
+
+# Window-enemy gameplay experiment: AITD1 window objects remain as static
+# colliders once the corresponding monster has entered its follow phase.
+# The room0 log shows world7 at (0,5000) absorbing rifle bullets ahead of
+# world21 at (50,4882), and its NPC root motion canceled by wall+object.
+# Room4 previously showed world51 next to follower world57. Avoid disabling
+# ordinary geometry: only relax those two window objects AFTER their scripted
+# monster is near and actively following the player.
+file = root / "FitdLib/main.cpp"
+src = file.read_text()
+anchor = "int CheckObjectCol(int actorIdx, ZVStruct* zvPtr)"
+if src.count(anchor) != 1:
+    raise RuntimeError("Window recovery could not find CheckObjectCol")
+helper = '''
+#ifdef FITD_R36S
+static bool r36sWindowColliderPassable(int candidate)
+{
+    const char* enabled = SDL_getenv("FITD_WINDOW_RECOVERY");
+    if (!enabled || enabled[0] != '1' || candidate < 0 ||
+        candidate >= NUM_MAX_OBJECT || g_gameId != AITD1)
+        return false;
+
+    const tObject& obstacle = ListObjets[candidate];
+    int windowId = -1;
+    int monsterWorld = -1;
+    if (obstacle.room == 0 && obstacle.indexInWorld == 7) {
+        windowId = 0; monsterWorld = 21;
+    } else if (obstacle.room == 4 && obstacle.indexInWorld == 51) {
+        windowId = 1; monsterWorld = 57;
+    } else {
+        return false;
+    }
+
+    static bool broken[2] = {false, false};
+    if (broken[windowId]) return true;
+
+    // The monster has already spawned, and is actively chasing the player.
+    // Thus the scripted window-breaking event has already occurred.
+    for (int i = 0; i < NUM_MAX_OBJECT; ++i) {
+        const tObject& monster = ListObjets[i];
+        if (monster.indexInWorld == monsterWorld &&
+            monster.room == obstacle.room && monster.trackMode == 2 &&
+            monster.speed >= 4 &&
+            abs(monster.roomX - obstacle.roomX) < 900 &&
+            abs(monster.roomZ - obstacle.roomZ) < 900) {
+            broken[windowId] = true;
+            fprintf(stderr,
+                "[FITD-R36S] WINDOW PASS: room=%d windowWorld=%d monsterWorld=%d actor=%d\\n",
+                obstacle.room, obstacle.indexInWorld, monsterWorld, i);
+            return true;
+        }
+    }
+    return false;
+}
+
+static long long r36sHorizontalOverlapArea(const ZVStruct* a, const ZVStruct* b)
+{
+    const int xMin = a->ZVX1 > b->ZVX1 ? a->ZVX1 : b->ZVX1;
+    const int xMax = a->ZVX2 < b->ZVX2 ? a->ZVX2 : b->ZVX2;
+    const int zMin = a->ZVZ1 > b->ZVZ1 ? a->ZVZ1 : b->ZVZ1;
+    const int zMax = a->ZVZ2 < b->ZVZ2 ? a->ZVZ2 : b->ZVZ2;
+    return (xMax > xMin && zMax > zMin) ?
+        (long long)(xMax - xMin) * (long long)(zMax - zMin) : 0;
+}
+#endif
+
+'''
+src=src.replace(anchor,helper+anchor,1)
+a=src.index(anchor)
+b=src.index("void take(int objIdx)",a)
+head,body,tail=src[:a],src[a:b],src[b:]
+needle='''        if (currentActor->indexInWorld == -1 ||
+            (currentActor->objectType & AF_SPECIAL))
+            continue;'''
+repl='''        if (currentActor->indexInWorld == -1 ||
+            (currentActor->objectType & AF_SPECIAL))
+            continue;
+#ifdef FITD_R36S
+        if (r36sWindowColliderPassable(i))
+            continue;
+#endif'''
+if body.count(needle)!=1:
+    raise RuntimeError("Window collision guard not found")
+body=body.replace(needle,repl)
+src=head+body+tail
+a=src.index("int checkLineProjectionWithActors(")
+b=src.index("void PutAtObjet(",a)
+head,body,tail=src[:a],src[a:b],src[b:]
+needle='''if(currentActorPtr->indexInWorld != -1 && i != actorIdx && !(currentActorPtr->objectType & AF_SPECIAL))'''
+repl='''if(currentActorPtr->indexInWorld != -1 && i != actorIdx && !(currentActorPtr->objectType & AF_SPECIAL)
+#ifdef FITD_R36S
+                   && !r36sWindowColliderPassable(i)
+#endif
+                  )'''
+if body.count(needle)!=1:
+    raise RuntimeError("Window rifle ray guard not found")
+body=body.replace(needle,repl)
+src=head+body+tail
+# NPC that is spawned *inside* a solid collider cannot move away with the
+# stock oldpos==0 branch. Permit only steps reducing the overlap area; the
+# next non-penetrating step then returns to the normal collision algorithm.
+a=src.index("void GereCollision(")
+b=src.index("int AsmCheckListCol(",a)
+head,body,tail=src[:a],src[a:b],src[b:]
+needle='''\t\tif(oldpos == 0)
+\t\t{
+\t\t\toldtype = 0;'''
+repl='''\t\tif(oldpos == 0)
+\t\t{
+#ifdef FITD_R36S
+            const char* windowTest = SDL_getenv("FITD_WINDOW_RECOVERY");
+            if (windowTest && windowTest[0] == '1' &&
+                g_gameId == AITD1 && currentProcessedActorPtr &&
+                currentProcessedActorPtr->trackMode == 2 &&
+                currentProcessedActorPtr->speed >= 4) {
+                const int world = currentProcessedActorPtr->indexInWorld;
+                if ((world == 21 && currentProcessedActorPtr->room == 0) ||
+                    (world == 57 && currentProcessedActorPtr->room == 4)) {
+                    const long long oldArea = r36sHorizontalOverlapArea(oldZv, fixZv);
+                    const long long proposedArea = r36sHorizontalOverlapArea(animatedZv, fixZv);
+                    if (oldArea > 0 && proposedArea < oldArea) {
+                        static unsigned recoveryEvents = 0;
+                        if (recoveryEvents++ < 12)
+                            fprintf(stderr, "[FITD-R36S] NPC UNSTICK: actor=%d world=%d overlap=%lld->%lld delta=%d,%d\\n",
+                                currentProcessedActorIdx, world, oldArea, proposedArea,
+                                hardColStepX, hardColStepZ);
+                        return;
+                    }
+                }
+            }
+#endif
+\t\t\toldtype = 0;'''
+if body.count(needle)!=1:
+    raise RuntimeError("GereCollision embedded actor case not found")
+body=body.replace(needle,repl)
+src=head+body+tail
+file.write_text(src)
+print("R36S optional window-only NPC overlap recovery + rifle unblock enabled")
