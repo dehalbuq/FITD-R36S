@@ -30,6 +30,6 @@ jobs:
       - name: Upload ARM64 test build
         uses: actions/upload-artifact@v4
         with:
-          name: FITD-R36S-AARCH64-GLSL-TRACE
-          path: work/fitdr36s-aarch64-glsl-trace.zip
+          name: FITD-R36S-AARCH64-SPHERE-FIX
+          path: work/fitdr36s-aarch64-sphere-fix.zip
           if-no-files-found: error

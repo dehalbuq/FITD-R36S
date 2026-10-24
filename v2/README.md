@@ -112,3 +112,11 @@ O console com dArkOSRE R36S kernel 4.4.189 confirmou que o patch anterior remove
 O pacote **FITD-R36S-AARCH64-GLSL-TRACE** adiciona instrumentacao dentro do backend GLES do bgfx para imprimir no fitd-debug.log o shader exato entregue a glShaderSource, com marcadores **[R36S-GLSL] 0001 | ...**. Isso permite identificar o trecho problemático e corrigi-lo sem suposicoes. O pacote contem as correcoes anteriores de shader, KMSDRM e as bibliotecas apropriadas. Nenhum dado do jogo e incluido.
 
 Para testar, substitua os arquivos do ZIP interno em /roms/ports/ e preserve fitdr36s/data; execute pelo menu Ports e envie fitdr36s/logs/fitd-debug.log. Nesta etapa a nova build e para diagnostico; nao e prometida a correcao completa da tela preta. O bloco [R36S-GLSL] contem apenas codigo do shader, nao os arquivos comerciais originais.
+
+
+## Correcao especifica para a tela preta: sphere_ps.sc
+O GLSL-TRACE no R36S mostrou GLSL ESSL 300 invalido nos testes de material de esfera: \`(0 == tmpvar_7) tmpvar_8 = bool(1);\` seguido de \`tmpvar_9 tmpvar_8 = bool(0);\`. Os erros "Expected token ';'" tinham causa na conversao de \`switch(material)\` por glsl-optimizer.
+
+O novo pacote **FITD-R36S-AARCH64-SPHERE-FIX** reescreve o shader de esferas com \`if (material == 3)\` para marmore, \`if (material == 2)\` para transparencia, e o caminho padrao de cor para os demais materiais, sem o switch/case. Substitui matematicamente cos(asin(y)) por sqrt(max(1-y*y, epsilon)) para manter estabilidade nas bordas. Os shaders anteriores, o patch KMSDRM e o GLSL-TRACE continuam incluidos.
+
+Baixe o novo pacote do workflow e substitua launcher, binario e libs, mas preserve a pasta fitdr36s/data. Caso apareca tela preta ou crash novamente, anexe fitdr36s/logs/fitd-debug.log. A compilacao ARM64 bem-sucedida nao valida execucao no hardware real.
