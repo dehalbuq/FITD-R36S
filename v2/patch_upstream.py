@@ -1182,7 +1182,8 @@ replace_one("FitdLib/mainLoop.cpp",
                 for (int actorId = 0; actorId < NUM_MAX_OBJECT && shown < 16; ++actorId) {
                     const tObject& actor = ListObjets[actorId];
                     if (actorId == currentCameraTargetActor ||
-                        actor.indexInWorld < 0 || actor.room != currentRoom) continue;
+                        actor.indexInWorld < 0 || actor.room != currentRoom ||
+                        (actor.life == -1 && !(actor.objectType & AF_ANIMATED))) continue;
                     fprintf(stderr,
                         "[FITD-R36S] AI ACTOR: id=%d world=%d life=%d mode=%d track=%d pos=%d speed=%d anim=%d frame=%d roomXZ=%d,%d stepXZ=%d,%d beta=%d hard=%d col=%d\\\\n",
                         actorId, actor.indexInWorld, actor.life, actor.trackMode,
