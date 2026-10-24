@@ -19,7 +19,7 @@ if ! touch "$LOG" 2>/dev/null; then
 fi
 exec >> "$LOG" 2>&1
 
-export FITD_DEBUG="${FITD_DEBUG:-1}"
+export FITD_DEBUG="${FITD_DEBUG:-0}"
 export SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-kmsdrm}"
 export SDL_AUDIODRIVER="${SDL_AUDIODRIVER:-alsa}"
 export SDL_VIDEO_FORCE_EGL=1
@@ -98,7 +98,7 @@ if [ "${FITD_GDB:-0}" = "1" ]; then
 else
     # Diagnostic build: safety exit to avoid an indefinite black-screen lock.
     # FITD_TEST_TIMEOUT=0 disables the timer for later normal gameplay.
-    TEST_TIMEOUT="${FITD_TEST_TIMEOUT:-90}"
+    TEST_TIMEOUT="${FITD_TEST_TIMEOUT:-0}"
     export FITD_VIDEO_TEST="${FITD_VIDEO_TEST:-0}"
     if command -v timeout >/dev/null 2>&1 && [ "$TEST_TIMEOUT" -gt 0 ] 2>/dev/null; then
         printf 'Safety timeout enabled: %s seconds; RGB video test: %s\n' "$TEST_TIMEOUT" "$FITD_VIDEO_TEST"
