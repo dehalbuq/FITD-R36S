@@ -1135,3 +1135,107 @@ replace_one("FitdLib/mainLoop.cpp",
 
     //  mainLoopVar1 = 0;''')
 print("R36S diagnostic-only AI actor/track/collision trace installed (game logic unchanged)")
+
+
+
+# Gameplay repair: ballistics and ghost effects. The upstream ray code
+# stops tracing when there is NO wall and checks actors only when inside a
+# wall. Invert it. Also ensure unimplemented particle effects cannot
+# create AF_SPECIAL entities that block walking / NPC pathfinding.
+replace_one("FitdLib/main.cpp",
+    'if(AsmCheckListCol(&localZv, &roomDataTable[room]) <= 0)',
+    'if(AsmCheckListCol(&localZv, &roomDataTable[room]) > 0)')
+
+# Special-effects actors should not behave as solid objects. Even fully
+# implemented mode=0 evaporate creates AF_SPECIAL indexInWorld=-2.
+replace_one("FitdLib/main.cpp",
+    '''        if (currentActor->indexInWorld == -1)
+            continue;''',
+    '''        if (currentActor->indexInWorld == -1 ||
+            (currentActor->objectType & AF_SPECIAL))
+            continue;''')
+
+# The ray stepping should not loop indefinitely if an original resource
+# supplies zero/invalid step length. Normally a wall, actor, or bounds ends
+# ray casting; 512 is a defensive upper bound far beyond a typical shot.
+replace_one("FitdLib/main.cpp",
+    '''    walkStep(param * 2, 0, beta);
+
+    while(foundFlag == -2)''',
+    '''    walkStep(param * 2, 0, beta);
+#ifdef FITD_R36S
+    unsigned r36sBulletSteps = 0;
+#endif
+
+    while(foundFlag == -2)''')
+replace_one("FitdLib/main.cpp",
+    '''    while(foundFlag == -2)
+    {
+        localZv.ZVX1 += animMoveX;''',
+    '''    while(foundFlag == -2)
+    {
+#ifdef FITD_R36S
+        if (++r36sBulletSteps > 512u) {
+            foundFlag = -1;
+            break;
+        }
+#endif
+        localZv.ZVX1 += animMoveX;''')
+
+# The upstream implementation only handles particle special mode=0. Other
+# modes are unimplemented, yet allocate an AF_SPECIAL actor with uninitialized
+# render fields; before the collision fix these were invisible obstructions.
+# Return before reserving actors; these unsupported modes have no working
+# visual effect to preserve.
+replace_one("FitdLib/life.cpp",
+    '''int InitSpecialObjet(int mode, int X, int Y, int Z, int stage, int room, int alpha, int beta, int gamma, ZVStruct* zvPtr)
+{
+    s16 localSpecialTable[4];''',
+    '''int InitSpecialObjet(int mode, int X, int Y, int Z, int stage, int room, int alpha, int beta, int gamma, ZVStruct* zvPtr)
+{
+#ifdef FITD_R36S
+    if (mode != 0) {
+        return -1; // no allocated ghost actor for unsupported effects
+    }
+#endif
+    s16 localSpecialTable[4];''')
+
+# LM_SPECIAL mode=1 attempts to dereference ListObjets[HIT_BY] before
+# InitSpecialObjet is even called; HIT_BY may be -1 or stale. Its effect is
+# not implemented, so do not dereference an unrelated actor.
+replace_one("FitdLib/life.cpp",
+    '''                case 1: // flow
+                {
+                    currentProcessedActorPtr = &ListObjets[currentProcessedActorPtr->HIT_BY];''',
+    '''                case 1: // flow
+                {
+#ifdef FITD_R36S
+                    break; // unimplemented particles, no HIT_BY dereference
+#endif
+                    currentProcessedActorPtr = &ListObjets[currentProcessedActorPtr->HIT_BY];''')
+
+# A hit/miss record at the moment of shot validates the physical target ID.
+# No renderer instrumentation or dynamic allocations during the ray itself.
+replace_one("FitdLib/animAction.cpp",
+    '''            if(touchedActor == -1) // no one has been touched''',
+    '''#ifdef FITD_R36S
+            fprintf(stderr,
+                "[FITD-R36S] SHOT: shooter=%d room=%d touched=%d origin=%d,%d,%d beta=%d radius=%d power=%d\\n",
+                currentProcessedActorIdx, currentProcessedActorPtr->room,
+                touchedActor,
+                currentProcessedActorPtr->roomX + currentProcessedActorPtr->hotPoint.x,
+                currentProcessedActorPtr->roomY + currentProcessedActorPtr->hotPoint.y,
+                currentProcessedActorPtr->roomZ + currentProcessedActorPtr->hotPoint.z,
+                currentProcessedActorPtr->beta, currentProcessedActorPtr->animActionParam,
+                currentProcessedActorPtr->hitForce);
+#endif
+            if(touchedActor == -1) // no one has been touched''')
+
+# Extend NPC trace with flags and target coordinates. A stuck NPC at speed=4
+# is not sufficient evidence of hard vs object collision, so preserve both.
+replace_one("FitdLib/mainLoop.cpp",
+    '''actor.stepX, actor.stepZ, actor.beta, actor.HARD_COL,
+                        actor.COL_BY);''',
+    '''actor.stepX, actor.stepZ, actor.beta, actor.HARD_COL,
+                        actor.COL_BY);''')
+print("R36S ballistic ray condition fixed; ghost special collisions disabled; shot telemetry enabled")
