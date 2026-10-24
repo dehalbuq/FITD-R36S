@@ -133,3 +133,16 @@ Em teste da versao SPHERE-FIX, o console continuou tocando audio, mas ficou com 
 - Para evitar travamentos indefinidos, o launcher usa o comando `timeout` (se estiver disponivel), encerrando a versao diagnostica automaticamente em **90 segundos**. O programa normal nao deve usar esse limite; altere FITD_TEST_TIMEOUT ou defina zero para desabilitar posteriormente. O codigo de saida 124 indica timeout (nao erro de compilacao).
 
 Preserve a pasta fitdr36s/data ao atualizar. Envie o fitdr36s/logs/fitd-debug.log atualizado e informe se viu VERMELHO, VERDE, AZUL antes de ficar preta. Nao force outros desligamentos se puder evitar: apos ~90s o teste deve encerrar sozinho (se a ferramenta timeout existir).
+
+
+## FITD RGB passou mas jogo permanece preto (POSTBGFX-PROBE)
+Teste no dArkOSRE confirma que RED, GREEN, BLUE aparecem corretamente usando glClear/SDL_GL_SwapWindow ANTES de bgfx inicializar, gamepad SDL funciona, audio toca, e >2100 iteracoes da engine rodam em 90 segundos. A tela segue preta apesar de nenhum BGFX FATAL ou erro DRM pageflip. O comando timeout da versao de teste gerou exit 124 esperado.
+
+Artefato **FITD-R36S-AARCH64-POSTBGFX-PROBE** (ZIP interno fitdr36s-aarch64-postbgfx-probe.zip). O novo codigo diagnostica na etapa depois de bgfx::frame:
+- BGFX STATS inclui numero real de draw calls, numero de views, programas, texturas e tamanho do framebuffer; 'frames rendered' sozinho NAO confirma draws GPU.
+- PIXEL BEFORE MAGENTA registra RGBA central lido do framebuffer padrao que SDL vai apresentar.
+- MAGENTA PRESENTATION TEST sobrescreve temporariamente o framebuffer com magenta *depois* de bgfx::frame e *antes* de SDL_GL_SwapWindow. Por aproximadamente 3,5 segundos apos o inicio do motor, espera-se tela MAGENTA (roxo-rosa). Isso serve para saber se a apresentacao permanece correta mesmo apos bgfx inicializar e desenhar. Depois a sobreposicao para, permitindo observar novamente a imagem do jogo.
+- Controle: START+SELECT **ou A+B** segurados por 1,5 segundos para sair. O firmware mostrou alguns botoes apenas como joystick raw, entao A+B mapeado como gamepad e alternativa mais confiavel. Se nenhuma combinacao funcionar, timeout automatico apos 90 segundos.
+- DEBUG e impressao GLSL das falhas mantidos.
+
+**Teste esperado:** veja RED/GREEN/BLUE, depois confira se MAGENTA aparece no inicio do jogo, e entao se o jogo sai da tela preta. Envie fitdr36s/logs/fitd-debug.log. Nao extrapolar de 'BGFX STATS frames': somente numDraw/PIXEL e visibilidade da MAGENTA ajudam a localizar falha. Em uso normal desligue FITD_VIDEO_TEST/FITD_TEST_TIMEOUT e retire instrumentacao de debug.
