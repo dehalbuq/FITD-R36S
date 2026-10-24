@@ -643,7 +643,7 @@ print("R36S R8U integer texture nearest-only fix: allocations=5 bindings=13")
 file = root / "FitdLib/osystemAL_adlib.cpp"
 value = file.read_text()
 value = value.replace('#include "osystemAL.h"',
-    '#include "osystemAL.h"\n#include "soloud.h"\n#include <cstdio>')
+    '#include "osystemAL.h"\n#ifdef getVersion\n#undef getVersion\n#endif\n#include "soloud.h"\n#include <cstdio>')
 adlib_source = r'''
 extern SoLoud::Soloud* gSoloud;
 class R36sAdlibSource;
