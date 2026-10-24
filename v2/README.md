@@ -203,3 +203,14 @@ Artefato **FITD-R36S-AARCH64-PERF-PROFILE**, ZIP interno `fitdr36s-aarch64-perf-
 4. **Limite de FPS**: 30 segue padrao. Mais quadros nao implicam a mesma velocidade de movimentos: engine original avanca logica por chamadas a `process_events` com relogio nominal de 25Hz. Se o FPS real cair a 10-15, as animacoes tambem podem aparentar lentidao. Antes de mexer em movimento/animacao, usar telemetry para distinguir gargalo na GPU, bgfx ou em DRM/CPU.
 
 Esta versao experimental nao garante mais FPS. Preserve `fitdr36s/data` e os `SAVE*.ITD`, e mantenha o ZIP anterior funcional como backup. O uso de `-O3` deve ser validado no hardware porque pode alterar otimizacoes de codigo legado.
+
+
+## 2026-10-24 — Jogo a 60 FPS, inimigo da janela preso
+O usuario confirmou ~58,5 FPS reais com `FITD_FPS_LIMIT=60` no R36S, com visuais fluidos; entretanto, um inimigo que quebra a janela do sotao fica preso. No log consta `Unsupported case 1 in createFlow`. Isso e efeito especial flow=1 *nao implementado pelo FITD original*; nao ha prova de relacao causal com movimento de inimigo.
+
+Artefato **FITD-R36S-AARCH64-NPC-CLOCK-FIX** (ZIP fitdr36s-aarch64-npc-clock-fix.zip) com ajustes **experimentais**:
+- render a 60 FPS como antes, mas o relogio da simulacao do motor agora progride conforme tempo real, a 25 ticks/s, em vez de avancar pelo menos 1 tick a cada um dos ~58,5 quadros/s; `FITD_GAME_CLOCK=fixed` padrao, `legacy` para comparacao. Renderizar nao exige avanco de tempo em cada frame.
+- modo `LM_SPECIAL flow=1` ignorado com aviso em vez de criar ator auxiliar AF_SPECIAL mal inicializado. Esse recurso/efeito ja nao era implementado pelo upstream. Nao altera IA de trajetoria nem colisao do monstro.
+- `FITD_AI_TRACE=1` ativado para diagnostico (a cada 2 s escreve `AI TRACE` e `AI ACTOR` com id, sala, track, coordenadas, velocidade e colisao). Para desligar use 0.
+
+Teste na **mesma cena**: iniciar novo jogo (ou salvar ANTES da aparicao do monstro), deixar `FITD_FPS_LIMIT=60`, comparar primeiro `FITD_GAME_CLOCK=fixed` e, se ainda estiver preso, `FITD_GAME_CLOCK=legacy`. Enviar logs mostrando o mesmo monstro antes e depois de ficar preso. A taxa visual de 60 Hz pode incluir frames com pose igual a anterior; a interpolacao suave de personagens a 60 Hz preservando a simulacao a 25 Hz sera uma evolucao separada. Guarde a versao anterior jogavel e backup de SAVE*.ITD.

@@ -21,7 +21,12 @@ exec >> "$LOG" 2>&1
 
 # Maximum requested render FPS. Change 30 to 25 (original timing) or 0 (uncapped).
 # WARNING: FITD is an old 25Hz engine; >25 may increase gameplay speed.
-export FITD_FPS_LIMIT="${FITD_FPS_LIMIT:-30}"
+# R36S renders ~58.5 FPS, while script/animation time uses a 25Hz clock.
+export FITD_FPS_LIMIT="${FITD_FPS_LIMIT:-60}"
+# Fixed real-time 25Hz game clock; choose 'legacy' to compare old behavior.
+export FITD_GAME_CLOCK="${FITD_GAME_CLOCK:-fixed}"
+# Enemy/AI movement trace, logs every two seconds.
+export FITD_AI_TRACE="${FITD_AI_TRACE:-1}"
 # Log real FPS and milliseconds spent in bgfx and KMS/SDL swap every 5 seconds.
 export FITD_PERF_TRACE="${FITD_PERF_TRACE:-1}"
 # Set to 0 to try disabling vsync; default 1 preserves stable SDL KMSDRM scanout.
