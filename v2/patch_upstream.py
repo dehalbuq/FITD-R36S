@@ -985,3 +985,27 @@ replace_one("FitdLib/osystemSDL.cpp",
     'stage=SDL swap interval=1',
     'stage=SDL swap interval configured')
 print("R36S v3: 10 save slots, actual Abandon quit, music/SFX states, honest HIGH graphics, optional FPS 0-120 and vsync")
+
+
+
+# A confirms the save slot in a nested picker; without suppressing the
+# still-held button the parent menu immediately reopens the save dialog.
+replace_one("FitdLib/systemMenu.cpp",
+    '''                    case 1: // save
+                        makeSave(45);
+                        break;''',
+    '''                    case 1: // save
+                        makeSave(45);
+                        AntiRebond = 1;
+                        break;''')
+replace_one("FitdLib/systemMenu.cpp",
+    '''                        }
+                        break;
+#ifdef FITD_R36S
+                    case 3: // music enabled / disabled''',
+    '''                        }
+                        AntiRebond = 1;
+                        break;
+#ifdef FITD_R36S
+                    case 3: // music enabled / disabled''')
+print("R36S save/load held-button debounce installed")
