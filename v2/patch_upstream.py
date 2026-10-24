@@ -381,3 +381,100 @@ replace_one("FitdLib/shaders/sphere_ps.sc",
     }
     gl_FragColor = resultColor;''')
 print("R36S sphere shader GLSL switch removal installed")
+
+
+
+# Hardware isolation test: draw primary RGB colors using raw GLES on SDL's
+# own framebuffer before launching bgfx/the game. This distinguishes scanout
+# failures from issues in the bgfx/game rendering path. Off: FITD_VIDEO_TEST=0.
+replace_one("FitdLib/osystemSDL.cpp",
+    '    int glMajor = 0, glMinor = 0;',
+    '''    const char* r36sVideoTest = std::getenv("FITD_VIDEO_TEST");
+    if (!r36sVideoTest || r36sVideoTest[0] != '0') {
+        using R36sClearColor = void (*)(float, float, float, float);
+        using R36sClear = void (*)(unsigned int);
+        R36sClearColor setColor = reinterpret_cast<R36sClearColor>(SDL_GL_GetProcAddress("glClearColor"));
+        R36sClear clearBuffer = reinterpret_cast<R36sClear>(SDL_GL_GetProcAddress("glClear"));
+        if (setColor && clearBuffer) {
+            fprintf(stderr, "[FITD-R36S] VIDEO TEST: red, green, blue; expect 3 visible colors\\n");
+            const float colors[3][3] = {{1.f, 0.f, 0.f}, {0.f, 1.f, 0.f}, {0.f, 0.f, 1.f}};
+            const char* colorNames[3] = {"RED", "GREEN", "BLUE"};
+            for (int i = 0; i < 3; ++i) {
+                setColor(colors[i][0], colors[i][1], colors[i][2], 1.f);
+                clearBuffer(0x00004000u); // GL_COLOR_BUFFER_BIT
+                if (!SDL_GL_SwapWindow(gWindowBGFX)) {
+                    fprintf(stderr, "[FITD-R36S] VIDEO TEST: swap failed %s\\n", SDL_GetError());
+                }
+                fprintf(stderr, "[FITD-R36S] VIDEO TEST: submitted %s\\n", colorNames[i]);
+                SDL_Delay(650);
+            }
+            fprintf(stderr, "[FITD-R36S] VIDEO TEST: finished; starting game\\n");
+        } else {
+            fprintf(stderr, "[FITD-R36S] VIDEO TEST: GLES glClear functions unavailable\\n");
+        }
+    }
+    int glMajor = 0, glMinor = 0;''')
+
+# Make START + SELECT held for 1.5s an explicit emergency-exit combination.
+# Also accept Enter + Escape when a firmware maps handheld buttons as keys.
+# The port's original gamepad code runs before the FITD_DEBUGGER marker.
+replace_one("FitdLib/input.cpp",
+    '#include <backends/imgui_impl_sdl3.h>',
+    '#include <backends/imgui_impl_sdl3.h>\n#include <cstdio>\n#include <cstdlib>')
+replace_one("FitdLib/input.cpp",
+    '#ifdef FITD_DEBUGGER\n    if (debuggerVar_topCamera)',
+    '''#ifdef FITD_R36S
+    static bool r36sReportedDevices = false;
+    if (!r36sReportedDevices) {
+        int rawJoysticks = 0, gamepads = 0;
+        SDL_JoystickID* joys = SDL_GetJoysticks(&rawJoysticks);
+        SDL_JoystickID* pads = SDL_GetGamepads(&gamepads);
+        fprintf(stderr, "[FITD-R36S] input devices: joysticks=%d mapped gamepads=%d\\n", rawJoysticks, gamepads);
+        SDL_free(joys);
+        SDL_free(pads);
+        r36sReportedDevices = true;
+    }
+    const bool* r36sKeys = SDL_GetKeyboardState(nullptr);
+    const bool r36sKeyQuit = r36sKeys && r36sKeys[SDL_SCANCODE_RETURN] && r36sKeys[SDL_SCANCODE_ESCAPE];
+    const bool r36sPadQuit = pad &&
+        SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_START) &&
+        SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_BACK);
+    static Uint64 r36sQuitSince = 0;
+    if (r36sPadQuit || r36sKeyQuit) {
+        if (r36sQuitSince == 0) r36sQuitSince = SDL_GetTicks();
+        if (SDL_GetTicks() - r36sQuitSince >= 1500) {
+            fprintf(stderr, "[FITD-R36S] EXIT: START+SELECT (or Enter+Escape) held\\n");
+            fflush(stderr);
+            std::_Exit(0);
+        }
+    } else {
+        r36sQuitSince = 0;
+    }
+#endif
+#ifdef FITD_DEBUGGER
+    if (debuggerVar_topCamera)''')
+replace_one("FitdLib/input.cpp",
+    '        case SDL_EVENT_QUIT:',
+    '''        case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+            fprintf(stderr, "[FITD-R36S] gamepad button pressed: %d\\n", (int)event.gbutton.button);
+            break;
+        case SDL_EVENT_JOYSTICK_BUTTON_DOWN:
+            fprintf(stderr, "[FITD-R36S] joystick button pressed: %d\\n", (int)event.jbutton.button);
+            break;
+        case SDL_EVENT_QUIT:''')
+
+# Report frame pacing and whether actual SDL buffer swaps are successful.
+replace_one("FitdLib/bgfxGlue.cpp",
+    '    if (SDL_strcmp(SDL_GetCurrentVideoDriver(), "kmsdrm") == 0)\n        SDL_GL_SwapWindow(gWindowBGFX);',
+    '''    if (SDL_strcmp(SDL_GetCurrentVideoDriver(), "kmsdrm") == 0) {
+        if (!SDL_GL_SwapWindow(gWindowBGFX)) {
+            fprintf(stderr, "[FITD-R36S] SDL_GL_SwapWindow failed: %s\\n", SDL_GetError());
+        }
+        static unsigned int r36sFrameCounter = 0;
+        ++r36sFrameCounter;
+        if (r36sFrameCounter % 125u == 0u) {
+            fprintf(stderr, "[FITD-R36S] game rendered %u frames; GL context=%p\\n",
+                r36sFrameCounter, SDL_GL_GetCurrentContext());
+        }
+    }''')
+print("R36S video scanout test + emergency exit + frame diagnostics installed")
