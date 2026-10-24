@@ -1009,3 +1009,78 @@ replace_one("FitdLib/systemMenu.cpp",
 #ifdef FITD_R36S
                     case 3: // music enabled / disabled''')
 print("R36S save/load held-button debounce installed")
+
+
+
+# RK3326 performance pass 1: remember permanently when drmModePageFlip()
+# has been rejected with -EINVAL by this KMSDRM implementation. Preserve the
+# already working drmModeSetCrtc fallback; avoid an unnecessary ioctl each
+# frame once unsupported pageflips have been detected.
+replace_one("ThirdParty/SDL/src/video/kmsdrm/SDL_kmsdrmopengles.c",
+    '''        ret = KMSDRM_drmModePageFlip(viddata->drm_fd, dispdata->crtc->crtc_id,
+                                     fb_info->fb_id, flip_flags, &windata->waiting_for_flip);''',
+    '''        static bool r36s_pageflip_rejected = false;
+        if (!r36s_pageflip_rejected) {
+            ret = KMSDRM_drmModePageFlip(viddata->drm_fd, dispdata->crtc->crtc_id,
+                                         fb_info->fb_id, flip_flags, &windata->waiting_for_flip);
+            if (ret == -EINVAL) {
+                r36s_pageflip_rejected = true;
+            }
+        } else {
+            ret = -EINVAL;
+        }''')
+
+# Optional inexpensive performance counters. These count delivered frames,
+# unlike the launcher's FPS limit. Measure bgfx::frame() and SDL/EGL/KMS swap
+# separately, once per 5 seconds. No glReadPixels, synchronizing queries, or
+# additional drawing is used.
+replace_one("FitdLib/bgfxGlue.cpp",
+    '''    bgfx::frame();
+#ifdef FITD_R36S''',
+    '''#ifdef FITD_R36S
+    const Uint64 r36sBgfxBegin = SDL_GetPerformanceCounter();
+#endif
+    bgfx::frame();
+#ifdef FITD_R36S
+    const Uint64 r36sBgfxEnd = SDL_GetPerformanceCounter();''')
+replace_one("FitdLib/bgfxGlue.cpp",
+    '''        const char* gpuTrace = SDL_getenv("FITD_GPU_TRACE");''',
+    '''        const Uint64 r36sSwapBegin = SDL_GetPerformanceCounter();
+        const char* gpuTrace = SDL_getenv("FITD_GPU_TRACE");''')
+replace_one("FitdLib/bgfxGlue.cpp",
+    '''        if (!SDL_GL_SwapWindow(gWindowBGFX)) {
+            fprintf(stderr, "[FITD-R36S] SDL_GL_SwapWindow failed: %s\\n", SDL_GetError());
+        }''',
+    '''        if (!SDL_GL_SwapWindow(gWindowBGFX)) {
+            fprintf(stderr, "[FITD-R36S] SDL_GL_SwapWindow failed: %s\\n", SDL_GetError());
+        }
+        const Uint64 r36sSwapEnd = SDL_GetPerformanceCounter();
+        if (SDL_getenv("FITD_PERF_TRACE")) {
+            static Uint64 r36sStartCounter = 0;
+            static Uint64 r36sPreviousReport = 0;
+            static unsigned r36sSampledFrames = 0;
+            static double r36sBgfxTotalMs = 0.0;
+            static double r36sSwapTotalMs = 0.0;
+            const double frequency = (double)SDL_GetPerformanceFrequency();
+            if (!r36sStartCounter) {
+                r36sStartCounter = r36sSwapEnd;
+                r36sPreviousReport = r36sSwapEnd;
+            }
+            ++r36sSampledFrames;
+            r36sBgfxTotalMs += 1000.0 * (r36sBgfxEnd - r36sBgfxBegin) / frequency;
+            r36sSwapTotalMs += 1000.0 * (r36sSwapEnd - r36sSwapBegin) / frequency;
+            const double elapsed = (r36sSwapEnd - r36sPreviousReport) / frequency;
+            if (elapsed >= 5.0) {
+                fprintf(stderr,
+                    "[FITD-R36S] PERF: actual_fps=%.1f limit=%d bgfx_ms=%.2f swap_ms=%.2f frames=%u\\n",
+                    r36sSampledFrames / elapsed, gFrameLimit,
+                    r36sBgfxTotalMs / r36sSampledFrames,
+                    r36sSwapTotalMs / r36sSampledFrames,
+                    r36sSampledFrames);
+                r36sPreviousReport = r36sSwapEnd;
+                r36sSampledFrames = 0;
+                r36sBgfxTotalMs = 0.0;
+                r36sSwapTotalMs = 0.0;
+            }
+        }''')
+print("R36S DRM rejected-pageflip cache + 5s hardware performance metrics installed")
