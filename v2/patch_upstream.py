@@ -1148,39 +1148,40 @@ replace_one("FitdLib/main.cpp",
 
 # Special-effects actors should not behave as solid objects. Even fully
 # implemented mode=0 evaporate creates AF_SPECIAL indexInWorld=-2.
-replace_one("FitdLib/main.cpp",
-    '''        if (currentActor->indexInWorld == -1)
-            continue;''',
-    '''        if (currentActor->indexInWorld == -1 ||
+file = root / "FitdLib/main.cpp"
+value = file.read_text()
+start = value.index("int CheckObjectCol(int actorIdx, ZVStruct* zvPtr)")
+finish = value.index("void take(int objIdx)", start)
+head, body, tail = value[:start], value[start:finish], value[finish:]
+old = '''        if (currentActor->indexInWorld == -1)
+            continue;'''
+new = '''        if (currentActor->indexInWorld == -1 ||
             (currentActor->objectType & AF_SPECIAL))
-            continue;''')
+            continue;'''
+if body.count(old) != 1:
+    raise RuntimeError("CheckObjectCol guard signature changed")
+file.write_text(head + body.replace(old, new) + tail)
 
 # The ray stepping should not loop indefinitely if an original resource
 # supplies zero/invalid step length. Normally a wall, actor, or bounds ends
 # ray casting; 512 is a defensive upper bound far beyond a typical shot.
 replace_one("FitdLib/main.cpp",
-    '''    walkStep(param * 2, 0, beta);
-
-    while(foundFlag == -2)''',
-    '''    walkStep(param * 2, 0, beta);
+    '\twalkStep(param * 2, 0, beta);',
+    '''\twalkStep(param * 2, 0, beta);
 #ifdef FITD_R36S
     unsigned r36sBulletSteps = 0;
-#endif
-
-    while(foundFlag == -2)''')
+#endif''')
 replace_one("FitdLib/main.cpp",
-    '''    while(foundFlag == -2)
-    {
-        localZv.ZVX1 += animMoveX;''',
-    '''    while(foundFlag == -2)
-    {
+    '\twhile(foundFlag == -2)\n\t{\n\t\tlocalZv.ZVX1 += animMoveX;',
+    '''\twhile(foundFlag == -2)
+\t{
 #ifdef FITD_R36S
         if (++r36sBulletSteps > 512u) {
             foundFlag = -1;
             break;
         }
 #endif
-        localZv.ZVX1 += animMoveX;''')
+\t\tlocalZv.ZVX1 += animMoveX;''')
 
 # The upstream implementation only handles particle special mode=0. Other
 # modes are unimplemented, yet allocate an AF_SPECIAL actor with uninitialized
@@ -1231,11 +1232,4 @@ replace_one("FitdLib/animAction.cpp",
 #endif
             if(touchedActor == -1) // no one has been touched''')
 
-# Extend NPC trace with flags and target coordinates. A stuck NPC at speed=4
-# is not sufficient evidence of hard vs object collision, so preserve both.
-replace_one("FitdLib/mainLoop.cpp",
-    '''actor.stepX, actor.stepZ, actor.beta, actor.HARD_COL,
-                        actor.COL_BY);''',
-    '''actor.stepX, actor.stepZ, actor.beta, actor.HARD_COL,
-                        actor.COL_BY);''')
 print("R36S ballistic ray condition fixed; ghost special collisions disabled; shot telemetry enabled")
