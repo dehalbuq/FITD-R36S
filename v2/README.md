@@ -120,3 +120,16 @@ O GLSL-TRACE no R36S mostrou GLSL ESSL 300 invalido nos testes de material de es
 O novo pacote **FITD-R36S-AARCH64-SPHERE-FIX** reescreve o shader de esferas com \`if (material == 3)\` para marmore, \`if (material == 2)\` para transparencia, e o caminho padrao de cor para os demais materiais, sem o switch/case. Substitui matematicamente cos(asin(y)) por sqrt(max(1-y*y, epsilon)) para manter estabilidade nas bordas. Os shaders anteriores, o patch KMSDRM e o GLSL-TRACE continuam incluidos.
 
 Baixe o novo pacote do workflow e substitua launcher, binario e libs, mas preserve a pasta fitdr36s/data. Caso apareca tela preta ou crash novamente, anexe fitdr36s/logs/fitd-debug.log. A compilacao ARM64 bem-sucedida nao valida execucao no hardware real.
+
+
+## R36S RGB + SAIDA - Diagnostico da tela preta com audio
+Em teste da versao SPHERE-FIX, o console continuou tocando audio, mas ficou com a imagem preta e nao respondeu ao comando de saida. O som confirma apenas atividade da parte do motor/audio, NAO comprova que a renderizacao esteja apresentando imagem. E necessario conferir o novo fitd-debug.log para descartar outros shaders e falhas.
+
+**Novo pacote: FITD-R36S-AARCH64-RGB-EXIT-TEST** (ZIP interno fitdr36s-aarch64-rgb-exit-test.zip).
+
+- No inicio do SDL/KMSDRM, antes de bgfx iniciar, um teste direto de OpenGL ES desenha VERMELHO, VERDE e AZUL por 650 ms cada. Veja se as tres cores aparecem na tela do R36S antes do jogo. O log registra `VIDEO TEST: submitted RED/GREEN/BLUE` e resultados das trocas de buffer. Se o log informa que as cores foram submetidas mas a tela ficou preta, o problema provavelmente esta no caminho EGL/KMSDRM/scanout. Se as cores aparecem mas o jogo fica preto, o proximo passo e revisar o bgfx e a propria renderizacao do FITD. `FITD_VIDEO_TEST=0` desabilita o teste.
+- Durante o jogo, registra `game rendered N frames; GL context=...` a cada 125 quadros (~5s), alem de mensagens quando SDL_GL_SwapWindow falhar.
+- Segure **START + SELECT** durante 1,5 segundo para sair quando SDL reconhecer o controle como gamepad. Tambem aceita Enter + Escape quando o firmware emula teclado. O log informa quantos joysticks e gamepads SDL encontrou e os codigos dos botoes pressionados. O botao pode nao funcionar se a firmware nao expuser um gamepad reconhecido.
+- Para evitar travamentos indefinidos, o launcher usa o comando `timeout` (se estiver disponivel), encerrando a versao diagnostica automaticamente em **90 segundos**. O programa normal nao deve usar esse limite; altere FITD_TEST_TIMEOUT ou defina zero para desabilitar posteriormente. O codigo de saida 124 indica timeout (nao erro de compilacao).
+
+Preserve a pasta fitdr36s/data ao atualizar. Envie o fitdr36s/logs/fitd-debug.log atualizado e informe se viu VERMELHO, VERDE, AZUL antes de ficar preta. Nao force outros desligamentos se puder evitar: apos ~90s o teste deve encerrar sozinho (se a ferramenta timeout existir).
