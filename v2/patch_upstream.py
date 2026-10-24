@@ -1171,7 +1171,7 @@ replace_one("FitdLib/mainLoop.cpp",
     //  mainLoopVar1 = 0;''',
     '''        updatePendingEvents();
 #ifdef FITD_R36S
-        if (SDL_getenv("FITD_AI_TRACE")) {
+        if (SDL_getenv("FITD_AI_TRACE") && SDL_getenv("FITD_AI_TRACE")[0] == '1') {
             static Uint64 r36sNextAiTrace = 0;
             const Uint64 r36sNow = SDL_GetTicks();
             if (r36sNow >= r36sNextAiTrace) {
