@@ -104,3 +104,11 @@ bgfx foi inicializado com contexto EGL **externo ao bgfx**, criado pelo SDL3. Ne
 Preserve /roms/ports/fitdr36s/data e instale o novo ZIP extraindo o arquivo interno em /roms/ports. Teste o launcher e envie fitdr36s/logs/fitd-debug.log, particularmente as mensagens "SDL swap interval", "FITD-R36S: drmModePageFlip", "BGFX FATAL" e "Exit code". Se a tela permanecer preta sem crash, encerre o jogo, aguarde a gravacao do log e envie o arquivo.
 
 Observacao: compilacao CI verde comprova apenas que o port ARM64 compila; nao valida o KMSDRM do R36S.
+
+
+## Diagnosticando erro L0001 do GLSL ES (tela preta, 2026-10-23)
+O console com dArkOSRE R36S kernel 4.4.189 confirmou que o patch anterior removeu completamente as mensagens "Could not queue pageflip -22", e que SDL3/KMSDRM, GLES 3, bgfx e os buffers DRM funcionam. O jogo encerra depois de "LM_WATER" / "LM_SHAKING" com BGFX FATAL "Failed to compile shader" e erros "L0001 Expected token ';'" nas linhas 49,50,73,74,98,99,138. O erro anterior no mod() GLSL desapareceu.
+
+O pacote **FITD-R36S-AARCH64-GLSL-TRACE** adiciona instrumentacao dentro do backend GLES do bgfx para imprimir no fitd-debug.log o shader exato entregue a glShaderSource, com marcadores **[R36S-GLSL] 0001 | ...**. Isso permite identificar o trecho problemático e corrigi-lo sem suposicoes. O pacote contem as correcoes anteriores de shader, KMSDRM e as bibliotecas apropriadas. Nenhum dado do jogo e incluido.
+
+Para testar, substitua os arquivos do ZIP interno em /roms/ports/ e preserve fitdr36s/data; execute pelo menu Ports e envie fitdr36s/logs/fitd-debug.log. Nesta etapa a nova build e para diagnostico; nao e prometida a correcao completa da tela preta. O bloco [R36S-GLSL] contem apenas codigo do shader, nao os arquivos comerciais originais.
