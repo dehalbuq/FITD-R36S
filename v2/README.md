@@ -233,3 +233,14 @@ Build FITD-R36S-AARCH64-HIT-COLLISION-FIX, ZIP `fitdr36s-aarch64-hit-collision-f
 3. **Diagnostico**: cada disparo imprime `[FITD-R36S] SHOT: shooter=N room=N touched=N origin=X,Y,Z beta=N radius=N power=N`, tornando verificavel se o sistema detecta o ator; `AI TRACE` e `AI ACTOR` anteriores permanecem. Compatibilidade OpenGL ES3/SDL3/SoLoud, menu, saves e o ritmo atual de 60 FPS foram preservados.
 
 A correcao da colisao de fantasmas e plausivel para monstros enroscados, mas **nao comprovada no console**; se continuar, enviar log com shot e AI ACTOR para rastrear pathfinder/rotas da fase. Fazer backup dos saves antes do teste.
+
+
+## 2026-10-24 — Investigando monstros presos em janelas e rifle que nao os atinge
+O pacote `HIT-COLLISION-FIX` funcionou com o zumbi (SHOT touched=18 nas duas balas), mas as duas balas no inimigo da sala 4 retornam SHOT touched=-1. O inimigo ator 20 / world 57 / life 74 / modo follow(2) / speed 4 / anim 50 apresenta frame avancando e beta mudando, mas coordenadas roomXZ permanecem (-750, 2159), proximo do objeto world51 em (-750, 2140), que desaparece da lista ativa depois da animacao da janela. Outras cenas apresentam atores em movimento parado, inclusive no quarto do espelho. Os 58,5 FPS e o audio/controles ja funcionam.
+
+Novo pacote **FITD-R36S-AARCH64-WINDOW-NPC-DIAGNOSTICS**, ZIP interno `fitdr36s-aarch64-window-npc-diagnostics.zip`. E DIAGNOSTICO, sem nova tentativa de forcar movimento ou de atravessar paredes. A causa precisa ser separada pela telemetria:
+- `FITD_NPC_MOTION_TRACE=1`: `NPC MOTION` a cada ~2s por inimigo follow (mode=2 e speed>=4): root=animStepX,Z extraidos da animacao, requested=deslocamento que o animador pede, resolved=deslocamento apos resolucao de colisoes, walls=colisoes fisicas com paredes, objects=outros atores, dyn=bandeira de colisao. Se root e requested 0, problema de root motion/animacao; se requested nao zero e resolved 0, procurar a parede/ator bloqueador; se resolved nao zero, mas roomXZ nao avanca, investigar commit do frame.
+- `FITD_SHOT_TRACE=1`: `RAY WALL` registra tipo/parametro da parede onde a bala interrompe, com coordenadas finais e numero de passos; `RAY RESULT` informa id de ator atingido ou -1. Nao permite atravessar paredes.
+- `FITD_FPS_LIMIT=60`, SDL3 GLES3 e jogo original preservados; `FITD_AI_TRACE=1` existente continua.
+
+**Passos:** guardar saves / versao que funciona, testar o inimigo preso e disparar duas vezes de frente para ele, enviar `fitdr36s/logs/fitd-debug.log` contendo `NPC MOTION`, `RAY WALL`, `RAY RESULT`, `SHOT`. Se a colisao for realmente a janela, localizar hardCol especifica para desativar SOMENTE quando evento de janela destruida for acionado; nao desativar paredes globalmente.

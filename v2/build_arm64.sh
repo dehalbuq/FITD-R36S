@@ -43,6 +43,6 @@ for lib in libstdc++.so.6 libgcc_s.so.1 libatomic.so.1; do
 done
 (
   cd "$PORT"
-  zip -qr "$ROOT/work/fitdr36s-aarch64-hit-collision-fix.zip" .
+  zip -qr "$ROOT/work/fitdr36s-aarch64-window-npc-diagnostics.zip" .
 )
-echo "PORT READY: $ROOT/work/fitdr36s-aarch64-hit-collision-fix.zip"
+echo "PORT READY: $ROOT/work/fitdr36s-aarch64-window-npc-diagnostics.zip"

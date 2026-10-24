@@ -26,6 +26,10 @@ export FITD_FPS_LIMIT="${FITD_FPS_LIMIT:-60}"
 # Original engine timing retained: NPC bug predates the 60 FPS change.
 # Enemy/AI movement trace, logs every two seconds.
 export FITD_AI_TRACE="${FITD_AI_TRACE:-1}"
+# Diagnose running-in-place enemies: root motion vs actual walls/actors.
+export FITD_NPC_MOTION_TRACE="${FITD_NPC_MOTION_TRACE:-1}"
+# For each shot, report hard wall stop vs actual target hit.
+export FITD_SHOT_TRACE="${FITD_SHOT_TRACE:-1}"
 # Log real FPS and milliseconds spent in bgfx and KMS/SDL swap every 5 seconds.
 export FITD_PERF_TRACE="${FITD_PERF_TRACE:-1}"
 # Set to 0 to try disabling vsync; default 1 preserves stable SDL KMSDRM scanout.
