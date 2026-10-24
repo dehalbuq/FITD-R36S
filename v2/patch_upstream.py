@@ -254,4 +254,16 @@ replace_one("FitdLib/bgfxGlue.cpp",
     '        loggedFirstFrame = true;\n'
     '    }\n'
     '#ifdef FITD_R36S')
+# GLSL ES 3.0 requires explicit precision for unsigned integer samplers.
+# bgfx's generated ESSL currently declares highp float/int, but does not add
+# precision for usampler2D; failing only at runtime on Mali GLES drivers.
+# All FITD pixel shaders include palette.sh, so one fix covers every program.
+replace_one("FitdLib/shaders/palette.sh",
+    'USAMPLER2D(s_paletteTexture, 1);',
+    '#if BGFX_SHADER_LANGUAGE_GLSL >= 300\\n'
+    'precision highp usampler2D;\\n'
+    '#endif\\n'
+    'USAMPLER2D(s_paletteTexture, 1);')
+print("R36S shader precision fix installed")
+
 print("R36S diagnostic instrumentation installed")
