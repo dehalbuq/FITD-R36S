@@ -1265,6 +1265,7 @@ replace_one("FitdLib/anim.cpp",
 \tif(stepX || stepY || stepZ) // start of movement management''')
 replace_one("FitdLib/anim.cpp",
     '''\t\t\tint numCol = AsmCheckListCol(&zvLocal, &roomDataTable[currentProcessedActorPtr->room]);
+
 \t\t\tfor(int i=0;i<numCol;i++)''',
     '''\t\t\tint numCol = AsmCheckListCol(&zvLocal, &roomDataTable[currentProcessedActorPtr->room]);
 #ifdef FITD_R36S
