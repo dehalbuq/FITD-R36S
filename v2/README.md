@@ -146,3 +146,11 @@ Artefato **FITD-R36S-AARCH64-POSTBGFX-PROBE** (ZIP interno fitdr36s-aarch64-post
 - DEBUG e impressao GLSL das falhas mantidos.
 
 **Teste esperado:** veja RED/GREEN/BLUE, depois confira se MAGENTA aparece no inicio do jogo, e entao se o jogo sai da tela preta. Envie fitdr36s/logs/fitd-debug.log. Nao extrapolar de 'BGFX STATS frames': somente numDraw/PIXEL e visibilidade da MAGENTA ajudam a localizar falha. Em uso normal desligue FITD_VIDEO_TEST/FITD_TEST_TIMEOUT e retire instrumentacao de debug.
+
+
+## R36S: RGB e magenta aparecem; bgfx game draws 45 mas framebuffer preto
+O teste POSTBGFX-PROBE confirmou glReadPixels do framebuffer padrao com RGBA=(0,0,0,255) mesmo depois de bgfx::frame e com 45 draw calls por quadro. O teste glClear magenta diretamente via GL antes de SDL_GL_SwapWindow mostra magenta no display; logo a integracao SDL/EGL/DRM e a troca de buffers podem apresentar cor. O bgfx compila shaders sem FATAL e tem desenhos ativos, mas os pixels do FITD permanecem pretos.
+
+**Novo artefato: FITD-R36S-AARCH64-BGFX-GREEN-TEST** / ZIP interno fitdr36s-aarch64-bgfx-green-test.zip. Em uma view dedicada ID 30, bgfx limpa o framebuffer padrao com VERDE por 10 segundos apos inicializar o motor (depois de renderizar o game na view 0). O teste magenta em GL continua nos primeiros 3,5 segundos. Resultado esperado: vermelho, verde, azul (teste SDL) -> magenta (~3,5s, SDL GL depois de bgfx) -> verde (~6,5s, limpeza BGFX) -> jogo (~restante). Se o verde BGFX nao aparecer, o gargalo esta no caminho de saida do bgfx, nao nos recursos do jogo; se aparecer, verificar shaders, dados e renderizacao da geometria FITD. O diagnostico grava `BGFX GREEN VIEW` e `COLOR GRID: nonblack=N/9` com amostragem de nove pixels do framebuffer padrao.
+
+Mantenha o launcher com timeout 90s, joystick START+SELECT ou A+B e a pasta fitdr36s/data original. Relate se VERDE apareceu DEPOIS do magenta e anexe fitd-debug.log. Esta e uma compilacao para diagnostico experimental; a tela preta do jogo ainda nao foi corrigida.
