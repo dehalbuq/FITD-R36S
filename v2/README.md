@@ -164,3 +164,17 @@ Em GLES 3.0, texturas inteiras R8UI nao aceitam filtragem linear: precisam GL_NE
 **FITD-R36S-AARCH64-R8U-NEAREST-FIX** / ZIP interno `fitdr36s-aarch64-r8u-nearest-fix.zip` aplica BGFX_SAMPLER_POINT tanto na criacao das 5 texturas R8U quanto em 13 ligacoes de sampler. Mantem shaders corrigidos, EGL/KMSDRM, logs e saida A+B / START+SELECT. Remove a view de teste BGFX verde. Magenta agora somente opt-in FITD_MAGENTA_TEST=1; RGB desativado por padrao via FITD_VIDEO_TEST=0 (pode ser reativado=1). O limite automatico continua em 90 segundos por seguranca de diagnostico.
 
 Se aparecer imagem real mas houver problemas de paleta, controles, ou tela preta depois, capture `fitdr36s/logs/fitd-debug.log` e envie. Compilacao verde nao prova que a GPU realmente resolveu o problema.
+
+## R36S port JOGAVEL: imagem confirmada, restaurando AdLib, menus e performance
+
+O teste `R8U-NEAREST-FIX` funcionou no hardware R36S V20 dArkOSRE: o jogo e personagens aparecem perfeitamente, sem BGFX FATAL, KMSDRM erro pageflip ou crashes. O usuario relatou musica ausente, teclas START/SELECT nao mapeadas para save/load/opcoes e lentidao. O log mostra `BGFX STATS` ate 45 chamadas de desenho, pixels de cores reais, gamepad conectado e saida por timeout de 90 segundos — nao um crash.
+
+Novo artefato: **FITD-R36S-AARCH64-MUSIC-CONTROLS-PERF**, ZIP interno **fitdr36s-aarch64-music-controls-perf.zip**.
+
+**Musica**: a rota de emulacao YM3812 OPL2 em `FitdLib/osystemAL_adlib.cpp` estava inteiramente sob `#if 0`. Novo AudioSource/AudioSourceInstance SoLoud transmite PCM mono 16-bit 44100Hz produzido por `musicUpdate` convertido para float a partir do primeiro `playMusic`. Mantem efeitos sonoros SoLoud e suporte a arquivos %02d.wav caso existam. Ajusta initMusicDriver para sinalizar musicConfigured quando OPL inicializar. Este codigo e experimental em ARM64; se houver travamento, mute, estalos ou volume alto, envie fitd-debug.log.
+
+**Controle**: R1 ou START ou botao bruto 7 abre sistema/opcoes (ESC); nesse menu, seta para baixo 1 vez para Salvar e 2 vezes para Carregar, confirmar com A (Click) ou B (Enter). L1 ou SELECT ou botao bruto 6 abre inventario (Enter). A continua acao e B tambem pode confirmar/inventario. Direcional e analogico: movimento. Segurar START+SELECT ou A+B 1,5s para encerrar. O reconhecimento de indices 6/7 e provisoriamente baseado nos eventos do firmware, confirmar no equipamento.
+
+**Desempenho**: desligados por padrao `FITD_GPU_TRACE` (glReadPixels e 9 leituras sincronas da GPU, muito caras), `FITD_INPUT_TRACE` e SDL debug. Limite inicial 25 FPS para preservar ritmo do jogo original, ajustavel `FITD_FPS_LIMIT=30` (20–35; valores acima de 25 podem acelerar a logica pois o game foi escrito para clock de 25Hz). Melhor avaliar 25 sem instrumentacao primeiro e so depois testar 30. Manter vsync KMSDRM para compatibilidade, sem mudar GPU modeset. O launcher NAO encerra mais a sessao depois de 90 segundos: `FITD_TEST_TIMEOUT=0` por padrao; usar por exemplo `FITD_TEST_TIMEOUT=120` para teste se desejar.
+
+**Instalacao**: sobrepor os arquivos do pacote em /roms/ports mantendo `fitdr36s/data`, incluindo saves originais. Sem arquivos comerciais no ZIP. A compilacao CI so garante compatibilidade de build; musica, controles e FPS precisam ser validados no R36S.
