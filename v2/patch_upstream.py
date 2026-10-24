@@ -765,3 +765,227 @@ replace_one("FitdLib/bgfxGlue.cpp",
     }
     fprintf(stderr, "[FITD-R36S] FPS limit=%d\\n", gFrameLimit);''')
 print("R36S controls/options, quiet GPU diagnostics and optional FPS mode installed")
+
+
+
+# Playability v3: the original slot selector always returns 0, making every
+# save overwrite SAVE0.ITD and every load use that same file. Implement a
+# native 10-slot onscreen picker drawn by the game's existing 320x200 font.
+replace_one("FitdLib/main.cpp",
+    '''int parseAllSaves(int arg)
+{
+\treturn(0);
+\t// TODO : make real implementation
+}''',
+    '''int parseAllSaves(int arg)
+{
+#ifdef FITD_R36S
+    // arg=0 load existing save; arg=1 choose a save slot (overwrite allowed).
+    const bool saving = arg != 0;
+    int slot = 0;
+    Uint64 nextMoveAt = 0;
+    // Do not accidentally confirm the choice with the same held button
+    // that entered this menu.
+    while (key || JoyD || Click) {
+        process_events();
+    }
+    for (;;) {
+        flushScreen();
+        AffBigCadre(160, 100, 304, 190);
+        char title[60];
+        snprintf(title, sizeof(title), saving ? "ESCOLHER SLOT PARA SALVAR" : "ESCOLHER SLOT PARA CARREGAR");
+        SetFont(PtrFont, 15);
+        PrintFont(45, 21, logicalScreen, reinterpret_cast<u8*>(title));
+        for (int index = 0; index < 10; ++index) {
+            char filename[24];
+            snprintf(filename, sizeof(filename), "SAVE%d.ITD", index);
+            FILE* handle = fopen(filename, "rb");
+            const bool exists = handle != nullptr;
+            if (handle) fclose(handle);
+            char name[42];
+            snprintf(name, sizeof(name), "%c SLOT %d %s",
+                (slot == index ? '>' : ' '), index,
+                exists ? "SALVO" : "VAZIO");
+            const int x = index < 5 ? 23 : 169;
+            const int y = 46 + (index % 5) * 22;
+            SetFont(PtrFont, index == slot ? 15 : 4);
+            PrintFont(x, y, logicalScreen, reinterpret_cast<u8*>(name));
+        }
+        const char* help = "A CONFIRMA / R1 VOLTA";
+        SetFont(PtrFont, 15);
+        PrintFont(54, 174, logicalScreen, reinterpret_cast<u8*>(const_cast<char*>(help)));
+        osystem_CopyBlockPhys(reinterpret_cast<unsigned char*>(logicalScreen),
+                              0, 0, 320, 200);
+        osystem_startFrame();
+        process_events();
+        osystem_drawBackground();
+        const Uint64 now = SDL_GetTicks();
+        if (key == 0x1B) {
+            fprintf(stderr, "[FITD-R36S] save slot selection canceled\\\\n");
+            return -1;
+        }
+        if (JoyD && now >= nextMoveAt) {
+            if (JoyD & 1) slot = (slot + 4) % 5 + (slot / 5) * 5;
+            else if (JoyD & 2) slot = (slot + 1) % 5 + (slot / 5) * 5;
+            else if (JoyD & 4) slot = (slot + 5) % 10;
+            else if (JoyD & 8) slot = (slot + 5) % 10;
+            nextMoveAt = now + 180;
+        }
+        if (!JoyD) nextMoveAt = 0;
+        if (key == 0x1C || Click) {
+            char filename[24];
+            snprintf(filename, sizeof(filename), "SAVE%d.ITD", slot);
+            FILE* check = fopen(filename, "rb");
+            if (check) fclose(check);
+            if (!saving && !check) {
+                fprintf(stderr, "[FITD-R36S] empty load slot %d\\\\n", slot);
+                continue;
+            }
+            fprintf(stderr, "[FITD-R36S] chosen %s slot %d\\\\n",
+                saving ? "SAVE" : "LOAD", slot);
+            return slot;
+        }
+    }
+#else
+    return 0;
+#endif
+}''')
+replace_one("FitdLib/save.cpp",
+    '''int makeSave(int arg0)
+{
+    return(makeSaveFile(0));
+}''',
+    '''int makeSave(int arg0)
+{
+#ifdef FITD_R36S
+    const int slot = parseAllSaves(1);
+    return slot < 0 ? 0 : makeSaveFile(slot);
+#else
+    return makeSaveFile(0);
+#endif
+}''')
+
+# Make "abandonar" actually exit, show the real sound state, and allow music
+# + sound on/off from the in-game menu. The graphical detail is hardwired in
+# this version; advertise HIGH (index 50) rather than the misleading LOW.
+replace_one("FitdLib/systemMenu.cpp",
+    '#include "common.h"',
+    '''#include "common.h"
+#ifdef FITD_R36S
+#include <cstdio>
+#include <cstdlib>
+int r36sSoundEnabled = 1;
+extern void r36sSetMusicEnabled(bool);
+#endif''')
+replace_one("FitdLib/systemMenu.cpp",
+    '    AffOption(4,43/*+soundToggle*/,selectedStringNumber);',
+    '''#ifdef FITD_R36S
+    AffOption(4,43+r36sSoundEnabled,selectedStringNumber);
+#else
+    AffOption(4,43/*+soundToggle*/,selectedStringNumber);
+#endif''')
+replace_one("FitdLib/systemMenu.cpp",
+    '    AffOption(5,49/*+detailToggle*/,selectedStringNumber);',
+    '''#ifdef FITD_R36S
+    AffOption(5,50,selectedStringNumber); // Renderer always uses its full quality path
+#else
+    AffOption(5,49/*+detailToggle*/,selectedStringNumber);
+#endif''')
+replace_one("FitdLib/systemMenu.cpp",
+    '''                    case 2: // load
+                        if(restoreSave(46,1))
+                        {
+                            FlagInitView = 2;
+                            RestoreTimerAnim();
+                            //updateShaking();
+                            return;
+                        }
+                        break;
+
+                    }''',
+    '''                    case 2: // load
+                        if(restoreSave(46,1))
+                        {
+                            FlagInitView = 2;
+                            RestoreTimerAnim();
+                            //updateShaking();
+                            return;
+                        }
+                        break;
+#ifdef FITD_R36S
+                    case 3: // music enabled / disabled
+                        musicEnabled = !musicEnabled;
+                        r36sSetMusicEnabled(musicEnabled != 0);
+                        AntiRebond = 1;
+                        break;
+                    case 4: // sound effects enabled / disabled
+                        r36sSoundEnabled = !r36sSoundEnabled;
+                        AntiRebond = 1;
+                        break;
+                    case 6: // abandon / quit the game
+                        fprintf(stderr, "[FITD-R36S] Quit selected in system menu\\\\n");
+                        fflush(stderr);
+                        std::_Exit(0);
+                        break;
+#endif
+                    }''')
+replace_one("FitdLib/systemMenu.cpp",
+    'if(!localKey && !localJoyD)',
+    'if(!localKey && !localJoyD && !localClick)')
+
+# The standard SoLoud effects pipeline was always active, independent of
+# the "sound disabled" static menu label. Respect the actual menu setting.
+replace_one("FitdLib/osystemAL.cpp",
+    'void osystem_playSample(char* samplePtr,int size)\n{',
+    '''#ifdef FITD_R36S
+extern int r36sSoundEnabled;
+#endif
+void osystem_playSample(char* samplePtr,int size)
+{
+#ifdef FITD_R36S
+    if (!r36sSoundEnabled) return;
+#endif''')
+# The audio stream exists already; retain its voice handle so the "MUSIC"
+# toggle immediately pauses and unpauses the synth safely via SoLoud API.
+file = root / "FitdLib/osystemAL_adlib.cpp"
+value = file.read_text()
+old = 'static bool s_r36sAdlibStarted = false;'
+if value.count(old) != 1:
+    raise RuntimeError("AdLib voice owner not found")
+value = value.replace(old,
+    '''static bool s_r36sAdlibStarted = false;
+static SoLoud::handle s_r36sAdlibVoice = 0;
+void r36sSetMusicEnabled(bool enabled)
+{
+    if (gSoloud && s_r36sAdlibStarted)
+        gSoloud->setPause(s_r36sAdlibVoice, !enabled);
+}''')
+old = 'const SoLoud::handle voice = gSoloud->play(s_r36sAdlibSource);'
+if value.count(old) != 1:
+    raise RuntimeError("AdLib play handle not found")
+value = value.replace(old, 'const SoLoud::handle voice = gSoloud->play(s_r36sAdlibSource);\\n        s_r36sAdlibVoice = voice;')
+# Above uses literal backslash+n in the Python text; convert to actual newline.
+value = value.replace(';\\\\n        s_r36sAdlibVoice', ';\\n        s_r36sAdlibVoice')
+file.write_text(value)
+
+# Remove the 25/35 FPS hard cap when explicitly requested, with 0=uncapped.
+# The 25Hz game update is legacy and per-frame, so this is an optional
+# overclock, not a promise of 60 independent rendered frames per second.
+replace_one("FitdLib/bgfxGlue.cpp",
+    'if (value >= 20 && value <= 35) gFrameLimit = value;',
+    'if (value == 0 || (value >= 20 && value <= 120)) gFrameLimit = value;')
+replace_one("FitdLib/bgfxGlue.cpp",
+    'double timeToWait = ((1.f / gFrameLimit) - secs) * 1000;',
+    'double timeToWait = gFrameLimit > 0 ? ((1.0 / gFrameLimit) - secs) * 1000.0 : 0.0;')
+replace_one("FitdLib/osystemSDL.cpp",
+    '    if (!SDL_GL_SetSwapInterval(1)) {',
+    '''    const char* r36sVsync = SDL_getenv("FITD_VSYNC");
+    const int r36sSwapInterval = (r36sVsync && r36sVsync[0] == '0') ? 0 : 1;
+    if (!SDL_GL_SetSwapInterval(r36sSwapInterval)) {''')
+replace_one("FitdLib/osystemSDL.cpp",
+    'stage=SDL swap interval=1',
+    'stage=SDL swap interval=%d')
+replace_one("FitdLib/osystemSDL.cpp",
+    '''fprintf(stderr, "[FITD-R36S] stage=SDL swap interval=%d\\\\n");''',
+    '''fprintf(stderr, "[FITD-R36S] stage=SDL swap interval=%d\\\\n", r36sSwapInterval);''')
+print("R36S v3: 10 save slots, actual Abandon quit, music/SFX states, honest HIGH graphics, optional FPS 0-120 and vsync")
