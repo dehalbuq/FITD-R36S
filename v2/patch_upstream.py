@@ -1485,3 +1485,157 @@ body=body.replace(needle,repl)
 src=head+body+tail
 file.write_text(src)
 print("R36S optional window-only NPC overlap recovery + rifle unblock enabled")
+
+
+
+# Window NPC hard-wall recovery v2:
+# Log after the first fix proves WINDOW PASS and rifle target 12 work, but
+# NPC world21 in room0 still gets walls=1 / objects=0 / movement=0.
+# When the spawned window enemy remains blocked for many animation cycles,
+# try the *closest collision-free placement inside the room*, at most 1,200
+# world units from its scripted spawn. Never disable hard colliders, and never
+# run this for player, zombies, or other enemies. Recovery is opt-in.
+file = root / "FitdLib/anim.cpp"
+src = file.read_text()
+needle = '''\t\tcurrentProcessedActorPtr->stepX = stepX + oldStepX;
+\t\tcurrentProcessedActorPtr->stepY = stepY + oldStepY;'''
+if src.count(needle) != 1:
+    raise RuntimeError("window position recovery insertion point missing")
+recovery = '''#ifdef FITD_R36S
+        // Only the two window encounters whose static wall collision is stuck.
+        // Unlike the actor-collider fix, this checks all room hard geometry.
+        {
+            static unsigned r36sBlockedFrames[NUM_MAX_OBJECT] = {};
+            static bool r36sRecoveryAttempted[NUM_MAX_OBJECT] = {};
+            const char* setting = SDL_getenv("FITD_WINDOW_RECOVERY");
+            const bool active = setting && setting[0] == '1' &&
+                g_gameId == AITD1 &&
+                currentProcessedActorIdx >= 0 &&
+                currentProcessedActorIdx < NUM_MAX_OBJECT &&
+                currentProcessedActorPtr->trackMode == 2 &&
+                currentProcessedActorPtr->speed >= 4 &&
+                ((currentProcessedActorPtr->indexInWorld == 21 &&
+                  currentProcessedActorPtr->room == 0 &&
+                  abs(currentProcessedActorPtr->roomX) < 700 &&
+                  abs(currentProcessedActorPtr->roomZ - 5000) < 700) ||
+                 (currentProcessedActorPtr->indexInWorld == 57 &&
+                  currentProcessedActorPtr->room == 4 &&
+                  abs(currentProcessedActorPtr->roomX + 750) < 700 &&
+                  abs(currentProcessedActorPtr->roomZ - 2140) < 700));
+
+            if (active && !r36sRecoveryAttempted[currentProcessedActorIdx] &&
+                r36sWallHits > 0 && numCol == 0 &&
+                r36sRequestedStepX != 0 || false) {
+                // Placeholder: updated below to group the full condition.
+            }
+        }
+#endif
+'''
+# Replace placeholder with real condition and search: explicit parentheses
+recovery=recovery.replace('''            if (active && !r36sRecoveryAttempted[currentProcessedActorIdx] &&
+                r36sWallHits > 0 && numCol == 0 &&
+                r36sRequestedStepX != 0 || false) {
+                // Placeholder: updated below to group the full condition.
+            }''','''            if (active && !r36sRecoveryAttempted[currentProcessedActorIdx] &&
+                r36sWallHits > 0 && numCol == 0 && stepX == 0 && stepZ == 0 &&
+                (r36sRequestedStepX != 0 || r36sRequestedStepZ != 0)) {
+                unsigned& blocked = r36sBlockedFrames[currentProcessedActorIdx];
+                if (++blocked >= 35) {
+                    r36sRecoveryAttempted[currentProcessedActorIdx] = true;
+                    const int room = currentProcessedActorPtr->room;
+                    const ZVStruct original = currentProcessedActorPtr->zv;
+                    const int oldX = currentProcessedActorPtr->roomX;
+                    const int oldZ = currentProcessedActorPtr->roomZ;
+                    const tObject* player = (currentCameraTargetActor >= 0 &&
+                        currentCameraTargetActor < NUM_MAX_OBJECT)
+                        ? &ListObjets[currentCameraTargetActor] : nullptr;
+                    long long bestCost = 0x7fffffffffffffffLL;
+                    int bestDX = 0, bestDZ = 0;
+                    bool found = false;
+                    unsigned tested = 0;
+                    for (int radius = 120; radius <= 1200; radius += 120) {
+                        for (int dx = -radius; dx <= radius; dx += 120) {
+                            for (int dz = -radius; dz <= radius; dz += 120) {
+                                if (abs(dx) != radius && abs(dz) != radius)
+                                    continue;
+                                // Restrict recovery to moves toward the player,
+                                // rather than teleporting out of the room.
+                                if (player && player->room == room) {
+                                    const long long progress =
+                                        (long long)dx * (player->roomX - oldX) +
+                                        (long long)dz * (player->roomZ - oldZ);
+                                    if (progress <= 0)
+                                        continue;
+                                }
+                                ZVStruct probe = original;
+                                probe.ZVX1 += dx; probe.ZVX2 += dx;
+                                probe.ZVZ1 += dz; probe.ZVZ2 += dz;
+                                ++tested;
+                                if (AsmCheckListCol(&probe, &roomDataTable[room]))
+                                    continue;
+                                bool occupied = false;
+                                for (int otherId = 0; otherId < NUM_MAX_OBJECT; ++otherId) {
+                                    if (otherId == currentProcessedActorIdx)
+                                        continue;
+                                    const tObject& other = ListObjets[otherId];
+                                    if (other.indexInWorld == -1 ||
+                                        (other.objectType & AF_SPECIAL) ||
+                                        (room == 0 && other.indexInWorld == 7) ||
+                                        (room == 4 && other.indexInWorld == 51))
+                                        continue;
+                                    ZVStruct otherBox = other.zv;
+                                    if (other.room != room)
+                                        AdjustZV(&otherBox, other.room, room);
+                                    if (CubeIntersect(&probe, &otherBox)) {
+                                        occupied = true;
+                                        break;
+                                    }
+                                }
+                                if (occupied)
+                                    continue;
+                                const long long cost = (long long)dx * dx +
+                                                       (long long)dz * dz;
+                                if (!found || cost < bestCost) {
+                                    found = true;
+                                    bestCost = cost;
+                                    bestDX = dx; bestDZ = dz;
+                                }
+                            }
+                        }
+                        if (found)
+                            break;
+                    }
+                    if (found) {
+                        currentProcessedActorPtr->roomX += bestDX;
+                        currentProcessedActorPtr->worldX += bestDX;
+                        currentProcessedActorPtr->roomZ += bestDZ;
+                        currentProcessedActorPtr->worldZ += bestDZ;
+                        currentProcessedActorPtr->zv.ZVX1 += bestDX;
+                        currentProcessedActorPtr->zv.ZVX2 += bestDX;
+                        currentProcessedActorPtr->zv.ZVZ1 += bestDZ;
+                        currentProcessedActorPtr->zv.ZVZ2 += bestDZ;
+                        currentProcessedActorPtr->animNegX = 0;
+                        currentProcessedActorPtr->animNegZ = 0;
+                        fprintf(stderr,
+                            "[FITD-R36S] WINDOW RESCUE: world=%d actor=%d room=%d "
+                            "old=%d,%d delta=%d,%d new=%d,%d checked=%u\\\\n",
+                            currentProcessedActorPtr->indexInWorld,
+                            currentProcessedActorIdx, room, oldX, oldZ,
+                            bestDX, bestDZ,
+                            currentProcessedActorPtr->roomX,
+                            currentProcessedActorPtr->roomZ, tested);
+                    } else {
+                        fprintf(stderr,
+                            "[FITD-R36S] WINDOW RESCUE: no safe point within 1200 "
+                            "world=%d actor=%d room=%d checked=%u\\\\n",
+                            currentProcessedActorPtr->indexInWorld,
+                            currentProcessedActorIdx, room, tested);
+                    }
+                }
+            } else if (!active || stepX || stepZ) {
+                r36sBlockedFrames[currentProcessedActorIdx] = 0;
+            }''')
+if recovery.includes("Placeholder") throw Error("placeholder");
+src=src.replace(needle,recovery+needle,1)
+file.write_text(src)
+print("R36S window NPC targeted collision-free nearest-spawn rescue installed")
