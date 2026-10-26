@@ -1,0 +1,35 @@
+name: FITD R36S ARM64 (yaz0r experimental)
+
+on:
+  push:
+    branches: [main, "port/fitd-yaz0r-aarch64"]
+    paths:
+      - "v2/**"
+      - ".github/workflows/fitd-r36s-arm64.yml"
+  workflow_dispatch:
+
+jobs:
+  build-aarch64:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 120
+    steps:
+      - name: Checkout port scripts
+        uses: actions/checkout@v4
+      - name: Install native AArch64 build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            git python3 cmake ninja-build build-essential pkg-config zip \
+            libasound2-dev libpulse-dev libjack-jackd2-dev libsndio-dev \
+            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev \
+            libxi-dev libxss-dev libxtst-dev libxkbcommon-dev libdrm-dev \
+            libgbm-dev libgl1-mesa-dev libgles2-mesa-dev libegl1-mesa-dev \
+            libopengl-dev libdbus-1-dev libudev-dev libwayland-dev
+      - name: Patch and build FITD for R36S
+        run: bash v2/build_arm64.sh
+      - name: Upload ARM64 test build
+        uses: actions/upload-artifact@v4
+        with:
+          name: FITD-R36S-AARCH64-WINDOW-HARDCOL-RESCUE
+          path: work/fitdr36s-aarch64-window-hardcol-rescue.zip
+          if-no-files-found: error
