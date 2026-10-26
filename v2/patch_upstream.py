@@ -1635,7 +1635,8 @@ recovery=recovery.replace('''            if (active && !r36sRecoveryAttempted[cu
             } else if (!active || stepX || stepZ) {
                 r36sBlockedFrames[currentProcessedActorIdx] = 0;
             }''')
-if recovery.includes("Placeholder") throw Error("placeholder");
+if "Placeholder" in recovery:
+    raise RuntimeError("Window recovery placeholder was not substituted")
 src=src.replace(needle,recovery+needle,1)
 file.write_text(src)
 print("R36S window NPC targeted collision-free nearest-spawn rescue installed")
