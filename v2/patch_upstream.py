@@ -1580,6 +1580,8 @@ recovery=recovery.replace('''            if (active && !r36sRecoveryAttempted[cu
                                     const tObject& other = ListObjets[otherId];
                                     if (other.indexInWorld == -1 ||
                                         (other.objectType & AF_SPECIAL) ||
+                                        other.room < 0 ||
+                                        (size_t)other.room >= roomDataTable.size() ||
                                         (room == 0 && other.indexInWorld == 7) ||
                                         (room == 4 && other.indexInWorld == 51))
                                         continue;
