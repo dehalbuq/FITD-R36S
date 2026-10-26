@@ -257,3 +257,12 @@ Build **FITD-R36S-AARCH64-WINDOW-OVERLAP-RECOVERY**, zip `fitdr36s-aarch64-windo
 - Para comparação A/B, alterar `FITD_WINDOW_RECOVERY=0` e reiniciar o jogo. Manter os dados do game e `SAVE*.ITD` intactos. O pacote anterior WIN-NPC-DIAGNOSTICS já foi compilado e é o backup antes da tentativa.
 
 **Não é confirmação de correção em hardware**: o patch experimental deve ser compilado e testado na cena original antes de considerá-lo definitivo. Se a janela for um objeto que possua outro papel no roteiro, esta regra específica pode afetá-lo; a ativação por evento follow procura limitar essa possibilidade. Não desativar colisões físicas gerais.
+
+
+## 2026-10-26 — O rifle acerta, mas o inimigo ainda não sai da parede
+
+Teste no R36S validou `WINDOW PASS room=0 windowWorld=7 monsterWorld=21 actor=12` e tiros `RAY RESULT hit=12`, mas o monstro fica em `roomXZ=50,4882`, `trackMode=2`, `speed=4`, `requested=9,-36`, `resolved=0,0`, `walls=1`, `objects=0`. O obstáculo remanescente é `hardCol` estática da sala, não ator/objeto. 58,5 FPS continuam estáveis.
+
+Novo artefato **FITD-R36S-AARCH64-WINDOW-HARDCOL-RESCUE**; ZIP interno `fitdr36s-aarch64-window-hardcol-rescue.zip`. Mantém as correções de tiros, personagens, menu e vídeo. Adiciona recuperação automática e estritamente limitada a **world21/room0** e **world57/room4** depois que começam a perseguir o jogador perto de suas janelas. Só é acionada após 35 tentativas reais de movimento bloqueado por parede, sem bloqueio por objetos. Pesquisa até 1200 unidades ao redor, encontra caixa livre de geometria `hardCol` e demais atores, e favorece uma posição em direção ao jogador. Se achar, move o ator uma única vez e grava `[FITD-R36S] WINDOW RESCUE`; caso contrário registra `no safe point` e não muda nada. Não altera colisões globais nem jogador. A opção `FITD_WINDOW_RECOVERY=0` no launcher mantém a reversibilidade e desliga também o tratamento anterior da janela.
+
+**Segurança/teste:** preservar saves e o executável anterior. Validar na cena inicial e na sala do espelho, confirmar se o inimigo sai da janela e caminha normalmente, se os disparos continuam registrados e se não atravessa o restante dos móveis. Embora a compilação possa passar, o comportamento só será confirmado em teste real no console.
