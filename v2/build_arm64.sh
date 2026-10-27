@@ -11,6 +11,11 @@ git -C work/source submodule update --init --recursive
 python3 -m py_compile v2/patch_debug_audio_crash.py
 python3 v2/patch_upstream.py work/source
 python3 v2/patch_debug_audio_crash.py work/source
+# CI must never publish a test binary without the crash and door-audio patches.
+grep -Fq 'SAVE COMPLETE slot=' work/source/FitdLib/save.cpp
+grep -Fq 'ListWorldObjets.resize(300)' work/source/FitdLib/save.cpp
+grep -Fq 'DOOR SAMPLE SUPPRESSED' work/source/FitdLib/tatou.cpp
+echo 'FITD R36S: verified save-object bounds, atomic write and door audio guard'
 cmake -S work/source -B work/arm64 -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_C_FLAGS="-DFITD_R36S=1 -DBGFX_CONFIG_MULTITHREADED=0 -DBGFX_CONFIG_RENDERER_OPENGL=0 -DBGFX_CONFIG_RENDERER_OPENGLES=30" \
