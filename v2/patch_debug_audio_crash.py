@@ -545,6 +545,9 @@ print("R36S audio startup guard, worker-only queued samples and synchronized SoL
 # hardens BOTH serialization directions.
 file = root / "FitdLib/save.cpp"
 src = file.read_text()
+if src.count('#include "common.h"') != 1:
+    raise RuntimeError("save.cpp include signature changed")
+src = src.replace('#include "common.h"', '#include "common.h"\\n#include "r36sCrashDebug.h"', 1)
 begin_load = src.index("int loadSave(int saveNumber)")
 begin_save = src.index("int makeSaveFile(int entry)", begin_load)
 load_section, save_section = src[begin_load:begin_save], src[begin_save:]
