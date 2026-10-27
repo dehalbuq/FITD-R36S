@@ -389,3 +389,150 @@ once("FitdLib/tatou.cpp",
     osystem_playSample(ptr, size);''')
 
 print("FITD-R36S diagnostic audio ownership/queue + room/camera/track/crash tracing installed")
+
+
+# 2026-10-27 first diagnostic field test: immediate SIGSEGV before the
+# gameplay worker starts. The video thread entered osystemAL_udpate before
+# upstream game init set nextSample=-1; nextSample's zero-initialized global
+# was mistaken for an armed script sequence, so playSound(0) dereferenced
+# an unavailable LISTSAMP. Also install the crash handler BEFORE this point.
+once("FitdLib/osystemAL.cpp",
+     '#include "osystemAL.h"',
+     '''#include "osystemAL.h"
+#include "r36sCrashDebug.h"
+extern int nextSample;''')
+once("FitdLib/osystemAL.cpp",
+     '''void osystemAL_init()
+{
+    gSoloud = new SoLoud::Soloud();''',
+     '''void osystemAL_init()
+{
+    r36sInstallCrashHandlers(); // before SDL event loop / worker startup
+    nextSample = -1;            // global begins as zero before game initialization
+    R36S_TRACE("AUDIO INIT: nextSample reset to -1");
+    gSoloud = new SoLoud::Soloud();''')
+once("FitdLib/osystemAL.cpp",
+     '#include <memory>',
+     '''#include <memory>
+#include <mutex>
+#include <atomic>''')
+once("FitdLib/osystemAL.cpp",
+     '''static SoLoud::handle r36sLastEffectHandle = 0;
+
+void r36sStopSoundEffects()''',
+     '''static SoLoud::handle r36sLastEffectHandle = 0;
+// SoLoud update runs on SDL thread and samples play on the game worker;
+// keep the owner array synchronized and arm queues only from life scripts.
+static std::mutex r36sAudioMutex;
+static std::atomic<int> r36sQueuedScriptSample{-1};
+
+void r36sQueueNextSample(int sample)
+{
+    nextSample = sample;
+    r36sQueuedScriptSample.store(sample, std::memory_order_release);
+    R36S_TRACE("AUDIO QUEUE armed sample=%d after voice=%u",
+        sample, (unsigned)r36sLastEffectHandle);
+}
+
+void r36sAudioPollQueued()
+{
+    const int pending = r36sQueuedScriptSample.load(std::memory_order_acquire);
+    if (pending < 0 || !gSoloud) return;
+    bool completed = false;
+    {
+        std::lock_guard<std::mutex> guard(r36sAudioMutex);
+        completed = r36sLastEffectHandle != 0 &&
+                    !gSoloud->isValidVoiceHandle(r36sLastEffectHandle);
+    }
+    if (!completed) return;
+    const int sample = r36sQueuedScriptSample.exchange(-1, std::memory_order_acq_rel);
+    if (sample < 0) return;
+    nextSample = -1;
+    R36S_TRACE("AUDIO SEQUENCE worker: previous effect ended, next=%d", sample);
+    playSound(sample & 0x3fff); // HQR accesses stay on the game worker
+}
+
+void r36sStopSoundEffects()''')
+once("FitdLib/osystemAL.cpp",
+     '''    if (gSoloud) for (auto& effect : r36sEffectVoices) gSoloud->stop(effect.handle);
+    r36sEffectVoices.clear();
+    r36sLastEffectHandle = 0;
+    nextSample = -1;''',
+     '''    std::lock_guard<std::mutex> guard(r36sAudioMutex);
+    if (gSoloud) for (auto& effect : r36sEffectVoices) gSoloud->stop(effect.handle);
+    r36sEffectVoices.clear();
+    r36sLastEffectHandle = 0;
+    nextSample = -1;
+    r36sQueuedScriptSample.store(-1, std::memory_order_release);''')
+once("FitdLib/osystemAL.cpp",
+     '''    const SoLoud::handle voice = gSoloud->play(*item);
+    r36sLastEffectHandle = voice;
+    r36sEffectVoices.push_back({voice, std::move(item)});
+    R36S_TRACE("AUDIO PLAY voice=%u bytes=%d frames=%d sampleRate=%.0f live=%zu queued=%d",
+        (unsigned)voice, size, decodedCount, appliedRate,
+        r36sEffectVoices.size(), nextSample);''',
+     '''    SoLoud::handle voice = 0;
+    size_t liveCount = 0;
+    {
+        std::lock_guard<std::mutex> guard(r36sAudioMutex);
+        voice = gSoloud->play(*item);
+        r36sLastEffectHandle = voice;
+        r36sEffectVoices.push_back({voice, std::move(item)});
+        liveCount = r36sEffectVoices.size();
+    }
+    R36S_TRACE("AUDIO PLAY voice=%u bytes=%d frames=%d sampleRate=%.0f live=%zu queued=%d",
+        (unsigned)voice, size, decodedCount, appliedRate,
+        liveCount, nextSample);''')
+once("FitdLib/osystemAL.cpp",
+     '''    for (auto it = r36sEffectVoices.begin(); it != r36sEffectVoices.end(); ) {
+        if (!gSoloud->isValidVoiceHandle(it->handle)) {
+            R36S_TRACE("AUDIO END voice=%u", (unsigned)it->handle);
+            it = r36sEffectVoices.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    if (nextSample >= 0 &&
+        (r36sLastEffectHandle == 0 ||
+         !gSoloud->isValidVoiceHandle(r36sLastEffectHandle))) {
+        const int queued = nextSample;
+        nextSample = -1;
+        R36S_TRACE("AUDIO SEQUENCE: completed first sample; play next=%d", queued);
+        playSound(queued & 0x3fff);
+    }''',
+     '''    // SDL event thread: housekeeping only; HQR/playSound must stay on
+    // the game worker, after its own initialization has completed.
+    std::lock_guard<std::mutex> guard(r36sAudioMutex);
+    for (auto it = r36sEffectVoices.begin(); it != r36sEffectVoices.end(); ) {
+        if (!gSoloud->isValidVoiceHandle(it->handle)) {
+            R36S_TRACE("AUDIO END voice=%u", (unsigned)it->handle);
+            it = r36sEffectVoices.erase(it);
+        } else {
+            ++it;
+        }
+    }''')
+
+once("FitdLib/life.cpp",
+     '''                    playSound(evalVar());
+                    nextSample = evalVar();''',
+     '''                    playSound(evalVar());
+                    r36sQueueNextSample(evalVar());''')
+once("FitdLib/life.cpp",
+     'extern void r36sStopSoundEffects();',
+     '''extern void r36sStopSoundEffects();
+extern void r36sQueueNextSample(int);''')
+once("FitdLib/tatou.cpp",
+     '#include "common.h"',
+     '''#include "common.h"
+#ifdef FITD_R36S
+extern void r36sAudioPollQueued();
+#endif''')
+once("FitdLib/tatou.cpp",
+     '''\tu32 timeIncrease = osystem_startOfFrame();
+    assert(timeIncrease);''',
+     '''\tu32 timeIncrease = osystem_startOfFrame();
+#ifdef FITD_R36S
+    r36sAudioPollQueued(); // invoked only after game worker is active
+#endif
+    assert(timeIncrease);''')
+print("R36S audio startup guard, worker-only queued samples and synchronized SoLoud owners installed")
