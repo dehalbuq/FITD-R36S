@@ -536,3 +536,120 @@ once("FitdLib/tatou.cpp",
 #endif
     assert(timeIncrease);''')
 print("R36S audio startup guard, worker-only queued samples and synchronized SoLoud owners installed")
+
+
+# Field test 2026-10-27: the saved game aborted inside makeSaveFile,
+# std::vector<tWorldObject>::operator[]; AITD1 forces 300 world-object
+# records on disk while LoadWorld initializes only maxObjects (<300).
+# The correction retains the original 300-record save file format and
+# hardens BOTH serialization directions.
+file = root / "FitdLib/save.cpp"
+src = file.read_text()
+begin_load = src.index("int loadSave(int saveNumber)")
+begin_save = src.index("int makeSaveFile(int entry)", begin_load)
+load_section, save_section = src[begin_load:begin_save], src[begin_save:]
+old = '''        oldNumMaxObj = maxObjects;
+        maxObjects = 300; // fix for save engine..'''
+new = '''        oldNumMaxObj = maxObjects;
+        maxObjects = 300; // original AITD1 on-disk format always uses 300
+        if (ListWorldObjets.size() < 300) {
+            const size_t originalSize = ListWorldObjets.size();
+            ListWorldObjets.resize(300);
+            for (size_t j = originalSize; j < 300; ++j)
+                ListWorldObjets[j].objIndex = -1;
+            fprintf(stderr, "[FITD-SAVE] LOAD padded world objects from %zu to 300\\n",
+                    originalSize);
+        }'''
+if load_section.count(old) != 1 or save_section.count(old) != 1:
+    raise RuntimeError("save/load 300 entries signature changed")
+load_section=load_section.replace(old,new,1)
+save_section=save_section.replace(old,new.replace("LOAD padded", "SAVE padded"),1)
+
+# Never destroy the previous working SAVE*.ITD if an abort or I/O error
+# happens during a new save. Serialize to .tmp and atomically rename.
+old='''    sprintf(buffer,"SAVE%d.ITD",entry);
+
+    fHandle = fopen(buffer,"wb+");'''
+new='''    sprintf(buffer,"SAVE%d.ITD",entry);
+    char temporary[128];
+    snprintf(temporary, sizeof(temporary), "SAVE%d.ITD.tmp", entry);
+    R36S_TRACE("SAVE BEGIN slot=%d worldSize=%zu maxObjects=%d floor=%d room=%d",
+               entry, ListWorldObjets.size(), maxObjects,
+               g_currentFloor, currentRoom);
+    fHandle = fopen(temporary,"wb+");'''
+if save_section.count(old)!=1:
+    raise RuntimeError("save file opener changed")
+save_section=save_section.replace(old,new,1)
+
+old='''    fclose(fHandle);
+
+    return 1;
+}
+
+int makeSave(int arg0)'''
+new='''    const long savedBytes = ftell(fHandle);
+    const int error = ferror(fHandle);
+    const int closeError = fclose(fHandle);
+    if (error || closeError || savedBytes < 0) {
+        fprintf(stderr, "[FITD-SAVE] write failed slot=%d bytes=%ld err=%d close=%d\\n",
+                entry, savedBytes, error, closeError);
+        remove(temporary);
+        return 0;
+    }
+    if (rename(temporary, buffer) != 0) {
+        perror("[FITD-SAVE] rename failed; old save preserved");
+        remove(temporary);
+        return 0;
+    }
+    fprintf(stderr, "[FITD-SAVE] SAVE COMPLETE slot=%d bytes=%ld actualWorld=%zu\\n",
+            entry, savedBytes, ListWorldObjets.size());
+    return 1;
+}
+
+int makeSave(int arg0)'''
+if save_section.count(old)!=1:
+    raise RuntimeError("save file close/return changed")
+save_section=save_section.replace(old,new,1)
+file.write_text(src[:begin_load]+load_section+save_section)
+print("R36S save/load world-object 300-entry safety + atomic save replacement installed")
+
+# The door sequence plays lengthy samples 3 (1.9 s) and 4 (2.7 s).
+# During an automatic-door trigger, life scripts sometimes call playSound
+# every frame (at 60 FPS), causing >100 voice overlaps and 'stretched'/
+# stuttering door effects. Restrict only these two door samples to at
+# most once per ~1.5 s; do not change footsteps, music or other effects.
+file = root / "FitdLib/tatou.cpp"
+src = file.read_text()
+anchor = '''void playSound(int num)
+{
+\tif(num == -1)
+\t\treturn;'''
+if src.count(anchor) != 1:
+    raise RuntimeError("door sample debounce anchor changed")
+replacement = '''void playSound(int num)
+{
+\tif(num == -1)
+\t\treturn;
+#ifdef FITD_R36S
+    if (num == 3 || num == 4) {
+        static unsigned lastTick[2] = {0, 0};
+        static bool played[2] = {false, false};
+        static unsigned suppressed[2] = {0, 0};
+        const int slot = num - 3;
+        // timer advances every gameplay frame on the legacy engine.
+        if (played[slot] && (unsigned)(timer - lastTick[slot]) < 90u) {
+            ++suppressed[slot];
+            if (suppressed[slot] == 1 || suppressed[slot] % 60 == 0)
+                fprintf(stderr,
+                    "[FITD-AUDIO] DOOR SAMPLE SUPPRESSED sample=%d count=%u room=%d time=%u\\\\n",
+                    num, suppressed[slot], currentRoom, (unsigned)timer);
+            return;
+        }
+        lastTick[slot] = (unsigned)timer;
+        played[slot] = true;
+        suppressed[slot] = 0;
+    }
+#endif'''
+src=src.replace(anchor,replacement,1)
+file.write_text(src)
+print("R36S repeated door sample (3,4) overlap limiter installed for debug")
