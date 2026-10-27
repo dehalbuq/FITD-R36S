@@ -30,6 +30,11 @@ export FITD_AI_TRACE="${FITD_AI_TRACE:-1}"
 export FITD_NPC_MOTION_TRACE="${FITD_NPC_MOTION_TRACE:-1}"
 # For each shot, report hard wall stop vs actual target hit.
 export FITD_SHOT_TRACE="${FITD_SHOT_TRACE:-1}"
+# Intentionally expensive debug build: detailed audio/rooms/actors and crash stack.
+export FITD_DEEP_TRACE="${FITD_DEEP_TRACE:-1}"
+# Leave FITD_GDB=0 unless gdb is installed. The binary handles fatal signals.
+ulimit -c 65536 2>/dev/null || true
+printf 'FITD debug profile: DEEP_TRACE=%s GDB=%s WINDOW_RECOVERY=%s\n' "$FITD_DEEP_TRACE" "${FITD_GDB:-0}" "${FITD_WINDOW_RECOVERY:-1}"
 # Experimental fix for two window encounters only (0=old behavior).
 export FITD_WINDOW_RECOVERY="${FITD_WINDOW_RECOVERY:-1}"
 # Log real FPS and milliseconds spent in bgfx and KMS/SDL swap every 5 seconds.

@@ -8,13 +8,16 @@ rm -rf work/source work/arm64 work/package
 git clone --recursive https://github.com/yaz0r/FITD.git work/source
 git -C work/source checkout --detach "$UPSTREAM_SHA"
 git -C work/source submodule update --init --recursive
+python3 -m py_compile v2/patch_debug_audio_crash.py
 python3 v2/patch_upstream.py work/source
+python3 v2/patch_debug_audio_crash.py work/source
 cmake -S work/source -B work/arm64 -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_C_FLAGS="-DFITD_R36S=1 -DBGFX_CONFIG_MULTITHREADED=0 -DBGFX_CONFIG_RENDERER_OPENGL=0 -DBGFX_CONFIG_RENDERER_OPENGLES=30" \
     -DCMAKE_CXX_FLAGS="-DFITD_R36S=1 -DBGFX_CONFIG_MULTITHREADED=0 -DBGFX_CONFIG_RENDERER_OPENGL=0 -DBGFX_CONFIG_RENDERER_OPENGLES=30" \
-    -DCMAKE_C_FLAGS_RELEASE="-O3 -mtune=cortex-a35 -fomit-frame-pointer -DNDEBUG -march=armv8-a" \
-    -DCMAKE_CXX_FLAGS_RELEASE="-O3 -mtune=cortex-a35 -fomit-frame-pointer -DNDEBUG -march=armv8-a" \
+    -DCMAKE_C_FLAGS_RELEASE="-O1 -g3 -fno-omit-frame-pointer -fno-optimize-sibling-calls -fstack-protector-strong -D_GLIBCXX_ASSERTIONS -DNDEBUG -march=armv8-a" \
+    -DCMAKE_CXX_FLAGS_RELEASE="-O1 -g3 -fno-omit-frame-pointer -fno-optimize-sibling-calls -fstack-protector-strong -D_GLIBCXX_ASSERTIONS -DNDEBUG -march=armv8-a" \
+    -DCMAKE_EXE_LINKER_FLAGS="-rdynamic" \
     -DSDL_KMSDRM=ON \
     -DSDL_SHARED=OFF -DSDL_STATIC=ON
 cmake --build work/arm64 --target Fitd --parallel 2
@@ -43,6 +46,6 @@ for lib in libstdc++.so.6 libgcc_s.so.1 libatomic.so.1; do
 done
 (
   cd "$PORT"
-  zip -qr "$ROOT/work/fitdr36s-aarch64-window-hardcol-rescue.zip" .
+  zip -qr "$ROOT/work/fitdr36s-aarch64-door-audio-crash-debug.zip" .
 )
-echo "PORT READY: $ROOT/work/fitdr36s-aarch64-window-hardcol-rescue.zip"
+echo "PORT READY: $ROOT/work/fitdr36s-aarch64-door-audio-crash-debug.zip"
