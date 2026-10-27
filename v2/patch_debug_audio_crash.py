@@ -213,7 +213,9 @@ public:
     ITD_AudioSource(const char* samplePtr, int size)
     {
         if (!samplePtr || size < 33) return;
-        const uint32_t packed = READ_LE_U32(samplePtr + 26);
+        const uint8_t* hdr = (const uint8_t*)samplePtr + 26;
+        const uint32_t packed = uint32_t(hdr[0]) | (uint32_t(hdr[1]) << 8) |
+                                (uint32_t(hdr[2]) << 16) | (uint32_t(hdr[3]) << 24);
         const int declared = (int)(packed >> 8) - 2;
         const int available = size - 32;
         if ((packed & 255u) != 1u || declared <= 0 || available <= 0)
