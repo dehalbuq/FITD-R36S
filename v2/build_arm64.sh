@@ -13,11 +13,14 @@ python3 v2/patch_upstream.py work/source
 python3 v2/patch_debug_audio_crash.py work/source
 python3 -m py_compile v2/patch_library_room_crash.py
 python3 v2/patch_library_room_crash.py work/source
+python3 -m py_compile v2/patch_throw_null_body.py
+python3 v2/patch_throw_null_body.py work/source
 # CI must never publish a test binary without the crash and door-audio patches.
 grep -Fq 'SAVE COMPLETE slot=' work/source/FitdLib/save.cpp
 grep -Fq 'ListWorldObjets.resize(300)' work/source/FitdLib/save.cpp
 grep -Fq 'DOOR SAMPLE SUPPRESSED' work/source/FitdLib/tatou.cpp
 grep -Fq '[FITD-LIBRARY] INVALID_ROOM' work/source/FitdLib/main.cpp
+grep -Fq '[FITD-THROW] MISSING_BODY' work/source/FitdLib/animAction.cpp
 echo 'FITD R36S: verified save/audio fixes and library invalid-room diagnostics'
 cmake -S work/source -B work/arm64 -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
@@ -54,6 +57,6 @@ for lib in libstdc++.so.6 libgcc_s.so.1 libatomic.so.1; do
 done
 (
   cd "$PORT"
-  zip -qr "$ROOT/work/fitdr36s-aarch64-library-room-debug.zip" .
+  zip -qr "$ROOT/work/fitdr36s-aarch64-throw-body-debug.zip" .
 )
-echo "PORT READY: $ROOT/work/fitdr36s-aarch64-library-room-debug.zip"
+echo "PORT READY: $ROOT/work/fitdr36s-aarch64-throw-body-debug.zip"
