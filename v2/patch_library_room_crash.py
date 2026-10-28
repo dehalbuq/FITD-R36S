@@ -42,7 +42,7 @@ static void r36sInvalidRoom(const char* site, int actorId, int candidateId,
         "[FITD-LIBRARY] INVALID_ROOM event=%u site=%s floor=%d activeRoom=%d count=%zu "
         "from=%d to=%d actor=%d world=%d actorRoom=%d life=%d anim=%d frame=%d "
         "mode=%d posXZ=%d,%d candidate=%d candidateWorld=%d candidateRoom=%d "
-        "candidateFlags=%d currentProcessed=%d time=%u\\n",
+        "candidateFlags=%d currentProcessed=%d time=%u\n",
         event, site, g_currentFloor, currentRoom, roomDataTable.size(),
         fromRoom, toRoom, actorId,
         actor ? actor->indexInWorld : -999,
