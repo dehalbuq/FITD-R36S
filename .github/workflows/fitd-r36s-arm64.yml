@@ -2,7 +2,7 @@ name: FITD R36S ARM64 (yaz0r experimental)
 
 on:
   push:
-    branches: [main, "port/fitd-yaz0r-aarch64", "debug/audio-door-room-crash-20261027", "debug/library-room-crash-20261028", "debug/throw-null-body-20261028", "debug/ball-enemies-hit-shake-20261028", "debug/worm-camera-orb-audio-20261028", "fix/orb-hit-object-rehaunted-20261028"]
+    branches: [main, "port/fitd-yaz0r-aarch64", "debug/audio-door-room-crash-20261027", "debug/library-room-crash-20261028", "debug/throw-null-body-20261028", "debug/ball-enemies-hit-shake-20261028", "debug/worm-camera-orb-audio-20261028", "fix/orb-hit-object-rehaunted-20261028", "fix/cellar-revolver-inventory-spawn-20261029"]
     paths:
       - "v2/**"
       - ".github/workflows/fitd-r36s-arm64.yml"
@@ -30,6 +30,6 @@ jobs:
       - name: Upload ARM64 test build
         uses: actions/upload-artifact@v4
         with:
-          name: FITD-R36S-AARCH64-HIT-OBJECT-REHAUNTED-DIAG
-          path: work/fitdr36s-aarch64-hit-object-rehaunted-debug.zip
+          name: FITD-R36S-AARCH64-CELLAR-REVOLVER-DIAG
+          path: work/fitdr36s-aarch64-cellar-revolver-diag.zip
           if-no-files-found: error
