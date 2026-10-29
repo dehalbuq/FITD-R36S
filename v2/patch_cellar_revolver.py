@@ -195,7 +195,7 @@ edit("FitdLib/life.cpp", [
                 if (lifeTempVar1 < 0 ||
                     static_cast<size_t>(lifeTempVar1) >= ListWorldObjets.size()) {
                     fprintf(stderr,
-                        "[FITD-CELLAR] INVALID_CAMERA_TARGET life=%d obj=%d size=%zu room=%d time=%u\n",
+                        "[FITD-CELLAR] INVALID_CAMERA_TARGET life=%d obj=%d size=%zu room=%d time=%u\\n",
                         lifeNum, lifeTempVar1, ListWorldObjets.size(), currentRoom, (unsigned)timer);
                     fflush(stderr);
                     break;
