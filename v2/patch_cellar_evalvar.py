@@ -28,7 +28,7 @@ sub("explicit world operand",
                 if (objectNumber < 0 ||
                     static_cast<size_t>(objectNumber) >= ListWorldObjets.size()) {
                     fprintf(stderr,
-                        "[FITD-CELLAR] EVAL_BAD_OBJECT world=%d size=%zu floor=%d room=%d time=%u\n",
+                        "[FITD-CELLAR] EVAL_BAD_OBJECT world=%d size=%zu floor=%d room=%d time=%u\\n",
                         objectNumber, ListWorldObjets.size(), g_currentFloor, currentRoom,
                         (unsigned)timer);
                     fflush(stderr);
@@ -43,7 +43,7 @@ sub("recursive found var",
                         if (foundIdx < 0 ||
                             static_cast<size_t>(foundIdx) >= ListWorldObjets.size()) {
                             fprintf(stderr,
-                                "[FITD-CELLAR] EVAL_BAD_FOUND world=%d size=%zu room=%d time=%u\n",
+                                "[FITD-CELLAR] EVAL_BAD_FOUND world=%d size=%zu room=%d time=%u\\n",
                                 foundIdx, ListWorldObjets.size(), currentRoom, (unsigned)timer);
                             fflush(stderr);
                             return 0;
@@ -59,7 +59,7 @@ sub("first dist world operand",
                         if (objectNumber < 0 ||
                             static_cast<size_t>(objectNumber) >= ListWorldObjets.size()) {
                             fprintf(stderr,
-                                "[FITD-CELLAR] EVAL_BAD_DIST world=%d size=%zu room=%d\n",
+                                "[FITD-CELLAR] EVAL_BAD_DIST world=%d size=%zu room=%d\\n",
                                 objectNumber, ListWorldObjets.size(), currentRoom);
                             return 32000;
                         }
@@ -71,7 +71,7 @@ sub("second dist world operand",
                         if (worldObjectIdx < 0 ||
                             static_cast<size_t>(worldObjectIdx) >= ListWorldObjets.size()) {
                             fprintf(stderr,
-                                "[FITD-CELLAR] EVAL_BAD_DIST world=%d size=%zu room=%d\n",
+                                "[FITD-CELLAR] EVAL_BAD_DIST world=%d size=%zu room=%d\\n",
                                 worldObjectIdx, ListWorldObjets.size(), currentRoom);
                             return 32000;
                         }
@@ -82,7 +82,7 @@ sub("relative position world operand",
 '''#ifdef FITD_R36S
                         if (objNum < 0 || static_cast<size_t>(objNum) >= ListWorldObjets.size()) {
                             fprintf(stderr,
-                                "[FITD-CELLAR] EVAL_BAD_REL world=%d size=%zu room=%d\n",
+                                "[FITD-CELLAR] EVAL_BAD_REL world=%d size=%zu room=%d\\n",
                                 objNum, ListWorldObjets.size(), currentRoom);
                             return 0;
                         }
