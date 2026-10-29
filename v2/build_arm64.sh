@@ -25,6 +25,10 @@ python3 -m py_compile v2/patch_cellar_revolver.py
 python3 v2/patch_cellar_revolver.py work/source
 python3 -m py_compile v2/patch_cellar_evalvar.py
 python3 v2/patch_cellar_evalvar.py work/source
+python3 -m py_compile v2/patch_underwater_mask.py
+python3 v2/patch_underwater_mask.py work/source
+grep -Fq '[FITD-WATER] MASK_FALLBACK' work/source/FitdLib/main.cpp
+grep -Fq '[FITD-WATER] PLAYER' work/source/FitdLib/main.cpp
 # Verify generated C++ log format strings before the expensive CMake build.
 # Python triple-quoted patches must emit a literal \n, not a raw line break.
 python3 - <<'PY'
@@ -89,6 +93,6 @@ for lib in libstdc++.so.6 libgcc_s.so.1 libatomic.so.1; do
 done
 (
   cd "$PORT"
-  zip -qr "$ROOT/work/fitdr36s-aarch64-cellar-revolver-diag.zip" .
+  zip -qr "$ROOT/work/fitdr36s-aarch64-underwater-bridge-diag.zip" .
 )
-echo "PORT READY: $ROOT/work/fitdr36s-aarch64-cellar-revolver-diag.zip"
+echo "PORT READY: $ROOT/work/fitdr36s-aarch64-underwater-bridge-diag.zip"
