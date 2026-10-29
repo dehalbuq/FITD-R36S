@@ -32,6 +32,7 @@ replace_once("water world-vertical trace",
 '''void GereSwitchCamera(void)
 {
 #ifdef FITD_R36S
+    extern int groundLevel;
     // Run even if the current camera zone is still valid: the normal routine
     // early-returns while the character moves within the zone.
     if (g_gameId == AITD1 && g_currentFloor == 5 && currentRoom == 7) {
@@ -64,6 +65,27 @@ replace_once("water world-vertical trace",
     }
 #endif
 \tint localCurrentCam = NumCamera;''')
+
+replace_once("log missing water overlay tables",
+'''\t\tnumOverlayZone = *(s16*)(data2);
+
+\t\tfor(int i=0;i<numOverlayZone;i++)''',
+'''\t\tnumOverlayZone = *(s16*)(data2);
+#ifdef FITD_R36S
+        if (g_gameId == AITD1 && g_currentFloor == 5 && currentRoom == 7 &&
+            actorPtr->indexInWorld == 1) {
+            static unsigned waterHeaderCount = 0;
+            if (++waterHeaderCount <= 12 || waterHeaderCount % 300u == 0u) {
+                fprintf(stderr,
+                    "[FITD-WATER] MASK_HEADER cam=%d viewed=%d count=%d actorWorld=%d time=%u\\n",
+                    NumCamera, relativeCameraIndex, numOverlayZone,
+                    actorPtr->indexInWorld, (unsigned)timer);
+                fflush(stderr);
+            }
+        }
+#endif
+
+\t\tfor(int i=0;i<numOverlayZone;i++)''')
 
 replace_once("mask condition, narrow center-based fallback",
 '''\t\t\tif(isBgOverlayRequired( actorPtr->zv.ZVX1 / 10, actorPtr->zv.ZVX2 / 10,
