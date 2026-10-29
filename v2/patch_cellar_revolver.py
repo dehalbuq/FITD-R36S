@@ -187,21 +187,21 @@ edit("FitdLib/life.cpp", [
 #endif
                 int localObjectIndex = ListWorldObjets[object].objIndex;''',1),
  ("guard camera target",
-  '''                lifeTempVar1 = readNextArgument("Target");
+  '''#endif
 
-                if (lifeTempVar1 != currentWorldTarget)''',
-  '''                lifeTempVar1 = readNextArgument("Target");
+                if (lifeTempVar1 != currentWorldTarget) // same target''',
+  '''#endif
 #ifdef FITD_R36S
                 if (lifeTempVar1 < 0 ||
                     static_cast<size_t>(lifeTempVar1) >= ListWorldObjets.size()) {
                     fprintf(stderr,
-                        "[FITD-CELLAR] INVALID_CAMERA_TARGET life=%d obj=%d size=%zu room=%d time=%u\\n",
+                        "[FITD-CELLAR] INVALID_CAMERA_TARGET life=%d obj=%d size=%zu room=%d time=%u\n",
                         lifeNum, lifeTempVar1, ListWorldObjets.size(), currentRoom, (unsigned)timer);
                     fflush(stderr);
                     break;
                 }
 #endif
 
-                if (lifeTempVar1 != currentWorldTarget)''',1)
+                if (lifeTempVar1 != currentWorldTarget) // same target''',1)
 ])
 print("FITD-R36S: cellar bounds checking, found-life tracing and ReHaunted render flag fix installed")
