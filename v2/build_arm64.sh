@@ -25,6 +25,19 @@ python3 -m py_compile v2/patch_cellar_revolver.py
 python3 v2/patch_cellar_revolver.py work/source
 python3 -m py_compile v2/patch_cellar_evalvar.py
 python3 v2/patch_cellar_evalvar.py work/source
+# Verify generated C++ log format strings before the expensive CMake build.
+# Python triple-quoted patches must emit a literal \n, not a raw line break.
+python3 - <<'PY'
+from pathlib import Path
+for filename in ("main.cpp", "life.cpp", "evalVar.cpp"):
+    p = Path("work/source/FitdLib") / filename
+    for lineno, line in enumerate(p.read_text().splitlines(), 1):
+        if '"[FITD-CELLAR]' in line and r'\n"' not in line:
+            raise SystemExit(
+                f"BAD generated C++ diagnostic string: {p}:{lineno}: {line.strip()}"
+            )
+print("FITD-CELLAR: C++ diagnostic string escape preflight passed")
+PY
 # CI must never publish a test binary without the crash and door-audio patches.
 grep -Fq 'SAVE COMPLETE slot=' work/source/FitdLib/save.cpp
 grep -Fq 'ListWorldObjets.resize(300)' work/source/FitdLib/save.cpp
