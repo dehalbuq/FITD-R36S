@@ -120,35 +120,6 @@ edit("FitdLib/main.cpp", [
 \t\t\tif(maskAllowed)
 \t\t\t{
 \t\t\t\tosystem_setClip(clipLeft, clipTop, clipRight, clipBottom);'''),
-    ("report actual drawn reptile actor",
-     '''\t\t\t\tNbAffObjets++;
-\t\t\t}
-\t\t}
-\t}
-}
 
-void InitView()''',
-     '''#ifdef FITD_R36S
-                if (g_gameId == AITD1 && g_currentFloor == 5 &&
-                    currentRoom == 7 && actorPtr->indexInWorld == 228) {
-                    static unsigned reptileDrawCount = 0;
-                    ++reptileDrawCount;
-                    if (reptileDrawCount <= 25 || reptileDrawCount % 600u == 0u) {
-                        fprintf(stderr,
-                            "[FITD-REPTILE] DRAW228 actor=%d body=%d room=%d type=0x%x cam=%d count=%u time=%u\\n",
-                            i, actorPtr->bodyNum, actorPtr->room,
-                            (unsigned)actorPtr->objectType, NumCamera,
-                            reptileDrawCount, (unsigned)timer);
-                        fflush(stderr);
-                    }
-                }
-#endif
-\t\t\t\tNbAffObjets++;
-\t\t\t}
-\t\t}
-\t}
-}
-
-void InitView()''')
 ])
 print("ReHaunted SD mask state and strictly observational reptile debug ready")
