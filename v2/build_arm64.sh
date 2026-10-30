@@ -25,6 +25,10 @@ python3 -m py_compile v2/patch_cellar_revolver.py
 python3 v2/patch_cellar_revolver.py work/source
 python3 -m py_compile v2/patch_cellar_evalvar.py
 python3 v2/patch_cellar_evalvar.py work/source
+python3 -m py_compile v2/patch_rehaunted_mask_reptile.py
+python3 v2/patch_rehaunted_mask_reptile.py work/source
+grep -Fq 'BGFX_STATE_DEPTH_TEST_ALWAYS' work/source/FitdLib/rendererBGFX.cpp
+grep -Fq '[FITD-REPTILE] WORLD228' work/source/FitdLib/main.cpp
 # Verify generated C++ log format strings before the expensive CMake build.
 # Python triple-quoted patches must emit a literal \n, not a raw line break.
 python3 - <<'PY'
@@ -89,6 +93,6 @@ for lib in libstdc++.so.6 libgcc_s.so.1 libatomic.so.1; do
 done
 (
   cd "$PORT"
-  zip -qr "$ROOT/work/fitdr36s-aarch64-cellar-revolver-diag.zip" .
+  zip -qr "$ROOT/work/fitdr36s-aarch64-rehaunted-mask-reptile-diag.zip" .
 )
-echo "PORT READY: $ROOT/work/fitdr36s-aarch64-cellar-revolver-diag.zip"
+echo "PORT READY: $ROOT/work/fitdr36s-aarch64-rehaunted-mask-reptile-diag.zip"
