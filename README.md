@@ -1,6 +1,6 @@
 # FITD-R36S — Alone in the Dark (1992) no R36S
 
-**Port experimental e aberto para contribuições.** O objetivo é executar o motor de *Alone in the Dark* no R36S com os recursos e a jogabilidade clássicos, corrigindo problemas de compatibilidade e lógica sem acrescentar remasterização ou melhorias visuais nesta fase.
+**Port experimental e aberto para contribuições.** O objetivo é executar o motor de *Alone in the Dark* no R36S com os recursos e a jogabilidade clássicos, corrigindo compatibilidade e lógica. A branch de teste recente acrescenta uma **opção experimental de fonte mais legível**, sem remasterização de cenários.
 
 > **Projeto em desenvolvimento, não lançamento oficial do PortMaster.** Este repositório disponibiliza scripts e patches do motor; **não distribui os dados comerciais do jogo**. É necessário possuir uma cópia legítima de *Alone in the Dark*.
 
@@ -63,6 +63,25 @@ Copie os arquivos da instalação original de *Alone in the Dark 1* para `fitdr3
 
 **Atualizando uma instalação existente:** faça backup de `fitd.aarch64` e dos saves (`SAVE*.ITD`) antes de substituí-los. **Não sobrescreva sua pasta `data/` nem os saves** com conteúdo de um pacote de teste. Execute `FITD-R36S-ARM64.sh` pelo menu de ports.
 
+### Fonte legível (experimental, ARM64)
+
+Nesta branch, o texto passa a utilizar por padrão **DejaVu Sans Condensed 12 px**, rasterizada durante a compilação a partir de uma fonte TrueType livre. O executável contém apenas glifos de bitmap para a codificação **CP850** do jogo, incluindo acentos; não é necessário instalar arquivos `.ttf` ou bibliotecas extras no R36S. O layout das telas continua em 320×200, para limitar mudanças e custo de GPU.
+
+Edite o arquivo `/roms/ports/fitdr36s/font.conf` com um editor de texto:
+
+```ini
+FONT_MODE=readable
+FONT_SIZE=12
+```
+
+- `FONT_MODE=readable`: fonte mais nítida (padrão da branch)
+- `FONT_MODE=classic`: fonte original de *Alone in the Dark*, sem mudanças
+- `FONT_SIZE=12` ou `FONT_SIZE=14`: tamanho normal ou ampliado da fonte legível (tamanho 14 pode ocupar mais espaço em diálogos)
+
+Reinicie o jogo após editar `font.conf`. Os arquivos `SAVE*.ITD` e `*.PAK` não são modificados. O launcher imprime `[FITD-FONT]` no log para confirmar a seleção. O sistema de fontes TrueType de alta resolução do ReHaunted foi estudado como referência, mas **não é importado integralmente** neste port.
+
+Esta branch inclui também recuperação pontual do personagem que fica preso na saída secreta da adega: detecta sobreposição confirmada com a parede da sala 0, andar 4, e desloca somente o necessário para desobstruir a colisão (log `[FITD-BARRELS] RECOVERED`). Isso ainda requer teste no dispositivo.
+
 ### Diagnóstico e problemas comuns
 
 - **Não abre / tela preta:** verifique `fitdr36s/logs/fitd-debug.log`, `SDL_VIDEODRIVER`, EGL/GLES e as bibliotecas do firmware. O build usa OpenGL ES 3.0; **OpenGL ES 2.0 não está validado**.
@@ -97,6 +116,7 @@ Leia [CONTRIBUTING.md](CONTRIBUTING.md) antes de abrir uma issue ou pull request
 - **Jogo original:** *Alone in the Dark* — os recursos comerciais pertencem aos seus titulares e não são distribuídos aqui.
 - **Motor FITD:** [jmimu/FITD](https://github.com/jmimu/FITD) e [yaz0r/FITD](https://github.com/yaz0r/FITD).
 - **Referência de correção `HIT_OBJ`:** [spacefarergames/AloneInTheDarkReHaunted](https://github.com/spacefarergames/AloneInTheDarkReHaunted) (GPLv2).
+- **Fonte alternativa experimental:** glifos gerados a partir de **DejaVu Sans Condensed**, com licença Bitstream Vera; os arquivos TTF não são incluídos no pacote.
 - **Port, scripts, diagnósticos e testes R36S:** colaboradores deste repositório.
 
 Preserve os cabeçalhos de autoria e as licenças do código adaptado. Consulte o arquivo de licença empacotado e os repositórios de origem para detalhes.
