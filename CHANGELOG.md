@@ -2,6 +2,18 @@
 
 Registro dos testes e correções do **port ARM64 experimental**. Não são lançamentos estáveis ou certificados pelo PortMaster. O histórico de compilação está no [GitHub Actions](https://github.com/dehalbuq/FITD-R36S/actions).
 
+## 2026-10-30 — Retorno à adega: personagem preso após animação de dois barris
+
+**Branch:** `debug/cellar-barrels-stuck-20261030` · **Status:** diagnóstico experimental, ainda sem correção física validada.
+
+- Log: `fitd-debug(20261031-002805).log`. Após derrotar a árvore maligna e atravessar a saída da toca do verme, personagem chega ao **andar 4 / sala 0** em `time=19238`.
+- Barris `world=201` e `world=202` animam com `ANIM=179` e `180`, respectivamente, e depois param nos pontos `roomXZ=6700,2900` e `6700,1700`. Scripts passam de `life=433/435` para `432/434`.
+- O jogo não travou: continuou em cerca de 58 FPS, salvou `SAVE0.ITD` e encerrou com `Exit code: 0`.
+- Análise do código: o ReHaunted usa praticamente a mesma rotina `GereDec()` de detecção de zonas/cena. O manejo de colisão em `GereAnim()` é semelhante; é preciso verificar sobreposição do personagem aos barris ou caixas rígidas antes de alterar posicionamento.
+- O log anterior mostrava atores dos barris, mas **não continha a posição ou o resultado da colisão do personagem** na área da adega.
+- O novo patch **somente diagnóstico** `v2/patch_cellar_barrel_stuck.py` acrescenta `[FITD-BARRELS] PLAYER`, `WORLD`, `ACTOR`, `HARD_OVERLAP` e `HARD_SUMMARY` restritos ao andar 4 / sala 0. Nenhuma alteração de colisão, alturas ou saves foi feita.
+- Reproduzir com cópia de `SAVE0.ITD` antes de substituir o binário; observar animação dos barris e tentar sair do local para produzir os novos logs.
+
 ## 2026-10-30 — Reversão da máscara de água experimental; comparação ReHaunted
 
 **Branch:** `fix/rehaunted-mask-reptile-diagnostic-20261030` · **Status:** teste pendente no R36S.
