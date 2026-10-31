@@ -2,6 +2,16 @@
 
 Registro dos testes e correções do **port ARM64 experimental**. Não são lançamentos estáveis ou certificados pelo PortMaster. O histórico de compilação está no [GitHub Actions](https://github.com/dehalbuq/FITD-R36S/actions).
 
+## 2026-10-30 — Fonte legível opcional e recuperação geométrica da adega
+
+**Branch:** `fix/cellar-wall-readable-font-20261030` · **Status:** experimental, precisa de teste no R36S.
+
+- Novo log `fitd-debug(20261031-020419).log`: `SAVE0.ITD` posicionava o personagem na adega com `roomXYZ=6759,0,4794`, ZV do jogador Z=4528..5060 e parede rígida nº 2 Z=5000..5300 (interseção de 60 unidades). Barris nº 201/202 tinham `overlap=0` e não causaram esse bloqueio.
+- Correção localizada em `v2/patch_cellar_wall_recovery.py`: quando essa posição específica e essa geometria se confirmam, ajustar coordenadas Z e caixa do jogador pelo deslocamento mínimo para sair da parede, com folga de oito unidades. Não remove paredes nem interfere em outras salas; mantém proteção do save já preso.
+- Fonte de leitura em `v2/patch_readable_font.py` + `v2/gen_readable_font.py`: renderização dos caracteres DOS/CP850, gerada a partir da DejaVu Sans Condensed TTF **somente no runner de build**; modo clássico preservado. Não há dependência TTF em tempo de execução.
+- Configuração `fitdr36s/font.conf`: `FONT_MODE=readable|classic`, `FONT_SIZE=12|14`. Padrão legível de 12 px; 14 px opcional, avaliar risco de texto ocupar linhas maiores no menu e diálogos.
+- Testar alternância, espaçamento, centralização, textos longos, menus, pontuação e acentos, além de retornar ao save anterior ao enrosco e confirmar `[FITD-BARRELS] RECOVERED` no log.
+
 ## 2026-10-30 — Retorno à adega: personagem preso após animação de dois barris
 
 **Branch:** `debug/cellar-barrels-stuck-20261030` · **Status:** diagnóstico experimental, ainda sem correção física validada.
