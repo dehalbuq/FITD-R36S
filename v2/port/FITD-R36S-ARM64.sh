@@ -55,6 +55,19 @@ export FITD_R36S_FONT="${FITD_R36S_FONT:-readable}"
 export FITD_R36S_FONT_SIZE="${FITD_R36S_FONT_SIZE:-12}"
 printf '[FITD-FONT] launcher mode=%s size=%s config=%s\n' \
     "$FITD_R36S_FONT" "$FITD_R36S_FONT_SIZE" "$FONT_CFG"
+# Optional rendering A/B controls: /roms/ports/fitdr36s/graphics.conf
+# Written as a tiny key=value file: no shell execution of user-supplied data.
+GFX_CONFIG="$GAME/graphics.conf"
+if [ -f "$GFX_CONFIG" ]; then
+    GFX_MASK="$(sed -n 's/^MASK_DEPTH=//p' "$GFX_CONFIG" | head -n1 | tr -d '\r')"
+    GFX_CLIP="$(sed -n 's/^NEAR_CLIP=//p' "$GFX_CONFIG" | head -n1 | tr -d '\r')"
+    case "$GFX_MASK" in classic|rehaunted) export FITD_R36S_MASK_DEPTH="$GFX_MASK";; esac
+    case "$GFX_CLIP" in on|off) export FITD_R36S_NEAR_CLIP="$GFX_CLIP";; esac
+fi
+export FITD_R36S_MASK_DEPTH="${FITD_R36S_MASK_DEPTH:-classic}"
+export FITD_R36S_NEAR_CLIP="${FITD_R36S_NEAR_CLIP:-off}"
+printf '[FITD-GFX] launcher mask=%s nearClip=%s config=%s\n' \
+    "$FITD_R36S_MASK_DEPTH" "$FITD_R36S_NEAR_CLIP" "$GFX_CONFIG"
 export SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-kmsdrm}"
 export SDL_AUDIODRIVER="${SDL_AUDIODRIVER:-alsa}"
 export SDL_VIDEO_FORCE_EGL=1
