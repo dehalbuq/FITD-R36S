@@ -42,6 +42,19 @@ export FITD_PERF_TRACE="${FITD_PERF_TRACE:-1}"
 # Set to 0 to try disabling vsync; default 1 preserves stable SDL KMSDRM scanout.
 export FITD_VSYNC="${FITD_VSYNC:-1}"
 export FITD_DEBUG="${FITD_DEBUG:-0}"
+# Optional text style (no runtime TTF file/dependency).
+# User-editable: /roms/ports/fitdr36s/font.conf
+FONT_CFG="$GAME/font.conf"
+if [ -f "$FONT_CFG" ]; then
+    FONT_CHOICE="$(sed -n 's/^FONT_MODE=//p' "$FONT_CFG" | head -n1 | tr -d '\r')"
+    FONT_POINT_SIZE="$(sed -n 's/^FONT_SIZE=//p' "$FONT_CFG" | head -n1 | tr -d '\r')"
+    case "$FONT_CHOICE" in readable|classic) export FITD_R36S_FONT="$FONT_CHOICE";; esac
+    case "$FONT_POINT_SIZE" in 12|14) export FITD_R36S_FONT_SIZE="$FONT_POINT_SIZE";; esac
+fi
+export FITD_R36S_FONT="${FITD_R36S_FONT:-readable}"
+export FITD_R36S_FONT_SIZE="${FITD_R36S_FONT_SIZE:-12}"
+printf '[FITD-FONT] launcher mode=%s size=%s config=%s\n' \
+    "$FITD_R36S_FONT" "$FITD_R36S_FONT_SIZE" "$FONT_CFG"
 export SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-kmsdrm}"
 export SDL_AUDIODRIVER="${SDL_AUDIODRIVER:-alsa}"
 export SDL_VIDEO_FORCE_EGL=1
