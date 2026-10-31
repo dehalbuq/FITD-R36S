@@ -2,7 +2,7 @@ name: FITD R36S ARM64 (yaz0r experimental)
 
 on:
   push:
-    branches: [main, "port/fitd-yaz0r-aarch64", "debug/audio-door-room-crash-20261027", "debug/library-room-crash-20261028", "debug/throw-null-body-20261028", "debug/ball-enemies-hit-shake-20261028", "debug/worm-camera-orb-audio-20261028", "fix/orb-hit-object-rehaunted-20261028", "fix/cellar-revolver-inventory-spawn-20261029", "fix/rehaunted-mask-reptile-diagnostic-20261030", "debug/cellar-barrels-stuck-20261030"]
+    branches: [main, "port/fitd-yaz0r-aarch64", "debug/audio-door-room-crash-20261027", "debug/library-room-crash-20261028", "debug/throw-null-body-20261028", "debug/ball-enemies-hit-shake-20261028", "debug/worm-camera-orb-audio-20261028", "fix/orb-hit-object-rehaunted-20261028", "fix/cellar-revolver-inventory-spawn-20261029", "fix/rehaunted-mask-reptile-diagnostic-20261030", "debug/cellar-barrels-stuck-20261030", "fix/cellar-wall-readable-font-20261030"]
     paths:
       - "v2/**"
       - ".github/workflows/fitd-r36s-arm64.yml"
@@ -19,7 +19,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            git python3 cmake ninja-build build-essential pkg-config zip \
+            git python3 python3-pil fonts-dejavu-core cmake ninja-build build-essential pkg-config zip \
             libasound2-dev libpulse-dev libjack-jackd2-dev libsndio-dev \
             libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev \
             libxi-dev libxss-dev libxtst-dev libxkbcommon-dev libdrm-dev \
@@ -30,6 +30,6 @@ jobs:
       - name: Upload ARM64 test build
         uses: actions/upload-artifact@v4
         with:
-          name: FITD-R36S-AARCH64-CELLAR-BARRELS-DIAG
-          path: work/fitdr36s-aarch64-cellar-barrels-diag.zip
+          name: FITD-R36S-AARCH64-READABLE-FONT-WALL-FIX
+          path: work/fitdr36s-aarch64-readable-font-wall-fix.zip
           if-no-files-found: error
