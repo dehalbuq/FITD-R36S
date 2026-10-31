@@ -82,6 +82,21 @@ Reinicie o jogo após editar `font.conf`. Os arquivos `SAVE*.ITD` e `*.PAK` não
 
 Esta branch inclui também recuperação pontual do personagem que fica preso na saída secreta da adega: detecta sobreposição confirmada com a parede da sala 0, andar 4, e desloca somente o necessário para desobstruir a colisão (log `[FITD-BARRELS] RECOVERED`). Isso ainda requer teste no dispositivo.
 
+### Diagnóstico dos defeitos gráficos — nova partida com Emily
+
+A versão desta branch volta a usar a **profundidade clássica** das máscaras do FITD, porque a tentativa anterior de importar a escrita de profundidade SD do ReHaunted sem o restante do renderizador podia alterar a sobreposição de objetos, paredes e personagem. A correção da saída da adega e a fonte legível são preservadas.
+
+Arquivo `/roms/ports/fitdr36s/graphics.conf`:
+
+```ini
+MASK_DEPTH=classic
+NEAR_CLIP=off
+```
+
+Para comparar, use `MASK_DEPTH=rehaunted` (modo experimental anterior) ou `NEAR_CLIP=on` (proteção opcional contra polígonos próximos da câmera, baseada nos critérios do ReHaunted). Mude uma opção por vez e reinicie o jogo. Os novos registros `[FITD-GFX]` no log mostram o perfil escolhido e os eventuais polígonos rejeitados.
+
+**A origem dos artefatos ainda não está confirmada:** o log da sessão de Emily `fitd-debug(20261031-155304).log` não contém erros de shader, GPU ou crash e o jogo encerrou normalmente. Fotos ou capturas das deformações serão necessárias para distinguir problemas de profundidade/máscaras de erros no modelo 3D, nas texturas ou nas animações. O modo `NEAR_CLIP=off` preserva por padrão a geometria original; não remover modelos ou objetos da história sem evidência de que estejam errados.
+
 ### Diagnóstico e problemas comuns
 
 - **Não abre / tela preta:** verifique `fitdr36s/logs/fitd-debug.log`, `SDL_VIDEODRIVER`, EGL/GLES e as bibliotecas do firmware. O build usa OpenGL ES 3.0; **OpenGL ES 2.0 não está validado**.
