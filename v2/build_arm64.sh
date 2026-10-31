@@ -29,6 +29,13 @@ python3 -m py_compile v2/patch_rehaunted_mask_reptile.py
 python3 v2/patch_rehaunted_mask_reptile.py work/source
 python3 -m py_compile v2/patch_cellar_barrel_stuck.py
 python3 v2/patch_cellar_barrel_stuck.py work/source
+python3 -m py_compile v2/patch_cellar_wall_recovery.py v2/gen_readable_font.py v2/patch_readable_font.py
+python3 v2/patch_cellar_wall_recovery.py work/source
+python3 v2/gen_readable_font.py work/source
+python3 v2/patch_readable_font.py work/source
+grep -Fq '[FITD-BARRELS] RECOVER_WALL' work/source/FitdLib/main.cpp
+grep -Fq '[FITD-FONT] mode=' work/source/FitdLib/font.cpp
+grep -Fq 'g_r36sReadable14' work/source/FitdLib/r36sReadableFontData.h
 grep -Fq '[FITD-BARRELS] PLAYER' work/source/FitdLib/main.cpp
 grep -Fq 'BGFX_STATE_DEPTH_TEST_ALWAYS' work/source/FitdLib/rendererBGFX.cpp
 grep -Fq '[FITD-REPTILE] WORLD228' work/source/FitdLib/main.cpp
@@ -80,6 +87,7 @@ mkdir -p "$PORT/fitdr36s/data" "$PORT/fitdr36s/libs"
 cp "$BIN" "$PORT/fitdr36s/fitd.aarch64"
 cp v2/port/FITD-R36S-ARM64.sh "$PORT/FITD-R36S-ARM64.sh"
 cp v2/port/port.json "$PORT/fitdr36s/port.json"
+cp v2/port/font.conf "$PORT/fitdr36s/font.conf"
 cp work/source/LICENSE "$PORT/fitdr36s/LICENSE.FITD.txt"
 chmod 755 "$PORT/FITD-R36S-ARM64.sh" "$PORT/fitdr36s/fitd.aarch64"
 printf 'Copy original legally acquired AITD game files here (not redistributed).\n' > "$PORT/fitdr36s/data/COPY_GAME_FILES_HERE.txt"
@@ -96,6 +104,6 @@ for lib in libstdc++.so.6 libgcc_s.so.1 libatomic.so.1; do
 done
 (
   cd "$PORT"
-  zip -qr "$ROOT/work/fitdr36s-aarch64-cellar-barrels-diag.zip" .
+  zip -qr "$ROOT/work/fitdr36s-aarch64-readable-font-wall-fix.zip" .
 )
-echo "PORT READY: $ROOT/work/fitdr36s-aarch64-cellar-barrels-diag.zip"
+echo "PORT READY: $ROOT/work/fitdr36s-aarch64-readable-font-wall-fix.zip"
