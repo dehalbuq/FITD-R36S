@@ -32,7 +32,7 @@ new = '''void GereDec()
         static bool haveOldPos = false;
         const unsigned tick = (unsigned)timer;
         ++cellarTraceCalls;
-        const tObject* player = currentProcessedActorPtr;
+        tObject* player = currentProcessedActorPtr;
         const int effectiveX = player->roomX + player->stepX;
         const int effectiveY = player->roomY + player->stepY;
         const int effectiveZ = player->roomZ + player->stepZ;
@@ -67,7 +67,7 @@ new = '''void GereDec()
                     world.life, world.lifeMode, world.body,
                     (unsigned)world.flags, world.x, world.y, world.z, tick);
                 if (actor >= 0 && actor < NUM_MAX_OBJECT) {
-                    const tObject* barrel = &ListObjets[actor];
+                    tObject* barrel = &ListObjets[actor];
                     const bool sameRoom = barrel->room == player->room;
                     const int overlap = sameRoom ?
                         CubeIntersect(&player->zv, &barrel->zv) : 0;
@@ -88,10 +88,10 @@ new = '''void GereDec()
             // underlying engine's collision resolver remains unchanged.
             const int roomIndex = player->room;
             if (roomIndex >= 0 && (size_t)roomIndex < roomDataTable.size()) {
-                const roomDataStruct& roomData = roomDataTable[roomIndex];
+                roomDataStruct& roomData = roomDataTable[roomIndex];
                 int hitCount = 0;
                 for (size_t i = 0; i < roomData.hardColTable.size(); ++i) {
-                    const hardColStruct& hc = roomData.hardColTable[i];
+                    hardColStruct& hc = roomData.hardColTable[i];
                     if (CubeIntersect(&player->zv, &hc.zv)) {
                         if (hitCount < 6)
                             fprintf(stderr,
