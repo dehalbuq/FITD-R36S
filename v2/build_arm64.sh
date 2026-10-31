@@ -35,6 +35,8 @@ python3 v2/gen_readable_font.py work/source
 python3 v2/patch_readable_font.py work/source
 python3 -m py_compile v2/patch_graphics_regression.py
 python3 v2/patch_graphics_regression.py work/source
+python3 -m py_compile v2/test_graphics_profile.py
+python3 v2/test_graphics_profile.py work/source
 grep -Fq '[FITD-GFX] MASK_DEPTH=' work/source/FitdLib/rendererBGFX.cpp
 grep -Fq '[FITD-GFX] NEAR_PRIMITIVE_REJECT' work/source/FitdLib/renderer.cpp
 grep -Fq '[FITD-BARRELS] RECOVER_WALL' work/source/FitdLib/main.cpp
