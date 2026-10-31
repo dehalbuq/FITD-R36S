@@ -2,6 +2,17 @@
 
 Registro dos testes e correções do **port ARM64 experimental**. Não são lançamentos estáveis ou certificados pelo PortMaster. O histórico de compilação está no [GitHub Actions](https://github.com/dehalbuq/FITD-R36S/actions).
 
+## 2026-10-31 — Defeitos gráficos na nova partida com Emily
+
+**Branch:** `fix/female-graphics-mask-isolation-20261031` · **Status:** pacote experimental de isolamento de regressão, ainda não validado no R36S.
+
+- Log `fitd-debug(20261031-155304).log`: inicou com `SAVE0.ITD` na adega, corrigiu a parede (`RECOVER_WALL dz=-68`; `HARD_SUMMARY count=0`) e prosseguiu por muitos cômodos após iniciar nova partida. O jogo terminou normalmente com `Exit code: 0`, sem mensagens de falha do renderizador. O log não registra os pixels da cena, portanto não permite identificar quais triângulos/texturas estão errados.
+- A versão anterior, `fix/cellar-wall-readable-font-20261030`, herdava o render de máscaras SD com `BGFX_STATE_WRITE_Z | BGFX_STATE_DEPTH_TEST_ALWAYS` extraído do ReHaunted, que possui mais mudanças no renderizador; essa adaptação tinha alcance global.
+- Novo `v2/patch_graphics_regression.py`: `MASK_DEPTH=classic` **padrão** para restaurar o estado original das máscaras; `MASK_DEPTH=rehaunted` para comparação explícita.
+- Modo opcional `NEAR_CLIP=on`: aplica um filtro conservador para triângulos altamente distorcidos perto da câmera (critérios de referência do ReHaunted); `off` por padrão, preservando os modelos originais. Logs `[FITD-GFX]`.
+- Preservadas a correção pontual da parede da adega e as fontes `FONT_MODE=classic|readable`.
+- Próximo teste: a mesma sequência de Emily com `MASK_DEPTH=classic,NEAR_CLIP=off`; se artefatos ainda aparecerem, enviar fotos/capturas indicando câmera e parte da personagem afetada. Testar `NEAR_CLIP=on` separadamente apenas para polígonos deformados próximos à câmera.
+
 ## 2026-10-30 — Fonte legível opcional e recuperação geométrica da adega
 
 **Branch:** `fix/cellar-wall-readable-font-20261030` · **Status:** experimental, precisa de teste no R36S.
