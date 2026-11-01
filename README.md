@@ -82,6 +82,27 @@ Reinicie o jogo após editar `font.conf`. Os arquivos `SAVE*.ITD` e `*.PAK` não
 
 Esta branch inclui também recuperação pontual do personagem que fica preso na saída secreta da adega: detecta sobreposição confirmada com a parede da sala 0, andar 4, e desloca somente o necessário para desobstruir a colisão (log `[FITD-BARRELS] RECOVERED`). Isso ainda requer teste no dispositivo.
 
+### Tela de abertura com créditos e aviso legal (R36S)
+
+Antes da introdução original do jogo, o port exibe duas telas próprias na resolução nativa **640×480**:
+
+1. **Créditos:** imagem do avatar público do GitHub `@dehalbuq` (obtida exclusivamente **durante a compilação**, com monograma reserva caso o serviço esteja indisponível), nome do port, autoria do port, origem do FITD (*yaz0r*, histórico de *jmimu*) e referências adaptadas do ReHaunted (*spacefarergames*).
+2. **Legalidade:** informa explicitamente que o pacote **contém o motor e os scripts do port, não o jogo original**, não distribui arquivos proprietários `.PAK` / `.ITD`, exige uma cópia legítima do jogo e não é afiliado nem endossado pelos titulares de *Alone in the Dark*. Distingue a GPL do código dos direitos autorais do jogo.
+
+As duas imagens são geradas pelo script aberto `v2/generate_startup_splash.py` e exibidas por `v2/patch_startup_splash.py` **antes da inicialização do bgfx**, aproveitando o contexto SDL/OpenGL ES 3 já disponível no R36S. Não há downloads, carregamento de TTF ou acesso à internet durante a execução.
+
+Arquivo de configuração `/roms/ports/fitdr36s/splash.conf`:
+
+```ini
+SPLASH=on
+CREDITS_MS=3500
+LEGAL_MS=9000
+```
+
+As telas podem ser avançadas pressionando **A/START** ou uma tecla, após um breve intervalo para evitar que o botão usado para iniciar o port as dispense acidentalmente. É possível configurar os tempos e, se desejado, usar `SPLASH=off` para desativar a apresentação. Se houver falha no carregamento das imagens, o jogo prossegue normalmente e o log registra `[FITD-SPLASH]`.
+
+**Avisos completos no pacote:** `fitdr36s/LEIA-ME-LEGAL.txt`, `fitdr36s/LICENSE.FITD.txt` e as referências de código-fonte dos repositórios originais. Manter as licenças e atribuições é obrigatório quando aplicável; não presumir que o código aberto libere os dados comerciais do jogo.
+
 ### Diagnóstico dos defeitos gráficos — nova partida com Emily
 
 A versão desta branch volta a usar a **profundidade clássica** das máscaras do FITD, porque a tentativa anterior de importar a escrita de profundidade SD do ReHaunted sem o restante do renderizador podia alterar a sobreposição de objetos, paredes e personagem. A correção da saída da adega e a fonte legível são preservadas.
