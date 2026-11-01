@@ -63,3 +63,17 @@ if s.count(old) != 1:
 s = s.replace(old, new, 1)
 p.write_text(s)
 print("Release: default realtime 25Hz clock independent from render cap")
+
+# Honor the launcher VSync choice in bgfx as well as SDL, to avoid
+# a second synchronization point even when SDL swap interval is zero.
+p = Path(sys.argv[1]) / "FitdLib/bgfxGlue.cpp"
+s = p.read_text()
+old = "    initparam.resolution.reset = BGFX_RESET_VSYNC;"
+new = """    const char* r36sVsync = SDL_getenv("FITD_VSYNC");
+    initparam.resolution.reset =
+        (r36sVsync && r36sVsync[0] == '1') ? BGFX_RESET_VSYNC : BGFX_RESET_NONE;"""
+if s.count(old) != 1:
+    raise RuntimeError(f"{p}: expected one bgfx vsync anchor, found {s.count(old)}")
+s = s.replace(old, new, 1)
+p.write_text(s)
+print("Release: bgfx VSync disabled by default; FITD_VSYNC=1 restores it")
