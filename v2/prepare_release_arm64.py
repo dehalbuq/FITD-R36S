@@ -18,8 +18,9 @@ once("#else\n#define R36S_TRACE(...) do {} while (0)", "#else\ninline bool r36sD
 p.write_text(s)
 print("Release: no signal backtraces or deep trace; all gameplay fixes retained")
 
-# Correct the old frame-driven minimum tick. At 60 FPS a forced tick on
-# every frame advances the 25Hz world clock 2.4x too quickly.
+# Keep the playable debug timing as the default. The experimental fixed 25Hz
+# wall-clock mode slows frame-driven animation and movement, so it is opt-in
+# until the simulation and rendering loops have been fully decoupled.
 p = Path(sys.argv[1]) / "FitdLib/osystemSDL.cpp"
 s = p.read_text()
 old = """    u32 numFramesToAdvance = (SDL_GetTicks() - lastFrameTime) / (1000 / FRAMES_PER_SECOND);
@@ -29,12 +30,12 @@ old = """    u32 numFramesToAdvance = (SDL_GetTicks() - lastFrameTime) / (1000 /
 
     lastFrameTime = SDL_GetTicks();"""
 new = """#ifdef FITD_R36S_RELEASE
-    // R36S_RELEASE_TIMEBASE: render as often as possible while the clock
-    // used for animations, chronometers and scripted delays advances at
-    // 25 ticks per second of real elapsed time (not per drawn frame).
+    // R36S_RELEASE_TIMEBASE: experimental realtime scheduler is opt-in.
+    // Match debug timing by default; frame-driven character motion depends
+    // on updates even when the fixed 25Hz wall-clock reports zero ticks.
     static const bool r36sRealTimebase = []() {
         const char* mode = SDL_getenv("FITD_R36S_TIMEBASE");
-        return !mode || SDL_strcmp(mode, "legacy") != 0;
+        return mode && SDL_strcmp(mode, "real") == 0;
     }();
     u32 numFramesToAdvance = 0;
     if (r36sRealTimebase) {
@@ -62,7 +63,7 @@ if s.count(old) != 1:
     raise RuntimeError(f"{p}: expected one original frame-tick block; found {s.count(old)}")
 s = s.replace(old, new, 1)
 p.write_text(s)
-print("Release: default realtime 25Hz clock independent from render cap")
+print("Release: debug-compatible timing by default; realtime 25Hz opt-in only")
 
 # Honor the launcher VSync choice in bgfx as well as SDL, to avoid
 # a second synchronization point even when SDL swap interval is zero.
