@@ -56,6 +56,13 @@ jobs:
           s=p.read_text()
           s=s.replace("abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'", "abiFilters 'armeabi-v7a'")
           s=s.replace('targetSdkVersion 34', 'targetSdkVersion 28')
+          s=s.replace('''    applicationVariants.all { variant ->
+    tasks["merge${variant.name.capitalize()}Assets"]
+        .dependsOn("externalNativeBuild${variant.name.capitalize()}")
+    }''', '')
+          # Disable SDL2 template's native-build dependency when packaging prebuilt .so files.
+          import re
+          s=re.sub(r'    applicationVariants\.all \{ variant ->\s*tasks\["merge\$\{variant\.name\.capitalize\(\)\}Assets"\]\s*\.dependsOn\("externalNativeBuild\$\{variant\.name\.capitalize\(\)\}"\)\s*\}', '', s)
           s=s.replace('minSdkVersion 19', 'minSdkVersion 19')
           p.write_text(s)
           p=root/'app/src/main/AndroidManifest.xml'
