@@ -30,6 +30,7 @@ jobs:
           bash -n v2/build_arm64.sh
           bash -n v2/port/FITD-R36S-ARM64-RELEASE.sh
           python3 -m py_compile v2/prepare_release_arm64.py
+          python3 v2/test_release_timebase.py
       - name: Build conservative release for R36S ARM64
         run: FITD_RELEASE=1 bash v2/build_arm64.sh
       - name: Verify release ELF and PortMaster archive

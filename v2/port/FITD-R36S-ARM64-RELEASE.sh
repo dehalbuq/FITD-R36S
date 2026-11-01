@@ -24,7 +24,12 @@ if [ "$found" -eq 0 ]; then
 fi
 
 # Engine/script clock of the original game: don't accelerate world simulation.
-export FITD_FPS_LIMIT=25 FITD_VSYNC=1 FITD_DEBUG=0 FITD_VIDEO_TEST=0
+# Render cap 60; the engine's 25Hz timer uses elapsed wall-clock time.
+# The original engine also contains per-frame logic, so verify movement
+# speed on-device; set FITD_R36S_TIMEBASE=legacy for A/B comparisons.
+export FITD_FPS_LIMIT="${FITD_FPS_LIMIT:-60}"
+export FITD_R36S_TIMEBASE="${FITD_R36S_TIMEBASE:-real}"
+export FITD_VSYNC="${FITD_VSYNC:-1}" FITD_DEBUG=0 FITD_VIDEO_TEST=0
 unset FITD_DEEP_TRACE FITD_PERF_TRACE FITD_AI_TRACE FITD_NPC_MOTION_TRACE FITD_SHOT_TRACE FITD_GDB FITD_TEST_TIMEOUT || true
 export FITD_WINDOW_RECOVERY="${FITD_WINDOW_RECOVERY:-1}"
 export SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-kmsdrm}"

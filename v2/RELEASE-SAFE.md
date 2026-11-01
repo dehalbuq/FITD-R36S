@@ -6,7 +6,9 @@ Esta variante fica isolada em `release/r36s-aarch64-safe-20261101` e usa o últi
 
 **Sem depuração:** o executável não contém seções `.debug_*`, a rotina de backtrace/sinais e `R36S_TRACE` ficam desabilitadas via `FITD_R36S_RELEASE=1`. O launcher da release não usa GDB, testes RGB, rastreios de IA/áudio/FPS nem timeout. Os consertos de salvamento, áudio, jogabilidade e gráficos permanecem aplicados. A saída de log normal é descartada; para registrar eventual falha, use `FITD_RELEASE_LOG=1`.
 
-**FPS:** 25 por padrão, para preservar o relógio de jogabilidade original. Não forçar 60 FPS sem primeiro dissociar renderização e simulação, pois isso pode acelerar personagens, inimigos e eventos.
+**FPS:** 60 por padrão (v-sync ativo, até a taxa permitida pelo hardware). A release corrige o relógio baseado em quadros de `osystem_startOfFrame()`: `timeGlobal` e `timer` avançam até 25 ticks por segundo real, sem forçar um tick por quadro. Essa alteração trata cronômetros, animações e scripts baseados nesses relógios. **Parte da lógica do FITD ainda ocorre uma vez por quadro**, então a velocidade dos personagens e algumas animações precisam ser verificadas no R36S antes de afirmar que a simulação está totalmente dissociada do renderizador.
+
+Para comparar ou ajustar sem recompilar, use `FITD_FPS_LIMIT=50` (ou `60`) e `FITD_R36S_TIMEBASE=real` (padrão) ou `legacy` (comportamento antigo de um tick mínimo por quadro). Aumentar o valor de `FITD_FPS_LIMIT` não garante que a GPU entregará todos esses quadros.
 
 ### Baixar e instalar
 

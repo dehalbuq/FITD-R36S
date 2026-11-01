@@ -57,6 +57,8 @@ python3 v2/patch_startup_splash.py work/source
 if [ "$FITD_RELEASE" = "1" ]; then
   python3 -m py_compile v2/prepare_release_arm64.py
   python3 v2/prepare_release_arm64.py work/source
+  grep -Fq 'R36S_RELEASE_TIMEBASE' work/source/FitdLib/osystemSDL.cpp
+  grep -Fq 'gFrameLimit = 25;' work/source/FitdLib/bgfxGlue.cpp
 fi
 grep -Fq 'r36sShowStartupNotices();' work/source/FitdLib/osystemSDL.cpp
 grep -Fq '[FITD-SPLASH] SHOW slide=' work/source/FitdLib/osystemSDL.cpp
