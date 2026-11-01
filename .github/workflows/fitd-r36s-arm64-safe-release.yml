@@ -1,0 +1,56 @@
+name: FITD R36S ARM64 (safe release)
+
+on:
+  push:
+    branches: ["release/r36s-aarch64-safe-20261101"]
+    paths:
+      - "v2/**"
+      - ".github/workflows/fitd-r36s-arm64-safe-release.yml"
+  workflow_dispatch:
+
+jobs:
+  build-aarch64:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 120
+    steps:
+      - name: Checkout port scripts
+        uses: actions/checkout@v4
+      - name: Install native AArch64 build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            git python3 python3-pil fonts-dejavu-core cmake ninja-build build-essential pkg-config zip \
+            libasound2-dev libpulse-dev libjack-jackd2-dev libsndio-dev \
+            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev \
+            libxi-dev libxss-dev libxtst-dev libxkbcommon-dev libdrm-dev \
+            libgbm-dev libgl1-mesa-dev libgles2-mesa-dev libegl1-mesa-dev \
+            libopengl-dev libdbus-1-dev libudev-dev libwayland-dev
+      - name: Validate scripts
+        run: |
+          bash -n v2/build_arm64.sh
+          bash -n v2/port/FITD-R36S-ARM64-RELEASE.sh
+          python3 -m py_compile v2/prepare_release_arm64.py
+      - name: Build conservative release for R36S ARM64
+        run: FITD_RELEASE=1 bash v2/build_arm64.sh
+      - name: Verify release ELF and PortMaster archive
+        run: |
+          set -euo pipefail
+          ZIP=work/fitdr36s-aarch64-safe-release.zip
+          test -s "$ZIP"
+          mkdir -p /tmp/fitd-release-check
+          unzip -q "$ZIP" -d /tmp/fitd-release-check
+          BIN=/tmp/fitd-release-check/fitdr36s/fitd.aarch64
+          test -s "$BIN"
+          readelf -h "$BIN" | grep AArch64
+          if readelf -SW "$BIN" | grep -Eq '\.debug_'; then exit 1; fi
+          grep -q 'release segura' /tmp/fitd-release-check/fitdr36s/port.json
+          test -s /tmp/fitd-release-check/fitdr36s/splash/credits.bmp
+          test -s /tmp/fitd-release-check/fitdr36s/splash/legal.bmp
+          test -s /tmp/fitd-release-check/fitdr36s/LEIA-ME-LEGAL.txt
+          test -s /tmp/fitd-release-check/FITD-R36S-ARM64.sh
+      - name: Upload ARM64 safe release
+        uses: actions/upload-artifact@v4
+        with:
+          name: FITD-R36S-AARCH64-SAFE-RELEASE
+          path: work/fitdr36s-aarch64-safe-release.zip
+          if-no-files-found: error
