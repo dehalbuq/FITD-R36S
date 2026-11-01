@@ -2,6 +2,21 @@
 set -Eeuo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$PWD"
+FITD_RELEASE="${FITD_RELEASE:-0}"
+case "$FITD_RELEASE" in
+  0)
+    FITD_BUILD_FLAGS="-O1 -g3 -fno-omit-frame-pointer -fno-optimize-sibling-calls -fstack-protector-strong -D_GLIBCXX_ASSERTIONS -DNDEBUG -march=armv8-a"
+    FITD_LINK_FLAGS="-rdynamic"
+    FITD_ARCHIVE="fitdr36s-aarch64-startup-credits-legal.zip"
+    ;;
+  1)
+    # Conservatively optimized: no LTO, O2, O3, Ofast or fast-math.
+    FITD_BUILD_FLAGS="-O1 -g0 -DNDEBUG -march=armv8-a -mtune=cortex-a35 -fno-strict-aliasing -fwrapv -fstack-protector-strong -D_GLIBCXX_ASSERTIONS -ffunction-sections -fdata-sections"
+    FITD_LINK_FLAGS="-rdynamic -Wl,--gc-sections"
+    FITD_ARCHIVE="fitdr36s-aarch64-safe-release.zip"
+    ;;
+  *) echo "FITD_RELEASE must be 0 or 1" >&2; exit 2 ;;
+esac
 UPSTREAM_SHA="543e22bc78b64405537ae545ecd382dcdf2c12b2"
 mkdir -p work
 rm -rf work/source work/arm64 work/package
@@ -39,6 +54,10 @@ python3 -m py_compile v2/test_graphics_profile.py
 python3 v2/test_graphics_profile.py work/source
 python3 -m py_compile v2/patch_startup_splash.py v2/generate_startup_splash.py
 python3 v2/patch_startup_splash.py work/source
+if [ "$FITD_RELEASE" = "1" ]; then
+  python3 -m py_compile v2/prepare_release_arm64.py
+  python3 v2/prepare_release_arm64.py work/source
+fi
 grep -Fq 'r36sShowStartupNotices();' work/source/FitdLib/osystemSDL.cpp
 grep -Fq '[FITD-SPLASH] SHOW slide=' work/source/FitdLib/osystemSDL.cpp
 grep -Fq '[FITD-GFX] MASK_DEPTH=' work/source/FitdLib/rendererBGFX.cpp
@@ -82,9 +101,9 @@ cmake -S work/source -B work/arm64 -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_C_FLAGS="-DFITD_R36S=1 -DBGFX_CONFIG_MULTITHREADED=0 -DBGFX_CONFIG_RENDERER_OPENGL=0 -DBGFX_CONFIG_RENDERER_OPENGLES=30" \
     -DCMAKE_CXX_FLAGS="-DFITD_R36S=1 -DBGFX_CONFIG_MULTITHREADED=0 -DBGFX_CONFIG_RENDERER_OPENGL=0 -DBGFX_CONFIG_RENDERER_OPENGLES=30" \
-    -DCMAKE_C_FLAGS_RELEASE="-O1 -g3 -fno-omit-frame-pointer -fno-optimize-sibling-calls -fstack-protector-strong -D_GLIBCXX_ASSERTIONS -DNDEBUG -march=armv8-a" \
-    -DCMAKE_CXX_FLAGS_RELEASE="-O1 -g3 -fno-omit-frame-pointer -fno-optimize-sibling-calls -fstack-protector-strong -D_GLIBCXX_ASSERTIONS -DNDEBUG -march=armv8-a" \
-    -DCMAKE_EXE_LINKER_FLAGS="-rdynamic" \
+    -DCMAKE_C_FLAGS_RELEASE="$FITD_BUILD_FLAGS" \
+    -DCMAKE_CXX_FLAGS_RELEASE="$FITD_BUILD_FLAGS" \
+    -DCMAKE_EXE_LINKER_FLAGS="$FITD_LINK_FLAGS" \
     -DSDL_KMSDRM=ON \
     -DSDL_SHARED=OFF -DSDL_STATIC=ON
 cmake --build work/arm64 --target Fitd --parallel 2
@@ -95,8 +114,18 @@ readelf -h "$BIN" | grep -q AArch64
 PORT="$ROOT/work/package"
 mkdir -p "$PORT/fitdr36s/data" "$PORT/fitdr36s/libs" "$PORT/fitdr36s/splash"
 cp "$BIN" "$PORT/fitdr36s/fitd.aarch64"
-cp v2/port/FITD-R36S-ARM64.sh "$PORT/FITD-R36S-ARM64.sh"
-cp v2/port/port.json "$PORT/fitdr36s/port.json"
+if [ "$FITD_RELEASE" = "1" ]; then
+  strip --strip-unneeded "$PORT/fitdr36s/fitd.aarch64"
+  if readelf -SW "$PORT/fitdr36s/fitd.aarch64" | grep -Eq '\.debug_'; then
+    echo "ERROR: release binary contains debug sections" >&2
+    exit 3
+  fi
+  cp v2/port/FITD-R36S-ARM64-RELEASE.sh "$PORT/FITD-R36S-ARM64.sh"
+  cp v2/port/port-release.json "$PORT/fitdr36s/port.json"
+else
+  cp v2/port/FITD-R36S-ARM64.sh "$PORT/FITD-R36S-ARM64.sh"
+  cp v2/port/port.json "$PORT/fitdr36s/port.json"
+fi
 cp v2/port/font.conf "$PORT/fitdr36s/font.conf"
 cp v2/port/graphics.conf "$PORT/fitdr36s/graphics.conf"
 cp v2/port/splash.conf "$PORT/fitdr36s/splash.conf"
@@ -114,6 +143,9 @@ printf 'Copy original legally acquired AITD game files here (not redistributed).
   echo "Required GLIBC versions:"; readelf -V "$BIN" | grep -o 'GLIBC_[0-9.]*' | sort -Vu || true
   echo "Required GLIBCXX versions:"; readelf -V "$BIN" | grep -o 'GLIBCXX_[0-9.]*' | sort -Vu || true
 } > "$PORT/fitdr36s/build-diagnostics.txt"
+if [ "$FITD_RELEASE" = "1" ]; then
+  mv "$PORT/fitdr36s/build-diagnostics.txt" "$PORT/fitdr36s/build-info.txt"
+fi
 # Leave glibc, the dynamic loader and GPU/Mesa/GBM/EGL stack to the firmware.
 for lib in libstdc++.so.6 libgcc_s.so.1 libatomic.so.1; do
   source_lib="$(ldconfig -p | awk -v name="$lib" '$1 == name && /aarch64/ {print $NF; exit}')"
@@ -121,6 +153,6 @@ for lib in libstdc++.so.6 libgcc_s.so.1 libatomic.so.1; do
 done
 (
   cd "$PORT"
-  zip -qr "$ROOT/work/fitdr36s-aarch64-startup-credits-legal.zip" .
+  zip -qr "$ROOT/work/$FITD_ARCHIVE" .
 )
-echo "PORT READY: $ROOT/work/fitdr36s-aarch64-startup-credits-legal.zip"
+echo "PORT READY: $ROOT/work/$FITD_ARCHIVE"
