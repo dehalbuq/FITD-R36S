@@ -16,6 +16,7 @@ jobs:
     permissions:
       contents: read
     env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
       FITD_ANDROID_KEYSTORE_PASSWORD: "experimental-ci-key-not-for-production"
       FITD_ANDROID_KEY_PASSWORD: "experimental-ci-key-not-for-production"
     steps:
@@ -42,8 +43,8 @@ jobs:
 
       - name: Install Android API and NDK
         run: |
-          yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager --install "platforms;android-35" "build-tools;35.0.0" \
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "platforms;android-35" "build-tools;35.0.0" \
             "ndk;28.2.13676358" "cmake;3.22.1"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
