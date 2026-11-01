@@ -19,6 +19,18 @@ else()
   set(SDL_STATIC ON CACHE BOOL "" FORCE)
 endif()''',"build shared SDL3 for Android")
 
+# Android Gradle AGP uses CMake's RelWithDebInfo even in :assembleRelease.
+# Explicitly prevent any -g code generation in every native dependency and
+# keep full compiler optimization for 32-bit ARM, without unsafe fast-math.
+edit("CMakeLists.txt",
+'project(FITD)',
+'''project(FITD)
+if(ANDROID)
+  set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O3 -DNDEBUG -g0 -ffunction-sections -fdata-sections" CACHE STRING "" FORCE)
+  set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -DNDEBUG -g0 -ffunction-sections -fdata-sections" CACHE STRING "" FORCE)
+  set(CMAKE_SHARED_LINKER_FLAGS_RELWITHDEBINFO "-Wl,--gc-sections -Wl,--strip-debug" CACHE STRING "" FORCE)
+endif()''',"strict no-debug Release code generation")
+
 # Native-host shader compiler is run once before Android cross-compilation.
 # Do not build a *target-ARM* shaderc executable (cannot run on CI x86).
 edit("CMakeLists.txt",
@@ -195,6 +207,8 @@ g=g.replace("namespace = \"org.libsdl.app\"","namespace = \"org.libsdl.app\"")
 g=g.replace("    defaultConfig {","    defaultConfig {\n        applicationId \"com.dehalbuq.fitd\"",1)
 g=g.replace("targetSdkVersion 35","targetSdkVersion 28").replace("versionName \"1.0\"","versionName \"0.1.0-armv7\"")
 g=g.replace("abiFilters 'arm64-v8a'","abiFilters 'armeabi-v7a'")
+g=g.replace("android {","android {\n    ndkVersion \"28.2.13676358\"",1)
+
 # Configure externalNativeBuild with FITD as the top-level CMake project:
 # its existing CMakeLists.txt relies on CMAKE_SOURCE_DIR for third-party deps.
 g=g.replace("path 'jni/CMakeLists.txt'","path '../../android-source/CMakeLists.txt'")
