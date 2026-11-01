@@ -37,6 +37,10 @@ python3 -m py_compile v2/patch_graphics_regression.py
 python3 v2/patch_graphics_regression.py work/source
 python3 -m py_compile v2/test_graphics_profile.py
 python3 v2/test_graphics_profile.py work/source
+python3 -m py_compile v2/patch_startup_splash.py v2/generate_startup_splash.py
+python3 v2/patch_startup_splash.py work/source
+grep -Fq 'r36sShowStartupNotices();' work/source/FitdLib/osystemSDL.cpp
+grep -Fq '[FITD-SPLASH] SHOW slide=' work/source/FitdLib/osystemSDL.cpp
 grep -Fq '[FITD-GFX] MASK_DEPTH=' work/source/FitdLib/rendererBGFX.cpp
 grep -Fq '[FITD-GFX] NEAR_PRIMITIVE_REJECT' work/source/FitdLib/renderer.cpp
 grep -Fq '[FITD-BARRELS] RECOVER_WALL' work/source/FitdLib/main.cpp
@@ -89,12 +93,18 @@ test -n "$BIN"
 file "$BIN"
 readelf -h "$BIN" | grep -q AArch64
 PORT="$ROOT/work/package"
-mkdir -p "$PORT/fitdr36s/data" "$PORT/fitdr36s/libs"
+mkdir -p "$PORT/fitdr36s/data" "$PORT/fitdr36s/libs" "$PORT/fitdr36s/splash"
 cp "$BIN" "$PORT/fitdr36s/fitd.aarch64"
 cp v2/port/FITD-R36S-ARM64.sh "$PORT/FITD-R36S-ARM64.sh"
 cp v2/port/port.json "$PORT/fitdr36s/port.json"
 cp v2/port/font.conf "$PORT/fitdr36s/font.conf"
 cp v2/port/graphics.conf "$PORT/fitdr36s/graphics.conf"
+cp v2/port/splash.conf "$PORT/fitdr36s/splash.conf"
+cp v2/port/LEIA-ME-LEGAL.txt "$PORT/fitdr36s/LEIA-ME-LEGAL.txt"
+python3 v2/generate_startup_splash.py "$PORT/fitdr36s/splash"
+test -s "$PORT/fitdr36s/splash/credits.bmp"
+test -s "$PORT/fitdr36s/splash/legal.bmp"
+test -s "$PORT/fitdr36s/LEIA-ME-LEGAL.txt"
 cp work/source/LICENSE "$PORT/fitdr36s/LICENSE.FITD.txt"
 chmod 755 "$PORT/FITD-R36S-ARM64.sh" "$PORT/fitdr36s/fitd.aarch64"
 printf 'Copy original legally acquired AITD game files here (not redistributed).\n' > "$PORT/fitdr36s/data/COPY_GAME_FILES_HERE.txt"
@@ -111,6 +121,6 @@ for lib in libstdc++.so.6 libgcc_s.so.1 libatomic.so.1; do
 done
 (
   cd "$PORT"
-  zip -qr "$ROOT/work/fitdr36s-aarch64-graphics-mask-isolation.zip" .
+  zip -qr "$ROOT/work/fitdr36s-aarch64-startup-credits-legal.zip" .
 )
-echo "PORT READY: $ROOT/work/fitdr36s-aarch64-graphics-mask-isolation.zip"
+echo "PORT READY: $ROOT/work/fitdr36s-aarch64-startup-credits-legal.zip"
