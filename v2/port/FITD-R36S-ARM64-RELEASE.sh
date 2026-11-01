@@ -23,12 +23,13 @@ if [ "$found" -eq 0 ]; then
     echo "FITD: adicione os PAKs originais em $DATA" >&2; exit 24
 fi
 
-# Engine/script clock of the original game: don't accelerate world simulation.
-# Render cap 60; the engine's 25Hz timer uses elapsed wall-clock time.
-# The original engine also contains per-frame logic, so verify movement
-# speed on-device; set FITD_R36S_TIMEBASE=legacy for A/B comparisons.
+# Match the previously playable debug build's per-frame simulation.
+# The experimental real-time 25Hz scheduler slowed character movement.
+# Opt in to FITD_R36S_TIMEBASE=real only for explicit A/B testing.
+# The legacy mode can accelerate some scripts at higher render FPS:
+# the game still needs a full render/simulation decoupling fix.
 export FITD_FPS_LIMIT="${FITD_FPS_LIMIT:-60}"
-export FITD_R36S_TIMEBASE="${FITD_R36S_TIMEBASE:-real}"
+export FITD_R36S_TIMEBASE="${FITD_R36S_TIMEBASE:-legacy}"
 export FITD_VSYNC="${FITD_VSYNC:-0}" FITD_DEBUG=0 FITD_VIDEO_TEST=0
 unset FITD_DEEP_TRACE FITD_PERF_TRACE FITD_AI_TRACE FITD_NPC_MOTION_TRACE FITD_SHOT_TRACE FITD_GDB FITD_TEST_TIMEOUT || true
 export FITD_WINDOW_RECOVERY="${FITD_WINDOW_RECOVERY:-1}"
