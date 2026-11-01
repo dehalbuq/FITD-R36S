@@ -66,7 +66,9 @@ jobs:
           p.write_text(s)
           PY
           cd /tmp/fitd-kitkat-apk
-          gradle --no-daemon -PEXCLUDE_NATIVE_LIBS=true :app:assembleDebug
+          curl -fsSL https://services.gradle.org/distributions/gradle-8.1.1-bin.zip -o /tmp/gradle-8.1.1-bin.zip
+          unzip -q /tmp/gradle-8.1.1-bin.zip -d /tmp
+          /tmp/gradle-8.1.1/bin/gradle --no-daemon -PEXCLUDE_NATIVE_LIBS=true :app:assembleDebug
           mkdir -p "$GITHUB_WORKSPACE/dist"
           cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/dist/FITD-KitKat-GLES2-ARMv7-TEST.apk"
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$GITHUB_WORKSPACE/dist/FITD-KitKat-GLES2-ARMv7-TEST.apk" | grep -E "sdkVersion|native-code|glEsVersion"
