@@ -211,7 +211,7 @@ g=g.replace("abiFilters 'arm64-v8a'","abiFilters 'armeabi-v7a'")
 # example executables and shared libz.so, which are unnecessary and can fail
 # linking with Android's NDK version script. Only build the actual JNI game.
 g=g.replace('arguments "-DANDROID_PLATFORM=android-21", "-DANDROID_STL=c++_static"',
-            'arguments "-DANDROID_PLATFORM=android-21", "-DANDROID_STL=c++_static"\\n                targets "main"')
+            'arguments "-DANDROID_PLATFORM=android-21", "-DANDROID_STL=c++_static"\n                targets "main"')
 
 g=g.replace("android {","android {\n    ndkVersion \"28.2.13676358\"",1)
 
