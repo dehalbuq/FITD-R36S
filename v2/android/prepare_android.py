@@ -51,6 +51,17 @@ int main(int argc,char* argv[])
 #endif
 {''',"SDL JNI entry symbol")
 
+edit("Fitd/fitd.cpp",
+'''    FitdInit(argc, argv);
+    FitdMain(argc, argv);''',
+'''#ifdef __ANDROID__
+    // Avoid worker call after GLES3 or data-file initialization fails.
+    return FitdInit(argc,argv);
+#else
+    FitdInit(argc, argv);
+    FitdMain(argc, argv);
+#endif''',"propagate SDL init failure cleanly")
+
 edit("FitdLib/osystemSDL.cpp",
 '#include "osystemAL.h"',
 '''#include "osystemAL.h"
