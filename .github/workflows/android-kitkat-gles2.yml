@@ -33,7 +33,7 @@ jobs:
       - name: Verify KitKat API19 toolchain and SDL2 output
         run: |
           test -s /tmp/sdl2-build/libSDL2.so
-          grep -q "ANDROID_PLATFORM:STRING=android-19" /tmp/sdl2-build/CMakeCache.txt || { grep ANDROID_PLATFORM /tmp/sdl2-build/CMakeCache.txt; exit 1; }
+          grep -q "ANDROID_PLATFORM:[A-Z]*=android-19" /tmp/sdl2-build/CMakeCache.txt || { grep ANDROID_PLATFORM /tmp/sdl2-build/CMakeCache.txt; exit 1; }
       - name: Cross-compile GLES2 JNI test
         run: |
           cmake -S v2/android-kitkat -B /tmp/fitd-probe-build -G Ninja \
