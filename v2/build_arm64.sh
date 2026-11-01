@@ -11,7 +11,7 @@ case "$FITD_RELEASE" in
     ;;
   1)
     # Conservatively optimized: no LTO, O2, O3, Ofast or fast-math.
-    FITD_BUILD_FLAGS="-O1 -g0 -DNDEBUG -march=armv8-a -mtune=cortex-a35 -fno-strict-aliasing -fwrapv -fstack-protector-strong -D_GLIBCXX_ASSERTIONS -ffunction-sections -fdata-sections"
+    FITD_BUILD_FLAGS="-O1 -g0 -DNDEBUG -DFITD_R36S_RELEASE=1 -march=armv8-a -mtune=cortex-a35 -fno-strict-aliasing -fwrapv -fstack-protector-strong -D_GLIBCXX_ASSERTIONS -ffunction-sections -fdata-sections"
     FITD_LINK_FLAGS="-rdynamic -Wl,--gc-sections"
     FITD_ARCHIVE="fitdr36s-aarch64-safe-release.zip"
     ;;
