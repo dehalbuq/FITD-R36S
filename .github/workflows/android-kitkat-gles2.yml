@@ -78,7 +78,7 @@ jobs:
           APK=dist/FITD-KitKat-GLES2-ARMv7-TEST.apk
           "$ANDROID_HOME/build-tools/34.0.0/aapt" dump badging "$APK" | tee /tmp/fitd-apk-badging.txt
           grep -Fq "sdkVersion:'19'" /tmp/fitd-apk-badging.txt
-          grep -Fq "uses-gl-es: '0x00020000'" /tmp/fitd-apk-badging.txt
+          grep -Eq "uses-gl-es: '0x0*20000'" /tmp/fitd-apk-badging.txt
           grep -Fq "native-code: 'armeabi-v7a'" /tmp/fitd-apk-badging.txt
           unzip -l "$APK" | tee /tmp/fitd-apk-contents.txt
           grep -Fq 'lib/armeabi-v7a/libSDL2.so' /tmp/fitd-apk-contents.txt
