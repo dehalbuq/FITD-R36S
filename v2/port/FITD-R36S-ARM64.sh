@@ -68,6 +68,22 @@ export FITD_R36S_MASK_DEPTH="${FITD_R36S_MASK_DEPTH:-classic}"
 export FITD_R36S_NEAR_CLIP="${FITD_R36S_NEAR_CLIP:-off}"
 printf '[FITD-GFX] launcher mask=%s nearClip=%s config=%s\n' \
     "$FITD_R36S_MASK_DEPTH" "$FITD_R36S_NEAR_CLIP" "$GFX_CONFIG"
+# Startup port credits + legal notice, shown before original game rendering.
+SPLASH_CFG="$GAME/splash.conf"
+if [ -f "$SPLASH_CFG" ]; then
+    SPLASH_CHOICE="$(sed -n 's/^SPLASH=//p' "$SPLASH_CFG" | head -n1 | tr -d '\r')"
+    SPLASH_CREDITS_MS="$(sed -n 's/^CREDITS_MS=//p' "$SPLASH_CFG" | head -n1 | tr -d '\r')"
+    SPLASH_LEGAL_MS="$(sed -n 's/^LEGAL_MS=//p' "$SPLASH_CFG" | head -n1 | tr -d '\r')"
+    case "$SPLASH_CHOICE" in on|off) export FITD_R36S_SPLASH="$SPLASH_CHOICE";; esac
+    case "$SPLASH_CREDITS_MS" in 1500|2000|2500|3000|3500|4000|5000|6000|8000|10000|15000) export FITD_R36S_CREDITS_MS="$SPLASH_CREDITS_MS";; esac
+    case "$SPLASH_LEGAL_MS" in 1500|2000|2500|3000|3500|4000|5000|6000|8000|9000|10000|15000|20000) export FITD_R36S_LEGAL_MS="$SPLASH_LEGAL_MS";; esac
+fi
+export FITD_R36S_SPLASH="${FITD_R36S_SPLASH:-on}"
+export FITD_R36S_CREDITS_MS="${FITD_R36S_CREDITS_MS:-3500}"
+export FITD_R36S_LEGAL_MS="${FITD_R36S_LEGAL_MS:-9000}"
+export FITD_R36S_SPLASH_DIR="$GAME/splash"
+printf '[FITD-SPLASH] launcher enabled=%s creditsMs=%s legalMs=%s dir=%s\n' \
+    "$FITD_R36S_SPLASH" "$FITD_R36S_CREDITS_MS" "$FITD_R36S_LEGAL_MS" "$FITD_R36S_SPLASH_DIR"
 export SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-kmsdrm}"
 export SDL_AUDIODRIVER="${SDL_AUDIODRIVER:-alsa}"
 export SDL_VIDEO_FORCE_EGL=1
