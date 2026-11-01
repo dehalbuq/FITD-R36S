@@ -1,0 +1,117 @@
+FITD-R36S — AVISO LEGAL, ORIGEM DO CÓDIGO E CRÉDITOS
+======================================================
+Repositório: https://github.com/dehalbuq/FITD-R36S
+Port para R36S / dArkOSRE (ARM64): @dehalbuq e colaboradores.
+
+1. O QUE ESTE PROJETO É
+----------------------
+FITD-R36S é um port comunitário e não oficial de um motor de execução
+compatível com Alone in the Dark (1992), adaptado para dispositivos R36S.
+O projeto disponibiliza código e patches do motor FITD, scripts de
+compilação, arquivos de configuração, recursos próprios da interface
+de inicialização e bibliotecas cuja redistribuição seja permitida.
+
+Este port NÃO é uma cópia de Alone in the Dark, NÃO inclui o jogo
+comercial completo e NÃO lhe concede uma licença de uso dos arquivos
+protegidos desse jogo.
+
+2. O QUE NÃO ESTÁ INCLUÍDO
+-------------------------
+O pacote distribuído pelo projeto não contém arquivos originais do
+jogo (PAK/ITD e demais dados protegidos), cenas, modelos 3D, texturas,
+personagens, trilhas sonoras, efeitos sonoros, diálogos ou outras obras
+comerciais fornecidas com Alone in the Dark.
+
+Para jogar, você deve obter legitimamente uma cópia compatível do
+Alone in the Dark original e fornecer POR CONTA PRÓPRIA os arquivos
+necessários em fitdr36s/data/. O projeto não orienta a obter cópias
+não autorizadas e não distribui nem hospeda recursos comerciais.
+
+A posse de um executável livre ou do motor não significa que os dados
+do jogo tenham se tornado livres. O acesso e uso desses dados dependem
+dos direitos concedidos por seus titulares e das regras legais aplicáveis
+em seu país.
+
+3. DIREITOS AUTORAIS E MARCAS
+----------------------------
+Alone in the Dark, seus nomes, marcas, personagens, gráficos, músicas,
+sons, histórias e demais conteúdos são propriedade de seus respectivos
+titulares de direitos.
+
+FITD-R36S não é uma versão oficial, não possui afiliação, associação,
+endosso, aprovação ou patrocínio oficial de Infogrames, Atari ou dos
+demais titulares relacionados a Alone in the Dark. A menção a nomes
+de marcas serve apenas para identificar compatibilidade e origem.
+
+4. ORIGEM DO MOTOR E ATRIBUIÇÃO DE CRÉDITOS
+-----------------------------------------
+- Jogo comercial original: Alone in the Dark (1992), lançado por
+  Infogrames. O port NÃO reivindica a autoria desse jogo.
+- FITD / Free in the Dark: motor de código aberto desenvolvido
+  originalmente por Vincent Hamm (yaz0r) e demais colaboradores.
+  Repositório: https://github.com/yaz0r/FITD
+- Histórico do projeto e versões anteriores do motor:
+  https://github.com/jmimu/FITD
+- Alone in the Dark ReHaunted, da comunidade spacefarergames:
+  referências e trechos de correções técnicas utilizados conforme
+  os avisos de autoria e as licenças aplicáveis.
+  https://github.com/spacefarergames/AloneInTheDarkReHaunted
+- FITD-R36S: scripts, adaptações ARM64, ajustes, testes e integração
+  para o R36S mantidos por @dehalbuq e colaboradores.
+  https://github.com/dehalbuq/FITD-R36S
+
+Os créditos acima não substituem os avisos e cabeçalhos de copyright
+individuais dos arquivos de código que integram este projeto.
+
+5. LICENÇA DO CÓDIGO-FONTE
+-------------------------
+O motor FITD distribui código sob a GNU General Public License,
+versão 2, ou (conforme seus avisos de copyright) qualquer versão
+posterior aplicável. Trechos adaptados do ReHaunted mantêm suas
+condições e avisos de licença originais. A licença GPL v2 do motor
+está no pacote como LICENSE.FITD.txt.
+
+Ao redistribuir o programa, inclusive binários modificados, devem
+ser respeitadas as condições da(s) licença(s) aplicável(is), incluindo
+a preservação dos avisos de autoria, da licença e os deveres relativos
+ao fornecimento do código-fonte correspondente.
+
+Fontes para reconstrução do port:
+  https://github.com/dehalbuq/FITD-R36S
+  https://github.com/yaz0r/FITD
+  https://github.com/spacefarergames/AloneInTheDarkReHaunted
+O script v2/build_arm64.sh fixa o commit do motor utilizado e
+aplica os patches documentados neste repositório.
+
+As fontes utilizadas para gerar a tipografia opcional da interface
+estão sujeitas às suas próprias licenças. Os arquivos TTF não são
+embutidos no pacote. Veja os avisos dos componentes de terceiros
+e o histórico do código para informações adicionais.
+
+6. RESPONSABILIDADE E LIMITAÇÕES
+--------------------------------
+O projeto é experimental, fornecido sem garantia de funcionamento,
+completude, segurança jurídica ou compatibilidade com toda edição
+do jogo ou firmware. Erros e regressões podem ocorrer; faça backup
+dos seus arquivos SAVE*.ITD antes de instalar novas versões.
+
+O fato de um projeto distribuir somente código de motor e não
+incluir dados comerciais NÃO constitui, isoladamente, uma garantia
+de legalidade em todas as jurisdições ou para todos os usos. Cada
+usuário ou distribuidor deve respeitar os direitos dos titulares,
+suas licenças e a legislação aplicável.
+
+Este documento é informativo e não substitui uma orientação jurídica.
+
+7. ARQUIVOS E DIRETÓRIOS
+-----------------------
+/roms/ports/FITD-R36S-ARM64.sh     — script que inicia o port
+/roms/ports/fitdr36s/fitd.aarch64 — executável do motor portado
+/roms/ports/fitdr36s/data/        — arquivos originais do jogo
+                                     fornecidos pelo próprio usuário
+/roms/ports/fitdr36s/splash/      — créditos e aviso originais do port
+/roms/ports/fitdr36s/splash.conf  — configuração das telas de aviso
+/roms/ports/fitdr36s/             — arquivos de licença e configuração
+
+======================================================
+Projeto comunitário independente • https://github.com/dehalbuq
