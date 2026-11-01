@@ -260,8 +260,8 @@ void main() {
 #endif
 '''
 one("startup routine definition",
-'''static int SDLCALL r36sGameThread(void*) { return FitdMain(0, nullptr); }''',
-'''static int SDLCALL r36sGameThread(void*) { return FitdMain(0, nullptr); }
+'''SDL_GLContext gR36sContext = nullptr;''',
+'''SDL_GLContext gR36sContext = nullptr;
 ''' + splash)
 
 one("show before detaching GL context",
