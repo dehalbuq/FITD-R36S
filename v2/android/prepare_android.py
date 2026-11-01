@@ -195,6 +195,10 @@ g=g.replace("namespace = \"org.libsdl.app\"","namespace = \"org.libsdl.app\"")
 g=g.replace("    defaultConfig {","    defaultConfig {\n        applicationId \"com.dehalbuq.fitd\"",1)
 g=g.replace("targetSdkVersion 35","targetSdkVersion 28").replace("versionName \"1.0\"","versionName \"0.1.0-armv7\"")
 g=g.replace("abiFilters 'arm64-v8a'","abiFilters 'armeabi-v7a'")
+# Configure externalNativeBuild with FITD as the top-level CMake project:
+# its existing CMakeLists.txt relies on CMAKE_SOURCE_DIR for third-party deps.
+g=g.replace("path 'jni/CMakeLists.txt'","path '../../android-source/CMakeLists.txt'")
+
 g=g.replace('''    buildTypes {
         release {''',
 '''    signingConfigs {
