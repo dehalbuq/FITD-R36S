@@ -2,6 +2,18 @@
 
 Registro dos testes e correções do **port ARM64 experimental**. Não são lançamentos estáveis ou certificados pelo PortMaster. O histórico de compilação está no [GitHub Actions](https://github.com/dehalbuq/FITD-R36S/actions).
 
+## 2026-10-31 — Apresentação do port e aviso legal durante a inicialização
+
+**Branch:** `feat/startup-credits-legal-splash-20261031` · **Status:** aguardando teste no R36S / workflow ARM64.
+
+- Pedido do portador do projeto: mostrar seu avatar público GitHub e nickname `@dehalbuq` antes do jogo, com origem do código e aviso explícito de legalidade e dependência dos dados originais do jogo.
+- Duas imagens originais do port, 640×480, geradas em `v2/generate_startup_splash.py` (sem distribuição de material de *Alone in the Dark*). Avatar carregado somente no runner do GitHub Actions, com fallback visível caso CDN indisponível.
+- Nova rotina `v2/patch_startup_splash.py` no `FitdLib/osystemSDL.cpp`: antes da thread do jogo e de `bgfx::init`, renderiza dois BMPs próprios no contexto OpenGL ES 3 via SDL, sem bibliotecas adicionais. Pode avançar por A/Start/teclado; falha de imagem nunca deve bloquear inicialização.
+- Telas incluem créditos FITD/yaz0r, histórico jmimu, referências ReHaunted/spacefarergames e integração R36S/@dehalbuq. Não há associação oficial com os titulares do jogo.
+- `v2/port/LEIA-ME-LEGAL.txt` detalha escopo do motor GPL, ausência de arquivos originais PAK/ITD, necessidade de fornecimento próprio de uma cópia legalmente obtida e respeito aos direitos de terceiros, sem afirmar garantia jurídica genérica.
+- `splash.conf` habilitado por padrão, exibição de aproximadamente 3,5s e 9s, controláveis pelo usuário; registros `[FITD-SPLASH]` no log.
+- Base de código mantida igual à branch `fix/female-graphics-mask-isolation-20261031`, preservando a correção validada da adega, a fonte legível e o modo clássico de máscaras para o relatório de regressões gráficas.
+
 ## 2026-10-31 — Defeitos gráficos na nova partida com Emily
 
 **Branch:** `fix/female-graphics-mask-isolation-20261031` · **Status:** pacote experimental de isolamento de regressão, ainda não validado no R36S.
