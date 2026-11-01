@@ -2,7 +2,7 @@ name: FITD R36S ARM64 (yaz0r experimental)
 
 on:
   push:
-    branches: [main, "port/fitd-yaz0r-aarch64", "debug/audio-door-room-crash-20261027", "debug/library-room-crash-20261028", "debug/throw-null-body-20261028", "debug/ball-enemies-hit-shake-20261028", "debug/worm-camera-orb-audio-20261028", "fix/orb-hit-object-rehaunted-20261028", "fix/cellar-revolver-inventory-spawn-20261029", "fix/rehaunted-mask-reptile-diagnostic-20261030", "debug/cellar-barrels-stuck-20261030", "fix/cellar-wall-readable-font-20261030", "fix/female-graphics-mask-isolation-20261031", "feat/startup-credits-legal-splash-20261031"]
+    branches: [main, "port/fitd-yaz0r-aarch64", "debug/audio-door-room-crash-20261027", "debug/library-room-crash-20261028", "debug/throw-null-body-20261028", "debug/ball-enemies-hit-shake-20261028", "debug/worm-camera-orb-audio-20261028", "fix/orb-hit-object-rehaunted-20261028", "fix/cellar-revolver-inventory-spawn-20261029", "fix/rehaunted-mask-reptile-diagnostic-20261030", "debug/cellar-barrels-stuck-20261030", "fix/cellar-wall-readable-font-20261030", "fix/female-graphics-mask-isolation-20261031", "feat/startup-credits-legal-splash-20261031", "release/r36s-aarch64-safe-20261101"]
     paths:
       - "v2/**"
       - ".github/workflows/fitd-r36s-arm64.yml"
@@ -25,9 +25,25 @@ jobs:
             libxi-dev libxss-dev libxtst-dev libxkbcommon-dev libdrm-dev \
             libgbm-dev libgl1-mesa-dev libgles2-mesa-dev libegl1-mesa-dev \
             libopengl-dev libdbus-1-dev libudev-dev libwayland-dev
-      - name: Patch and build FITD for R36S
+      - name: Patch and build FITD for R36S (release without debug)
+        if: github.ref_name == 'release/r36s-aarch64-safe-20261101'
+        env:
+          FITD_RELEASE: "1"
         run: bash v2/build_arm64.sh
-      - name: Upload ARM64 test build
+      - name: Patch and build FITD for R36S (diagnostics)
+        if: github.ref_name != 'release/r36s-aarch64-safe-20261101'
+        env:
+          FITD_RELEASE: "0"
+        run: bash v2/build_arm64.sh
+      - name: Upload ARM64 release
+        if: github.ref_name == 'release/r36s-aarch64-safe-20261101'
+        uses: actions/upload-artifact@v4
+        with:
+          name: FITD-R36S-AARCH64-RELEASE-RK3326-60FPS-NO-DEBUG
+          path: work/fitdr36s-aarch64-safe-release.zip
+          if-no-files-found: error
+      - name: Upload ARM64 diagnostic build
+        if: github.ref_name != 'release/r36s-aarch64-safe-20261101'
         uses: actions/upload-artifact@v4
         with:
           name: FITD-R36S-AARCH64-STARTUP-CREDITS-LEGAL
