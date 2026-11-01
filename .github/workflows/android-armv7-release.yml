@@ -40,9 +40,6 @@ jobs:
             libgles2-mesa-dev libegl1-mesa-dev libopengl-dev \
             libdbus-1-dev libudev-dev libwayland-dev
 
-      - name: Prepare Android SDK platform and ARMv7 NDK
-        uses: android-actions/setup-android@v3
-
       - name: Install Android API and NDK
         run: |
           yes | sdkmanager --licenses >/dev/null 2>&1 || true
