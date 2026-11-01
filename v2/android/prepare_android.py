@@ -19,6 +19,25 @@ else()
   set(SDL_STATIC ON CACHE BOOL "" FORCE)
 endif()''',"build shared SDL3 for Android")
 
+# Native-host shader compiler is run once before Android cross-compilation.
+# Do not build a *target-ARM* shaderc executable (cannot run on CI x86).
+edit("CMakeLists.txt",
+'set(BGFX_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)',
+'''set(BGFX_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+if(ANDROID)
+  set(BGFX_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+endif()''',"skip shaderc target on Android")
+
+p=root/"FitdLib/CMakeLists.txt";s=p.read_text()
+needle="macro(addShaderProgramPermutation vsname psname varyingname)"
+first=s.find(needle)
+last=s.find("endmacro()",first)
+if first<0 or last<=first:raise RuntimeError("shader compilation macro missing")
+s=s[:first]+s[first:last].replace(needle,
+    needle+"\n    if(NOT ANDROID)",1)+"    endif()\n"+s[last:]
+p.write_text(s)
+print("ARMV7: reuse native host-generated GLES3 shader headers")
+
 edit("Fitd/CMakeLists.txt",
 '''add_executable (Fitd ${SOURCES})
 
