@@ -207,6 +207,12 @@ g=g.replace("namespace = \"org.libsdl.app\"","namespace = \"org.libsdl.app\"")
 g=g.replace("    defaultConfig {","    defaultConfig {\n        applicationId \"com.dehalbuq.fitd\"",1)
 g=g.replace("targetSdkVersion 35","targetSdkVersion 28").replace("versionName \"1.0\"","versionName \"0.1.0-armv7\"")
 g=g.replace("abiFilters 'arm64-v8a'","abiFilters 'armeabi-v7a'")
+# Gradle otherwise builds every CMake default target, including zlib's
+# example executables and shared libz.so, which are unnecessary and can fail
+# linking with Android's NDK version script. Only build the actual JNI game.
+g=g.replace('arguments "-DANDROID_PLATFORM=android-21", "-DANDROID_STL=c++_static"',
+            'arguments "-DANDROID_PLATFORM=android-21", "-DANDROID_STL=c++_static"\\n                targets "main"')
+
 g=g.replace("android {","android {\n    ndkVersion \"28.2.13676358\"",1)
 
 # Configure externalNativeBuild with FITD as the top-level CMake project:
