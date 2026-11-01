@@ -1,7 +1,13 @@
 cmake_minimum_required(VERSION 3.16)
 project(fitd_gles2_probe LANGUAGES C CXX)
-# Use with an SDL2 Android Gradle template; the SDL2 target must exist.
+# Cross-compile with SDL2 built for the same Android ABI/API level.
+if(NOT SDL2_ROOT OR NOT SDL2_INCLUDE_DIR)
+  message(FATAL_ERROR "Set SDL2_ROOT (SDL2 build directory) and SDL2_INCLUDE_DIR")
+endif()
+find_library(SDL2_LIBRARY NAMES SDL2 PATHS "${SDL2_ROOT}" NO_DEFAULT_PATH REQUIRED)
 add_library(main SHARED gles2_probe.cpp)
+target_include_directories(main PRIVATE "${SDL2_INCLUDE_DIR}")
 target_compile_features(main PRIVATE cxx_std_11)
-target_link_libraries(main PRIVATE SDL2 GLESv2 EGL log android)
-target_compile_options(main PRIVATE -O2 -DNDEBUG)
+target_link_libraries(main PRIVATE "${SDL2_LIBRARY}" GLESv2 EGL log android)
+target_compile_options(main PRIVATE -O2 -DNDEBUG -fvisibility=hidden)
+set_target_properties(main PROPERTIES LINK_FLAGS "-Wl,--no-undefined")
