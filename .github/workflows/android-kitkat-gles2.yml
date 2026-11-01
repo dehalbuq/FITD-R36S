@@ -42,6 +42,40 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release -DSDL2_ROOT=/tmp/sdl2-build \
             -DSDL2_INCLUDE_DIR=/tmp/SDL2/include
           cmake --build /tmp/fitd-probe-build --parallel 2
+      - name: Package Android 4.4 APK with SDL2 Java activity
+        run: |
+          set -euxo pipefail
+          cp -a /tmp/SDL2/android-project /tmp/fitd-kitkat-apk
+          mkdir -p /tmp/fitd-kitkat-apk/app/src/main/jniLibs/armeabi-v7a
+          cp /tmp/sdl2-build/libSDL2.so /tmp/fitd-kitkat-apk/app/src/main/jniLibs/armeabi-v7a/
+          cp /tmp/fitd-probe-build/libmain.so /tmp/fitd-kitkat-apk/app/src/main/jniLibs/armeabi-v7a/
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path('/tmp/fitd-kitkat-apk')
+          p=root/'app/build.gradle'
+          s=p.read_text()
+          s=s.replace("abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'", "abiFilters 'armeabi-v7a'")
+          s=s.replace('targetSdkVersion 34', 'targetSdkVersion 28')
+          s=s.replace('minSdkVersion 19', 'minSdkVersion 19')
+          p.write_text(s)
+          p=root/'app/src/main/AndroidManifest.xml'
+          s=p.read_text().replace('android:preferMinimalPostProcessing="true"','')
+          p.write_text(s)
+          p=root/'app/src/main/res/values/strings.xml'
+          s=p.read_text().replace('SDL App','FITD GLES2 Test')
+          p.write_text(s)
+          PY
+          cd /tmp/fitd-kitkat-apk
+          gradle --no-daemon -PEXCLUDE_NATIVE_LIBS=true :app:assembleDebug
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/dist/FITD-KitKat-GLES2-ARMv7-TEST.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$GITHUB_WORKSPACE/dist/FITD-KitKat-GLES2-ARMv7-TEST.apk" | grep -E "sdkVersion|native-code|glEsVersion"
+      - name: Upload Android 4.4 GLES2 test APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: fitd-kitkat-gles2-armv7-apk-test
+          path: dist/FITD-KitKat-GLES2-ARMv7-TEST.apk
+          if-no-files-found: error
       - name: Check ELF binaries
         run: |
           file /tmp/fitd-probe-build/libmain.so /tmp/sdl2-build/libSDL2.so
