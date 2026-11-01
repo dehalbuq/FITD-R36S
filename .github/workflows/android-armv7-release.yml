@@ -1,0 +1,62 @@
+name: FITD Android ARMv7 APK (Release experimental)
+
+on:
+  push:
+    branches:
+      - port/android-armeabi-v7a-release-20261031
+    paths:
+      - "v2/android/**"
+      - ".github/workflows/android-armv7-release.yml"
+  workflow_dispatch:
+
+jobs:
+  android-armeabi-v7a:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 110
+    permissions:
+      contents: read
+    env:
+      FITD_ANDROID_KEYSTORE_PASSWORD: "experimental-ci-key-not-for-production"
+      FITD_ANDROID_KEY_PASSWORD: "experimental-ci-key-not-for-production"
+    steps:
+      - name: Checkout port repository
+        uses: actions/checkout@v4
+
+      - name: Configure Java for modern Gradle
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install host native build requirements
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build build-essential cmake git python3 zip unzip \
+            libasound2-dev libpulse-dev libjack-jackd2-dev libsndio-dev \
+            libx11-dev libxext-dev libxrandr-dev libxcursor-dev \
+            libxfixes-dev libxi-dev libxss-dev libxtst-dev \
+            libxkbcommon-dev libdrm-dev libgbm-dev libgl1-mesa-dev \
+            libgles2-mesa-dev libegl1-mesa-dev libopengl-dev \
+            libdbus-1-dev libudev-dev libwayland-dev
+
+      - name: Prepare Android SDK platform and ARMv7 NDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android API and NDK
+        run: |
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager --install "platforms;android-35" "build-tools;35.0.0" \
+            "ndk;28.2.13676358" "cmake;3.22.1"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+
+      - name: Build optimized non-debuggable Android ARMv7 release
+        run: bash v2/android/build_android.sh
+
+      - name: Upload signed experimental APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: FITD-ANDROID-ARMV7-RELEASE-APK-TEST
+          path: work/android-out/FITD-Android-ARMv7-GLES3-Release-TEST.apk
+          if-no-files-found: error
