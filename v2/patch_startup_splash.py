@@ -191,6 +191,19 @@ void main() {
     gl.disable(0x0BE2u); // GL_BLEND
     gl.disable(0x0B44u); // GL_CULL_FACE
 
+    // Gamepads must be opened to receive SDL_EVENT_GAMEPAD_BUTTON_DOWN.
+    // Close before launching the game's normal input mapping.
+    int splashPadCount = 0;
+    SDL_JoystickID* splashIds = SDL_GetGamepads(&splashPadCount);
+    SDL_Gamepad* splashGamepad = nullptr;
+    if (splashIds) {
+        if (splashPadCount > 0)
+            splashGamepad = SDL_OpenGamepad(splashIds[0]);
+        SDL_free(splashIds);
+    }
+    fprintf(stderr,"[FITD-SPLASH] input padAvailable=%d open=%d\n",
+            splashPadCount,splashGamepad ? 1 : 0);
+
     const char* names[2] = { "credits.bmp", "legal.bmp" };
     const char* durationVars[2] = {"FITD_R36S_CREDITS_MS","FITD_R36S_LEGAL_MS"};
     const int defaultDurations[2] = { 3500, 9000 };
@@ -251,6 +264,7 @@ void main() {
             SDL_Delay(33); // low-cost static display; no busy polling
         }
     }
+    if (splashGamepad) SDL_CloseGamepad(splashGamepad);
     gl.bindTexture(0x0DE1u,0);
     gl.deleteTextures(1,&texture);
     gl.useProgram(0);
