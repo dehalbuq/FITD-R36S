@@ -1,16 +1,20 @@
-# Primeiro teste GLES2 / Android 4.4
+# Teste independente SDL2 + OpenGL ES 2.0 para Android 4.4 (API 19)
 
-Código-fonte de um **smoke test**, ainda sem APK compilado. Desenha um triângulo verde com shaders GLSL ES 1.00 e contexto OpenGL ES 2.0. Encerra com Escape, START de controle ou após 30 segundos. Sem arquivos comerciais.
+Este diretório contém **somente um smoke test**, não o motor FITD. O aplicativo de teste mostra um triângulo verde com shaders GLSL ES 1.00 durante até 30 segundos; START de gamepad ou Escape encerram o teste. Não inclui recursos comerciais.
 
-## Integração
+## Projeto Android reproduzível
 
-Usar o template Android da versão SDL2 compatível com API 19, adicionando `gles2_probe.cpp` como biblioteca JNI `main`. Configurar `minSdkVersion 19`, `ANDROID_PLATFORM=android-19`, `abiFilters 'armeabi-v7a'` e declarar `android:glEsVersion=\"0x00020000\"`. Compilar SDL2 junto ao projeto e ajustar o alvo CMake ao template escolhido. O arquivo CMake fornecido pressupõe que o alvo SDL2 já existe.
+O projeto Gradle fica em `android/` com arquivos próprios e estáveis (Gradle **8.1.1**, Android Gradle Plugin **8.1.1**, Java **17**, `minSdk 19`, ABI **armeabi-v7a**). O workflow `.github/workflows/android-kitkat-gles2.yml`:
 
-**Importante:** este teste é separado do FITD, não compila o motor, não contém importador de arquivos, não garante funcionamento do bgfx e não substitui o APK SDL3/GLES3 anterior. Não afirmar compatibilidade Android 4.4 sem compilar e testar em dispositivo real.
+1. Compila SDL2 `release-2.30.12` usando NDK r23c para ARMv7/API 19.
+2. Compila `gles2_probe.cpp` como `libmain.so` e copia o Java do SDL2 e ambas as bibliotecas para o projeto Gradle.
+3. Produz `FITD-KitKat-GLES2-ARMv7-TEST.apk` e valida SDK, GLES e ABI com `aapt`, além de verificar as bibliotecas dentro do APK.
+4. Publica o APK no artefato GitHub Actions `fitd-kitkat-gles2-armv7-apk-test`.
 
-## Critérios
+Nenhuma dependência da tarefa `externalNativeBuild` do modelo SDL2 é necessária. O APK só deve ser chamado de compilado depois que o workflow terminar com sucesso.
 
-- Verificar com aapt: minSdkVersion 19, ABI armeabi-v7a.
-- Verificar via logcat: contexto GLES 2.0, shaders compilados e triângulo visível.
-- Testar suspensão/retomada, saída via START e controle Bluetooth.
-- Só depois migrar o motor e shaders bgfx.
+## Teste em dispositivo real
+
+Instalar com `adb install -r FITD-KitKat-GLES2-ARMv7-TEST.apk`. Abrir **FITD GLES2 Test** no aparelho e procurar o triângulo verde. Conferir a saída de logs do SDL2 em `adb logcat` e testar START do controle Bluetooth, além de suspensão/retomada.
+
+**Importante:** o teste não executa Alone in the Dark, não usa dados do jogo, não valida bgfx e não demonstra ainda que o motor FITD funciona em Android 4.4. Essa migração só virá depois de confirmar este teste.

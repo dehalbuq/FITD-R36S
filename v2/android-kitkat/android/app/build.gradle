@@ -1,0 +1,31 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'org.libsdl.app'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'io.github.dehalbuq.fitdkitkatprobe'
+        minSdk 19
+        targetSdk 28
+        versionCode 1
+        versionName '0.1'
+        ndk {
+            abiFilters 'armeabi-v7a'
+        }
+    }
+
+    buildTypes {
+        debug {
+            minifyEnabled false
+        }
+    }
+
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging true
+        }
+    }
+}

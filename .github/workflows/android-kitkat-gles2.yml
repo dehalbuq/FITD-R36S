@@ -1,4 +1,5 @@
-name: Android KitKat GLES2 native smoke build
+name: Android KitKat GLES2 APK smoke test
+
 on:
   push:
     branches: [port/android-kitkat-api19]
@@ -10,86 +11,86 @@ on:
 jobs:
   armv7-api19-gles2:
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 45
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - name: Install Android NDK
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android SDK and NDK
         run: |
-          echo "ANDROID_SDK_ROOT=${ANDROID_HOME}" >> "$GITHUB_ENV"
-          "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --install "ndk;23.2.8568313"
-      - name: Fetch SDL2
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;23.2.8568313" "platforms;android-34" "build-tools;34.0.0"
+      - name: Fetch SDL2 source
         run: |
           git clone --depth 1 --branch release-2.30.12 https://github.com/libsdl-org/SDL.git /tmp/SDL2
-      - name: Cross-compile SDL2 for ARMv7 API19
+      - name: Compile SDL2 for ARMv7, API 19
         run: |
           cmake -S /tmp/SDL2 -B /tmp/sdl2-build -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/23.2.8568313/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-19 \
-            -DCMAKE_BUILD_TYPE=Release -DSDL_SHARED=ON -DSDL_STATIC=OFF \
-            -DSDL_TEST=OFF -DSDL_TESTS=OFF
+            -DANDROID_STL=c++_static -DCMAKE_BUILD_TYPE=Release \
+            -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TEST=OFF -DSDL_TESTS=OFF
           cmake --build /tmp/sdl2-build --target SDL2 --parallel 2
-      - name: Verify KitKat API19 toolchain and SDL2 output
+      - name: Check API 19 toolchain configuration
         run: |
           test -s /tmp/sdl2-build/libSDL2.so
-          grep -q "ANDROID_PLATFORM:[A-Z]*=android-19" /tmp/sdl2-build/CMakeCache.txt || { grep ANDROID_PLATFORM /tmp/sdl2-build/CMakeCache.txt; exit 1; }
-      - name: Cross-compile GLES2 JNI test
+          grep -Eq '^ANDROID_PLATFORM:[^=]+=android-19$' /tmp/sdl2-build/CMakeCache.txt
+      - name: Compile GLES2 probe for ARMv7, API 19
         run: |
           cmake -S v2/android-kitkat -B /tmp/fitd-probe-build -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/23.2.8568313/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-19 \
-            -DCMAKE_BUILD_TYPE=Release -DSDL2_ROOT=/tmp/sdl2-build \
-            -DSDL2_INCLUDE_DIR=/tmp/SDL2/include
+            -DANDROID_STL=c++_static -DCMAKE_BUILD_TYPE=Release \
+            -DSDL2_ROOT=/tmp/sdl2-build -DSDL2_INCLUDE_DIR=/tmp/SDL2/include
           cmake --build /tmp/fitd-probe-build --parallel 2
-      - name: Package Android 4.4 APK with SDL2 Java activity
+      - name: Verify native libraries
         run: |
-          set -euxo pipefail
-          cp -a /tmp/SDL2/android-project /tmp/fitd-kitkat-apk
-          mkdir -p /tmp/fitd-kitkat-apk/app/src/main/jniLibs/armeabi-v7a
-          cp /tmp/sdl2-build/libSDL2.so /tmp/fitd-kitkat-apk/app/src/main/jniLibs/armeabi-v7a/
-          cp /tmp/fitd-probe-build/libmain.so /tmp/fitd-kitkat-apk/app/src/main/jniLibs/armeabi-v7a/
-          python3 - <<'PY'
-          from pathlib import Path
-          root=Path('/tmp/fitd-kitkat-apk')
-          p=root/'app/build.gradle'
-          s=p.read_text()
-          s=s.replace("abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'", "abiFilters 'armeabi-v7a'")
-          s=s.replace('targetSdkVersion 34', 'targetSdkVersion 28')
-          s=s.replace('''    applicationVariants.all { variant ->
-    tasks["merge${variant.name.capitalize()}Assets"]
-        .dependsOn("externalNativeBuild${variant.name.capitalize()}")
-    }''', '')
-          # Disable SDL2 template's native-build dependency when packaging prebuilt .so files.
-          import re
-          s=re.sub(r'    applicationVariants\.all \{ variant ->\s*tasks\["merge\$\{variant\.name\.capitalize\(\)\}Assets"\]\s*\.dependsOn\("externalNativeBuild\$\{variant\.name\.capitalize\(\)\}"\)\s*\}', '', s)
-          s=s.replace('minSdkVersion 19', 'minSdkVersion 19')
-          p.write_text(s)
-          p=root/'app/src/main/AndroidManifest.xml'
-          s=p.read_text().replace('android:preferMinimalPostProcessing="true"','')
-          p.write_text(s)
-          p=root/'app/src/main/res/values/strings.xml'
-          s=p.read_text().replace('SDL App','FITD GLES2 Test')
-          p.write_text(s)
-          PY
-          cd /tmp/fitd-kitkat-apk
+          test -s /tmp/fitd-probe-build/libmain.so
+          test -s /tmp/sdl2-build/libSDL2.so
+          file /tmp/fitd-probe-build/libmain.so /tmp/sdl2-build/libSDL2.so
+          "$ANDROID_HOME/ndk/23.2.8568313/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -d /tmp/fitd-probe-build/libmain.so /tmp/sdl2-build/libSDL2.so | grep NEEDED
+      - name: Prepare standalone Android app
+        run: |
+          set -euo pipefail
+          mkdir -p v2/android-kitkat/android/app/src/main/java
+          mkdir -p v2/android-kitkat/android/app/src/main/jniLibs/armeabi-v7a
+          cp -a /tmp/SDL2/android-project/app/src/main/java/. v2/android-kitkat/android/app/src/main/java/
+          cp /tmp/sdl2-build/libSDL2.so v2/android-kitkat/android/app/src/main/jniLibs/armeabi-v7a/
+          cp /tmp/fitd-probe-build/libmain.so v2/android-kitkat/android/app/src/main/jniLibs/armeabi-v7a/
+          test -s v2/android-kitkat/android/app/src/main/java/org/libsdl/app/SDLActivity.java
+      - name: Build installable APK with Gradle 8.1.1
+        run: |
+          set -euo pipefail
           curl -fsSL https://services.gradle.org/distributions/gradle-8.1.1-bin.zip -o /tmp/gradle-8.1.1-bin.zip
           unzip -q /tmp/gradle-8.1.1-bin.zip -d /tmp
-          /tmp/gradle-8.1.1/bin/gradle --no-daemon -PEXCLUDE_NATIVE_LIBS=true :app:assembleDebug
+          cd v2/android-kitkat/android
+          /tmp/gradle-8.1.1/bin/gradle --no-daemon --stacktrace :app:assembleDebug
           mkdir -p "$GITHUB_WORKSPACE/dist"
           cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/dist/FITD-KitKat-GLES2-ARMv7-TEST.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$GITHUB_WORKSPACE/dist/FITD-KitKat-GLES2-ARMv7-TEST.apk" | grep -E "sdkVersion|native-code|glEsVersion"
-      - name: Upload Android 4.4 GLES2 test APK
+      - name: Validate APK minimum SDK, GLES and ABI
+        run: |
+          set -euo pipefail
+          APK=dist/FITD-KitKat-GLES2-ARMv7-TEST.apk
+          "$ANDROID_HOME/build-tools/34.0.0/aapt" dump badging "$APK" | tee /tmp/fitd-apk-badging.txt
+          grep -Fq "sdkVersion:'19'" /tmp/fitd-apk-badging.txt
+          grep -Fq "uses-gl-es: '0x00020000'" /tmp/fitd-apk-badging.txt
+          grep -Fq "native-code: 'armeabi-v7a'" /tmp/fitd-apk-badging.txt
+          unzip -l "$APK" | tee /tmp/fitd-apk-contents.txt
+          grep -Fq 'lib/armeabi-v7a/libSDL2.so' /tmp/fitd-apk-contents.txt
+          grep -Fq 'lib/armeabi-v7a/libmain.so' /tmp/fitd-apk-contents.txt
+          if grep -Fq 'lib/arm64-v8a/' /tmp/fitd-apk-contents.txt; then exit 1; fi
+      - name: Upload Android 4.4 test APK
         uses: actions/upload-artifact@v4
         with:
           name: fitd-kitkat-gles2-armv7-apk-test
           path: dist/FITD-KitKat-GLES2-ARMv7-TEST.apk
           if-no-files-found: error
-      - name: Check ELF binaries
-        run: |
-          file /tmp/fitd-probe-build/libmain.so /tmp/sdl2-build/libSDL2.so
-          "$ANDROID_HOME/ndk/23.2.8568313/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -h /tmp/fitd-probe-build/libmain.so
-      - name: Upload native smoke-test binaries
+      - name: Upload standalone native libraries
         uses: actions/upload-artifact@v4
         with:
           name: fitd-kitkat-gles2-native-armv7-test
