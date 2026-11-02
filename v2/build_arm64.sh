@@ -154,6 +154,24 @@ for lib in libstdc++.so.6 libgcc_s.so.1 libatomic.so.1; do
   source_lib="$(ldconfig -p | awk -v name="$lib" '$1 == name && /aarch64/ {print $NF; exit}')"
   if [ -f "$source_lib" ]; then cp -L "$source_lib" "$PORT/fitdr36s/libs.aarch64/$lib"; fi
 done
+# Preserve the licenses/copyright notices for any bundled runtime libraries.
+for pkg in libstdc++6 libgcc-s1 libatomic1; do
+  copyright="/usr/share/doc/$pkg/copyright"
+  if [ -f "$copyright" ]; then
+    cp "$copyright" "$PORT/fitdr36s/licenses/$pkg-copyright.txt"
+  fi
+done
+# Include third-party source notices where the upstream tree provides them.
+find work/source/ThirdParty -maxdepth 5 -type f \\
+  \\( -iname 'LICENSE' -o -iname 'LICENSE.txt' -o -iname 'COPYING' \\) \\
+  -print 2>/dev/null | sort > "$PORT/fitdr36s/licenses/THIRD_PARTY_LICENSE_PATHS.txt"
+{
+  echo "FITD upstream: https://github.com/yaz0r/FITD"
+  echo "Reference engine: https://github.com/jmimu/FITD"
+  echo "Port: https://github.com/dehalbuq/FITD-R36S"
+  echo "Bundled shared libraries:"
+  find "$PORT/fitdr36s/libs.aarch64" -maxdepth 1 -type f -printf '%f\\n' | sort
+} > "$PORT/fitdr36s/licenses/SOURCES-AND-LIBRARIES.txt"
 if [ "$FITD_RELEASE" = "1" ]; then
   # Prevent publishing binaries that require newer glibc than the chosen baseline.
   python3 - "$PORT/fitdr36s/fitd.aarch64" <<'PY'
