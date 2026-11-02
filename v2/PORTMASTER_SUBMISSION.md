@@ -46,3 +46,34 @@ This causes packaging to FAIL without the real gameplay screenshot.
 The current debug-compatible per-frame timing avoids the known slow
 movement regression, but can accelerate some events at high FPS.
 A future timing refactor must separate render frames from simulation updates.
+
+## Firmware test procedure for a real R36S
+
+1. Back up `fitdr36s/data/SAVE*.ITD` before updating.
+2. Install the latest `fitdr36s.zip`, copying only your own original data.
+3. On the handheld's terminal/SSH, run:
+   ```sh
+   cd /roms/ports/fitdr36s
+   sh ./check_compatibility.sh
+   ```
+   If your firmware mounts ROMs elsewhere, change the base path.
+4. Send `fitdr36s/compatibility-report.txt` after each firmware test.
+5. Test New Game, action mode, entering/exiting rooms, inventory,
+   save/load, sound, Start+Select exit, and character walking pace.
+6. Record actual FPS if your firmware provides a supported overlay.
+   Do not equate 60 render FPS with correct simulation timing.
+7. Capture one real 4:3 gameplay screenshot (>=640x480), place it at
+   `v2/port/assets/screenshot.png` for public PortMaster submission.
+8. Only mark a firmware compatible after gameplay, controls, sound,
+   save/load and exit pass on the real device.
+
+## Important remaining constraints
+
+- ARMHF/32-bit firmware is **not** supported by the current ARM64 package.
+- OpenGL ES 2.0 is **not** supported by the current GLES3 engine.
+- SDL3/KMSDRM behaviour is firmware-specific and may require integration
+  with PortMaster's WestonPack runtime in a separate version.
+- Ubuntu 22.04 reduces the required GLIBC baseline but does not
+  automatically guarantee compatibility with every PortMaster firmware.
+- The current Release build must pass GitHub Actions and physical gameplay
+  tests before its compatibility can be claimed.
