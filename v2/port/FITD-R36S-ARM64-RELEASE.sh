@@ -1,6 +1,6 @@
 #!/bin/bash
 # R36S ARM64 safe release: quiet execution without GDB or diagnostic traces.
-set -eu
+set -e
 # PortMaster's control.txt supplies per-firmware device, input and paths.
 # A standalone fallback permits manual launch on an AArch64 system.
 XDG_DATA_HOME=${XDG_DATA_HOME:-"$HOME/.local/share"}
@@ -56,7 +56,6 @@ export FITD_WINDOW_RECOVERY="${FITD_WINDOW_RECOVERY:-1}"
 # SDL3/KMSDRM works on the tested RK3326; do not override firmware settings.
 export SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-kmsdrm}"
 [ -z "${sdl_controllerconfig:-}" ] || export SDL_GAMECONTROLLERCONFIG="$sdl_controllerconfig"
-[ -z "${sdl_controllerconfig:-}" ] || export SDL_GAMECONTROLLERCONFIG_FILE="$sdl_controllerconfig"
 export SDL_AUDIODRIVER="${SDL_AUDIODRIVER:-alsa}"
 export SDL_VIDEO_FORCE_EGL=1
 # Never bundle/override firmware GPU/EGL/DRM, dynamic loader or glibc.
