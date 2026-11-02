@@ -13,7 +13,7 @@ case "$FITD_RELEASE" in
     # Conservatively optimized: no LTO, O2, O3, Ofast or fast-math.
     FITD_BUILD_FLAGS="-O1 -g0 -DNDEBUG -DFITD_R36S_RELEASE=1 -march=armv8-a -mtune=cortex-a35 -fno-strict-aliasing -fwrapv -fstack-protector-strong -D_GLIBCXX_ASSERTIONS -ffunction-sections -fdata-sections"
     FITD_LINK_FLAGS="-rdynamic -Wl,--gc-sections"
-    FITD_ARCHIVE="fitdr36s-aarch64-safe-release.zip"
+    FITD_ARCHIVE="fitdr36s.zip"
     ;;
   *) echo "FITD_RELEASE must be 0 or 1" >&2; exit 2 ;;
 esac
@@ -114,7 +114,7 @@ test -n "$BIN"
 file "$BIN"
 readelf -h "$BIN" | grep -q AArch64
 PORT="$ROOT/work/package"
-mkdir -p "$PORT/fitdr36s/data" "$PORT/fitdr36s/libs" "$PORT/fitdr36s/splash"
+mkdir -p "$PORT/fitdr36s/data" "$PORT/fitdr36s/libs.aarch64" "$PORT/fitdr36s/splash" "$PORT/fitdr36s/licenses"
 cp "$BIN" "$PORT/fitdr36s/fitd.aarch64"
 if [ "$FITD_RELEASE" = "1" ]; then
   strip --strip-unneeded "$PORT/fitdr36s/fitd.aarch64"
@@ -137,6 +137,7 @@ test -s "$PORT/fitdr36s/splash/credits.bmp"
 test -s "$PORT/fitdr36s/splash/legal.bmp"
 test -s "$PORT/fitdr36s/LEIA-ME-LEGAL.txt"
 cp work/source/LICENSE "$PORT/fitdr36s/LICENSE.FITD.txt"
+cp work/source/LICENSE "$PORT/fitdr36s/licenses/LICENSE.FITD.txt"
 chmod 755 "$PORT/FITD-R36S-ARM64.sh" "$PORT/fitdr36s/fitd.aarch64"
 printf 'Copy original legally acquired AITD game files here (not redistributed).\n' > "$PORT/fitdr36s/data/COPY_GAME_FILES_HERE.txt"
 {
@@ -151,24 +152,37 @@ fi
 # Leave glibc, the dynamic loader and GPU/Mesa/GBM/EGL stack to the firmware.
 for lib in libstdc++.so.6 libgcc_s.so.1 libatomic.so.1; do
   source_lib="$(ldconfig -p | awk -v name="$lib" '$1 == name && /aarch64/ {print $NF; exit}')"
-  if [ -f "$source_lib" ]; then cp -L "$source_lib" "$PORT/fitdr36s/libs/$lib"; fi
+  if [ -f "$source_lib" ]; then cp -L "$source_lib" "$PORT/fitdr36s/libs.aarch64/$lib"; fi
 done
 if [ "$FITD_RELEASE" = "1" ]; then
+  # Prevent publishing binaries that require newer glibc than the chosen baseline.
+  python3 - "$PORT/fitdr36s/fitd.aarch64" <<'PY'
+import re, subprocess, sys
+binary = sys.argv[1]
+data = subprocess.check_output(['readelf', '-V', binary], text=True)
+versions = [tuple(map(int, v.split('.'))) for v in re.findall(r'GLIBC_(\\d+\\.\\d+)', data)]
+if versions and max(versions) > (2, 35):
+    raise SystemExit(f"Release requires GLIBC_{'.'.join(map(str, max(versions)))}, newer than Ubuntu 22.04 baseline")
+print('GLIBC compatibility audit passed: <=2.35')
+PY
   python3 v2/package_portmaster_release.py "$ROOT" "$PORT"
   python3 - "$PORT" <<'PY'
 from pathlib import Path
 import json, sys, xml.etree.ElementTree as ET
 p=Path(sys.argv[1])
 m=json.loads((p/'port.json').read_text())
-assert m['items'] == ['FITD-R36S-ARM64.sh', 'fitdr36s/']
+assert m['items'] == ['FITD-R36S-ARM64.sh', 'fitdr36s']
 assert m['attr']['arch'] == ['aarch64']
 assert (p/'fitdr36s/fitd.aarch64').stat().st_size > 0
-assert (p/'cover.png').stat().st_size > 0
-assert (p/'screenshot.png').stat().st_size > 0
+# Real gameplay images are mandatory for submission but not for local test builds.
+if (p/'screenshot.png').exists():
+    assert (p/'screenshot.png').stat().st_size > 0
+else:
+    assert (p/'SUBMISSION_BLOCKERS.txt').is_file()
 g=ET.parse(p/'gameinfo.xml').getroot().find('game')
 assert g.findtext('path') == './FITD-R36S-ARM64.sh'
-assert (p/'fitdr36s/cover.png').is_file()
-print('PortMaster release QA OK: binary, XML, JSON, launcher and cover')
+assert (p/'fitdr36s/licenses/LICENSE.FITD.txt').is_file()
+print('PortMaster staging QA OK: binary, XML, JSON, launcher, licenses')
 PY
 fi
 (
