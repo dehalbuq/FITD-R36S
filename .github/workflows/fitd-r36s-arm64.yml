@@ -15,6 +15,21 @@ jobs:
     steps:
       - name: Checkout port scripts
         uses: actions/checkout@v4
+      - name: Static PortMaster submission preflight
+        run: |
+          bash -n v2/port/FITD-R36S-ARM64-RELEASE.sh
+          sh -n v2/port/check_compatibility.sh
+          bash -n v2/build_arm64.sh
+          python3 -m py_compile v2/package_portmaster_release.py v2/prepare_release_arm64.py
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          m = json.loads(Path('v2/port/port-release.json').read_text())
+          assert m['version'] == 4
+          assert m['attr']['arch'] == ['aarch64']
+          assert Path('v2/PORTMASTER_SUBMISSION.md').is_file()
+          print('PortMaster static submission preflight passed')
+          PY
       - name: Install native AArch64 build dependencies
         run: |
           sudo apt-get update
