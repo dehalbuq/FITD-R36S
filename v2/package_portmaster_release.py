@@ -49,6 +49,8 @@ else:
         raise SystemExit("Official submission blocked: genuine gameplay screenshot missing")
 
 if cover_src.is_file():
+    if not screenshot_src.is_file():
+        raise SystemExit("A cover cannot replace a mandatory gameplay screenshot")
     shutil.copy2(cover_src, pkg / "cover.png")
     shutil.copy2(cover_src, game / "cover.png")
 
@@ -62,7 +64,8 @@ fields = {
     "developer": "Infogrames (original game); yaz0r/jmimu (FITD engine)",
     "publisher": "Infogrames (original game)",
     "genre": "Survival Horror / Adventure",
-    "image": "./fitdr36s/cover.png" if cover_src.is_file() else "./fitdr36s/screenshot.png",
+    **({"image": "./fitdr36s/cover.png"} if cover_src.is_file() else
+       {"image": "./fitdr36s/screenshot.png"} if screenshot_src.is_file() else {}),
 }
 for name, value in fields.items():
     ET.SubElement(g, name).text = value
