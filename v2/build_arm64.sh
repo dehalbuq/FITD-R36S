@@ -153,6 +153,24 @@ for lib in libstdc++.so.6 libgcc_s.so.1 libatomic.so.1; do
   source_lib="$(ldconfig -p | awk -v name="$lib" '$1 == name && /aarch64/ {print $NF; exit}')"
   if [ -f "$source_lib" ]; then cp -L "$source_lib" "$PORT/fitdr36s/libs/$lib"; fi
 done
+if [ "$FITD_RELEASE" = "1" ]; then
+  python3 v2/package_portmaster_release.py "$ROOT" "$PORT"
+  python3 - "$PORT" <<'PY'
+from pathlib import Path
+import json, sys, xml.etree.ElementTree as ET
+p=Path(sys.argv[1])
+m=json.loads((p/'port.json').read_text())
+assert m['items'] == ['FITD-R36S-ARM64.sh', 'fitdr36s/']
+assert m['attr']['arch'] == ['aarch64']
+assert (p/'fitdr36s/fitd.aarch64').stat().st_size > 0
+assert (p/'cover.png').stat().st_size > 0
+assert (p/'screenshot.png').stat().st_size > 0
+g=ET.parse(p/'gameinfo.xml').getroot().find('game')
+assert g.findtext('path') == './FITD-R36S-ARM64.sh'
+assert (p/'fitdr36s/cover.png').is_file()
+print('PortMaster release QA OK: binary, XML, JSON, launcher and cover')
+PY
+fi
 (
   cd "$PORT"
   zip -qr "$ROOT/work/$FITD_ARCHIVE" .
