@@ -131,6 +131,8 @@ fi
 cp v2/port/font.conf "$PORT/fitdr36s/font.conf"
 cp v2/port/graphics.conf "$PORT/fitdr36s/graphics.conf"
 cp v2/port/splash.conf "$PORT/fitdr36s/splash.conf"
+cp v2/port/check_compatibility.sh "$PORT/fitdr36s/check_compatibility.sh"
+chmod 755 "$PORT/fitdr36s/check_compatibility.sh"
 cp v2/port/LEIA-ME-LEGAL.txt "$PORT/fitdr36s/LEIA-ME-LEGAL.txt"
 python3 v2/generate_startup_splash.py "$PORT/fitdr36s/splash"
 test -s "$PORT/fitdr36s/splash/credits.bmp"
@@ -200,6 +202,7 @@ else:
 g=ET.parse(p/'gameinfo.xml').getroot().find('game')
 assert g.findtext('path') == './FITD-R36S-ARM64.sh'
 assert (p/'fitdr36s/licenses/LICENSE.FITD.txt').is_file()
+assert (p/'fitdr36s/check_compatibility.sh').is_file()
 print('PortMaster staging QA OK: binary, XML, JSON, launcher, licenses')
 PY
 fi
