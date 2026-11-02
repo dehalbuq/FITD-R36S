@@ -40,7 +40,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: FITD-R36S-AARCH64-RELEASE-RK3326-60FPS-NO-DEBUG
-          path: work/fitdr36s-aarch64-safe-release.zip
+          path: work/fitdr36s.zip
           if-no-files-found: error
       - name: Upload ARM64 diagnostic build
         if: github.ref_name != 'release/r36s-aarch64-safe-20261101'
