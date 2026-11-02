@@ -164,8 +164,8 @@ for pkg in libstdc++6 libgcc-s1 libatomic1; do
   fi
 done
 # Include third-party source notices where the upstream tree provides them.
-find work/source/ThirdParty -maxdepth 5 -type f \\
-  \\( -iname 'LICENSE' -o -iname 'LICENSE.txt' -o -iname 'COPYING' \\) \\
+find work/source/ThirdParty -maxdepth 5 -type f \
+  \( -iname 'LICENSE' -o -iname 'LICENSE.txt' -o -iname 'COPYING' \) \
   -print 2>/dev/null | sort > "$PORT/fitdr36s/licenses/THIRD_PARTY_LICENSE_PATHS.txt"
 # Copy third-party license texts from the compiled source tree (not paths only).
 python3 - "$PORT/fitdr36s/licenses" <<'PY'
@@ -191,7 +191,7 @@ PY
   echo "Reference engine: https://github.com/jmimu/FITD"
   echo "Port: https://github.com/dehalbuq/FITD-R36S"
   echo "Bundled shared libraries:"
-  find "$PORT/fitdr36s/libs.aarch64" -maxdepth 1 -type f -printf '%f\\n' | sort
+  find "$PORT/fitdr36s/libs.aarch64" -maxdepth 1 -type f -printf '%f\n' | sort
 } > "$PORT/fitdr36s/licenses/SOURCES-AND-LIBRARIES.txt"
 if [ "$FITD_RELEASE" = "1" ]; then
   # Prevent publishing binaries that require newer glibc than the chosen baseline.
@@ -199,7 +199,7 @@ if [ "$FITD_RELEASE" = "1" ]; then
 import re, subprocess, sys
 binary = sys.argv[1]
 data = subprocess.check_output(['readelf', '-V', binary], text=True)
-versions = [tuple(map(int, v.split('.'))) for v in re.findall(r'GLIBC_(\\d+\\.\\d+)', data)]
+versions = [tuple(map(int, v.split('.'))) for v in re.findall(r'GLIBC_(\d+\.\d+)', data)]
 if versions and max(versions) > (2, 35):
     raise SystemExit(f"Release requires GLIBC_{'.'.join(map(str, max(versions)))}, newer than Ubuntu 22.04 baseline")
 print('GLIBC compatibility audit passed: <=2.35')
