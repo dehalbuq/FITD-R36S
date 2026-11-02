@@ -167,6 +167,25 @@ done
 find work/source/ThirdParty -maxdepth 5 -type f \\
   \\( -iname 'LICENSE' -o -iname 'LICENSE.txt' -o -iname 'COPYING' \\) \\
   -print 2>/dev/null | sort > "$PORT/fitdr36s/licenses/THIRD_PARTY_LICENSE_PATHS.txt"
+# Copy third-party license texts from the compiled source tree (not paths only).
+python3 - "$PORT/fitdr36s/licenses" <<'PY'
+from pathlib import Path
+import shutil
+import sys
+dest = Path(sys.argv[1])
+sources = Path("work/source/ThirdParty")
+copied = 0
+if sources.is_dir():
+    for source in sorted(sources.rglob("*")):
+        if not source.is_file() or source.stat().st_size > 1_000_000:
+            continue
+        if source.name.lower() not in ("license", "license.txt", "license.md", "copying", "copying.txt", "copyright"):
+            continue
+        name = "THIRDPARTY_" + "_".join(source.relative_to(sources).parts)
+        shutil.copy2(source, dest / name)
+        copied += 1
+print(f"Bundled third-party license texts: {copied}")
+PY
 {
   echo "FITD upstream: https://github.com/yaz0r/FITD"
   echo "Reference engine: https://github.com/jmimu/FITD"
