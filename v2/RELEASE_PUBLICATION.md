@@ -1,92 +1,120 @@
-# Como compilar e publicar a Release ARM64 do FITD-R36S
+# Publicar a primeira Release FITD-R36S v1.0.0 (dArkOSRE + ArkOS4Clone)
 
-Repositorio: https://github.com/dehalbuq/FITD-R36S
-Branch de trabalho: `release/r36s-aarch64-safe-20261101`
-Destino: Linux AArch64, SDL3/KMSDRM, OpenGL ES 3.0, PortMaster.
-O port NAO contem dados originais do jogo.
+Repositório: **https://github.com/dehalbuq/FITD-R36S**
 
-## 1. Obter o binario de verdade
-1. Abra: https://github.com/dehalbuq/FITD-R36S/actions/workflows/fitd-r36s-arm64.yml
-2. Clique em **Run workflow** (Executar fluxo de trabalho).
-3. Selecione a branch **release/r36s-aarch64-safe-20261101**.
-4. Clique em **Run workflow** e abra a execucao.
-5. Aguarde o status **Success** (verde). Se a compilacao falhar, NAO publique.
-6. Na secao **Artifacts**, baixe:
-   `FITD-R36S-AARCH64-RELEASE-RK3326-60FPS-NO-DEBUG`
-7. O GitHub Actions entrega um ZIP externo do artifact. Extraia esse arquivo.
-   Dentro dele devem existir `fitdr36s.zip` e `SHA256SUMS.txt`.
-8. O `fitdr36s.zip` interno e o pacote do port. NAO envie o ZIP externo do artifact ao usuario final.
+Branch que contém o port ARM64: `release/r36s-aarch64-safe-20261101`
 
-### Confirmar estrutura e integridade
-No Linux ou WSL:
-```sh
+Esta é a **primeira distribuição unificada ARM64** para os firmwares dArkOSRE e ArkOS4Clone. É uma publicação do projeto no GitHub; **não** significa aprovação no catálogo oficial PortMaster. Não inclui arquivos comerciais de *Alone in the Dark*.
+
+## 1. Preparar os três arquivos da Release
+
+O método recomendado é deixar o GitHub Actions empacotar os dois builds validados.
+
+1. Abra **[FITD-R36S v1.0.0 Dual ARM64 PortMaster Release](https://github.com/dehalbuq/FITD-R36S/actions/workflows/fitd-r36s-dual-release.yml)**.
+2. Escolha **Run workflow** e selecione a branch `release/r36s-aarch64-safe-20261101`.
+3. Execute e abra a execução mais recente.
+4. Só continue se todas as etapas estiverem **verdes**: download de ambos os builds, SHA256 de origem, verificação dos ELF AArch64 e ZIP final.
+5. Em **Artifacts**, baixe `FITD-R36S-v1.0.0-DUAL-ARM64-PORTMASTER`.
+6. Extraia o **ZIP externo** que o GitHub Actions fornece. Dentro dele estarão os **três arquivos** que devem ser anexados à Release:
+   - `fitdr36s.zip` — pacote final para instalar na pasta `ports/`;
+   - `SHA256SUMS.txt` — hash SHA-256 do ZIP;
+   - `RELEASE_NOTES_v1.0.0.md` — texto pronto para a descrição.
+
+**Não publique o ZIP externo do artefato.** Publique apenas os arquivos acima.
+
+O workflow usa compilações confirmadas nos runs [moderno #41561105602](https://github.com/dehalbuq/FITD-R36S/actions/runs/41561105602) e [legacy #41562095088](https://github.com/dehalbuq/FITD-R36S/actions/runs/41562095088). Os artefatos do Actions expiram; por isso, depois que a Release estiver publicada, os assets do GitHub Releases serão a distribuição permanente.
+
+### Conferência da integridade
+
+No Linux/WSL, estando na pasta dos arquivos:
+
+```bash
+sha256sum -c SHA256SUMS.txt
 unzip -t fitdr36s.zip
 unzip -l fitdr36s.zip
-sha256sum -c SHA256SUMS.txt
 ```
-No Windows, voce pode inspecionar o ZIP com 7-Zip, mas a verificacao de hash
-via SHA256SUMS.txt e recomendada.
 
-O ZIP precisa incluir `FITD-R36S-ARM64.sh`, `fitdr36s/fitd.aarch64`,
-`port.json`, `gameinfo.xml`, README e licencas.
-Para submissao oficial tambem precisa incluir `screenshot.png` de gameplay
-e um `cover.png` somente se ele atender ao criterio do PortMaster.
-Se houver `SUBMISSION_BLOCKERS.txt`, NAO apresente o pacote como pronto
-para submissao oficial.
+No PowerShell/Windows:
 
-## 2. Criar uma pre-release no seu GitHub
-1. Abra: https://github.com/dehalbuq/FITD-R36S/releases/new
-2. Clique em **Choose a tag** e digite `v0.1.0-arm64-test`.
-3. Crie a nova tag apontando para a branch
-   `release/r36s-aarch64-safe-20261101`, confirmando que ela aponta para
-   o commit que produziu o ZIP testado.
-4. Titulo: `FITD-R36S ARM64 v0.1.0 - PortMaster test build`.
-5. Marque **Set as a pre-release**, pois ainda faltam testes multi-firmware.
-6. Anexe `fitdr36s.zip` e `SHA256SUMS.txt` em **Attach binaries**.
-7. Escreva a descricao com limitacoes e creditos (modelo abaixo).
-8. Clique em **Publish release**.
-
-**IMPORTANTE**: nao marque `Set as the latest release` em testes ainda nao
-validados. Se o GitHub pedir `Target`, use a branch indicada acima.
-
-## 3. Texto sugerido para a Release
-### FITD-R36S ARM64 - PortMaster test build
-Engine FITD open-source para Alone in the Dark (1992) executado em Linux
-AArch64 / OpenGL ES 3.0. Port independente por dehalbuq com base no codigo
-de yaz0r e jmimu, com referencias a ReHaunted.
-
-- Otimizacao segura para RK3326/Cortex-A35; binario release sem debug.
-- VSync desativado por padrao; limite de renderizacao configurado para ate 60 FPS.
-- Timing do motor equivalente ao da Debug anterior; algumas rotinas podem
-  acelerar em FPS mais altos. Ainda nao foi validado em todas as fases.
-- Usa arquivos comerciais originais de Alone in the Dark 1, NAO inclusos.
-- Compatibilidade com outros firmwares ARM64 ainda precisa de testes.
-- Nunca declara suporte a ARMv7 ou GLES2.
-
-Instale extraindo o conteudo de fitdr36s.zip na pasta ports/ do firmware,
-com o launcher na raiz; adicione seus arquivos originais em fitdr36s/data/.
-Faca backup dos saves SAVE*.ITD antes de atualizar.
-
-Licencas: ver pasta fitdr36s/licenses.
-Codigo-fonte: https://github.com/dehalbuq/FITD-R36S
-
-## 4. Publicacao no catalogo oficial PortMaster (etapa futura)
-Leia: https://portmaster.games/packaging.html
-
-- Obtenha screenshot 4:3 real de gameplay, pelo menos 640x480.
-- Preencha capa somente com imagens que incluam gameplay.
-- Teste boot, controles, audio, save/load e sair em firmwares ARM64.
-- Confira licencas e dependencias reais do binario.
-- Verifique unicidade do nome de port `fitdr36s`.
-- Confira os arquivos e abra um Pull Request seguindo o guia oficial,
-  com a estrutura `port/fitdr36s/` no repositorio de submissao.
-- Release no seu GitHub NAO publica automaticamente o jogo no catalogo
-  PortMaster.
-
-## 5. Relatorios de teste no dispositivo
-```sh
-cd /roms/ports/fitdr36s
-sh ./check_compatibility.sh
+```powershell
+Get-FileHash .\fitdr36s.zip -Algorithm SHA256
 ```
-O resultado fica em `fitdr36s/compatibility-report.txt`.
-Se o firmware usar outro caminho para ROMs, ajuste o `cd`.
+
+Compare esse valor com a primeira coluna de `SHA256SUMS.txt`. Também é possível abrir o ZIP com 7-Zip e testar sua integridade.
+
+Confira no ZIP:
+
+```text
+FITD-R36S-ARM64.sh
+port.json
+gameinfo.xml
+README.md
+fitdr36s/fitd.aarch64
+fitdr36s/libs.aarch64/
+fitdr36s/fitd.glibc230.aarch64
+fitdr36s/libs.glibc230/
+fitdr36s/data/
+fitdr36s/licenses/
+```
+
+Não devem existir arquivos originais comerciais do jogo (`.PAK`, `.ITD`), ROMs, ISOs ou saves incluídos.
+
+## 2. Criar uma Release no seu GitHub
+
+1. Abra **https://github.com/dehalbuq/FITD-R36S/releases/new**.
+2. Clique em **Choose a tag** → digite `v1.0.0` → **Create new tag**.
+3. Em **Target**, escolha **`release/r36s-aarch64-safe-20261101`**. Isso é importante: a branch `main` ainda mantém código ARMHF histórico.
+4. Em **Release title**, escreva:
+   **`FITD-R36S v1.0.0 — ARM64 dArkOSRE + ArkOS4Clone`**
+5. Na descrição, cole o conteúdo de **`RELEASE_NOTES_v1.0.0.md`**.
+6. Em **Attach binaries by dropping them here or selecting them**, anexe `fitdr36s.zip` e `SHA256SUMS.txt`. Opcionalmente anexe também o próprio arquivo `.md`.
+7. Escolha **Save draft** para conferir os arquivos e os links de download, especialmente se sua conta exigir Releases imutáveis.
+8. Quando estiver tudo correto, clique em **Publish release**. Para anunciar como primeira versão final, não marque **Set as a pre-release**; não confunda isso com validação completa da campanha.
+
+O GitHub criará a página `https://github.com/dehalbuq/FITD-R36S/releases/tag/v1.0.0` após a publicação. Esse endereço só funcionará depois que a tag/Release existir.
+
+## 3. Instalação que os usuários finais verão
+
+- Baixe `fitdr36s.zip` na Release.
+- Faça backup de `fitdr36s/data/` e dos arquivos `SAVE*.ITD`.
+- Extraia **o conteúdo** do ZIP na pasta de Ports do seu firmware, tipicamente `/roms/ports/`.
+- Copie os arquivos de sua própria cópia original de *Alone in the Dark 1* para `fitdr36s/data/`.
+- Execute `FITD-R36S-ARM64.sh` no menu Ports.
+
+Seleção automática do launcher:
+- **ArkOS4Clone, glibc 2.30:** `fitd.glibc230.aarch64` + `libs.glibc230/`;
+- **dArkOSRE com glibc >=2.35:** `fitd.aarch64` + `libs.aarch64/`.
+
+Em outros sistemas, o comportamento dependerá de arquitetura, versões de bibliotecas, SDL/KMSDRM e GPU.
+
+## 4. Critérios mínimos para anunciar como v1.0.0
+
+- [ ] ZIP unificado com checksum validado e **os dois** binários presentes;
+- [ ] Boot, controles, som, save/load e sair testados em dArkOSRE com **o ZIP final**;
+- [ ] Boot, controles, som, save/load e sair testados em ArkOS4Clone com **o ZIP final**;
+- [ ] Backup dos saves testado e documentação sem dados comerciais do jogo;
+- [ ] Limitações conhecidas e créditos declarados na descrição da Release.
+
+Os dois executáveis têm ABI auditada, e o usuário confirmou a inicialização do ArkOS4Clone. **Isso não substitui o smoke test do ZIP combinado.** Se ainda não cumpriu todos os itens, prefira publicar como **pre-release `v1.0.0-rc1`**, depois marque a final após a validação.
+
+## 5. Publicação no catálogo PortMaster (separada)
+
+Leia as regras atuais em **https://portmaster.games/packaging.html**. A publicação no seu GitHub não coloca o port automaticamente no catálogo oficial. Para submissão, o PortMaster exige, entre outros pontos:
+
+- Screenshot **real** de gameplay 4:3 (mínimo 640×480), sem usar imagens geradas para substituí-la;
+- testes documentados em firmwares e resoluções exigidos pela comunidade;
+- `port.json`, `gameinfo.xml`, README, launcher, licenças e estrutura correta;
+- revisão e Pull Request no repositório de submissões apropriado.
+
+O arquivo `SUBMISSION_BLOCKERS.txt` pode permanecer no ZIP para deixar claro que essas condições não estão todas satisfeitas. **Não apague esse aviso só para parecer aprovado.**
+
+## 6. Fontes e como reconstruir
+
+- Fonte e patches: branch `release/r36s-aarch64-safe-20261101`;
+- script de montagem: `v2/assemble_dual_release.py`;
+- workflow de pacote final: `.github/workflows/fitd-r36s-dual-release.yml`;
+- build da variante moderna: `.github/workflows/fitd-r36s-arm64.yml`;
+- build da variante antiga: `.github/workflows/fitd-arkos4clone-arm64-legacy.yml`;
+- notas para copiar: `v2/RELEASE_NOTES_v1.0.0.md`.
+
+**Observação:** o workflow atual de montagem usa dois runs específicos já concluídos. Para futuras versões, reconstrua ambos os binários e ajuste os IDs dos runs para que o pacote sempre reflita a mesma versão do código.
