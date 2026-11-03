@@ -53,3 +53,27 @@ for rel in ("room.cpp", "floor.cpp"):
     path.write_text(updated)
 
 print(f"PortMaster GCC 11 compatibility: replaced {total} std::format calls")
+
+# The upstream engine also defines "byte" as a global macro in osystem.h.
+# GCC11's <functional> declares "enum class byte", which that macro destroys
+# when osystemAL.cpp includes <algorithm> after common.h. Remove the macro
+# and retain the exact original parameter types in declarations.
+header = root / "osystem.h"
+source = header.read_text()
+if source.count("#define byte char") != 1:
+    raise SystemExit(f"{header}: expected one legacy byte macro")
+source = source.replace("#define byte char", "// FITD PortMaster: no global byte macro (conflicts with C++17 std::byte)")
+declarations = {
+    "osystem_setColor(byte i, byte R, byte G, byte B)": "osystem_setColor(char i, char R, char G, char B)",
+    "osystem_setPalette(unsigned byte * palette)": "osystem_setPalette(unsigned char * palette)",
+    "osystem_setPalette320x200(byte * palette)": "osystem_setPalette320x200(char * palette)",
+}
+for old, new in declarations.items():
+    if source.count(old) != 1:
+        raise SystemExit(f"{header}: expected one prototype {old}")
+    source = source.replace(old, new, 1)
+if re.search(r"\\bbyte\\b", "\\n".join(line for line in source.splitlines()
+                                     if not line.strip().startswith("//"))):
+    raise SystemExit(f"{header}: unexpected legacy byte token remains")
+header.write_text(source)
+print("PortMaster GCC 11 compatibility: removed conflicting global byte macro")
