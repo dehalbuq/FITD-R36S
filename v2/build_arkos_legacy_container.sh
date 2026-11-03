@@ -33,8 +33,31 @@ python3 -m pip install --no-cache-dir 'cmake==3.27.9'
 # Debian Buster Pillow is too old for font.getlength()/baseline anchor.
 python3 -m pip install --no-cache-dir 'Pillow==9.5.0'
 export PATH="/usr/local/bin:$PATH"
-export CC=/usr/bin/gcc-8
-export CXX=/usr/bin/g++-8
+# BGFX/BX explicitly requires GCC >=11 or Clang >=11. GCC 8 from Buster
+# cannot compile __builtin_bit_cast and __builtin_is_constant_evaluated.
+# Use Clang 11 built for Debian Buster, while retaining Buster glibc 2.28
+# and its GCC8/libstdc++ system runtime. These commands affect only Docker.
+apt-get -y --no-install-recommends install wget gnupg
+wget -qO /tmp/llvm-snapshot.gpg.key https://apt.llvm.org/llvm-snapshot.gpg.key
+gpg --batch --yes --dearmor -o /usr/share/keyrings/llvm-snapshot.gpg /tmp/llvm-snapshot.gpg.key
+printf '%s\n' 'deb [signed-by=/usr/share/keyrings/llvm-snapshot.gpg] http://apt.llvm.org/buster/ llvm-toolchain-buster-11 main'   > /etc/apt/sources.list.d/llvm-buster.list
+apt-get -o Acquire::Check-Valid-Until=false update
+apt-cache policy clang-11
+apt-get -y --no-install-recommends install clang-11
+export CC=/usr/bin/clang-11
+export CXX=/usr/bin/clang++-11
+# Preflight before cloning/compiling 950+ FITD objects. Report compiler ABI.
+cat >/tmp/fitd-clang11-preflight.cpp <<'CPP'
+#include <cstdint>
+static_assert(__clang_major__ >= 11, "BGFX requires Clang 11+");
+constexpr uint32_t number = __builtin_bit_cast(uint32_t, 1.0f);
+static_assert(number == 0x3f800000, "Clang bit_cast unavailable");
+static_assert(__builtin_is_constant_evaluated(), "constexpr builtin missing");
+int main() { return 0; }
+CPP
+"$CXX" -std=c++20 /tmp/fitd-clang11-preflight.cpp -o /tmp/fitd-clang11-preflight
+/tmp/fitd-clang11-preflight
+python3 v2/audit_arm64_abi.py --max-glibc 2.30 --max-glibcxx 3.4.28 /tmp/fitd-clang11-preflight
 
 echo "[LEGACY] compiler: $("$CXX" --version | head -n 1)"
 echo "[LEGACY] cmake: $(cmake --version | head -n 1)"
