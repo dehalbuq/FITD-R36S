@@ -116,3 +116,29 @@ compilar e migrar vídeo bgfx/shaders e ciclo de jogo SDL3 para SDL2/GLES2,
 além do áudio, transições, salvamento e controles do gameplay. A aprovação
 do CI não comprova leitura correta de PAK comercial até testada no aparelho.
 Nenhum arquivo comercial é incluído no artefato.
+
+
+## Resultado do Teste 05 com dados embutidos — Chanuo A1 (03/11/2026)
+
+**Aprovado em teste físico pelo usuário.** O APK privado ARMv7 de Teste 05,
+com recursos do jogo fornecidos pelo próprio usuário e instalados automaticamente
+no armazenamento do aplicativo, foi relatado como funcionando perfeitamente
+no projetor Chanuo A1 com controle iPega PG-9068. Isso valida a execução do
+teste de motor, o processo de instalação dos recursos e o uso dos controles
+**no cenário testado**. Não equivale a testar gameplay completo, salvamentos,
+áudio do jogo, troca de salas ou compatibilidade em outros dispositivos.
+
+Os recursos proprietários do jogo ficam fora do repositório e dos workflows
+públicos. O projeto Linux/PortMaster publicado não foi alterado.
+
+### Próximo marco: inicialização de gameplay real
+
+- Converter integração SDL3 para SDL2 sem afetar o executável R36S;
+- Preparar janela e backend BGFX OpenGLES 2.0 no Android, gerando shaders ESSL
+  adequados e eliminando pressupostos exclusivos de GLES3;
+- Compilar ciclo principal, assets, áudio e funções de save do motor original;
+- Substituir o triângulo de diagnóstico por inicialização de jogo;
+- Selecionar gamepad físico em vez de `gpio_ir_recv` e dispositivos virtuais;
+- Validar cena inicial, ações, áudio, saída e salvamento, com logs específicos.
+
+A fase de gameplay **ainda não foi compilada nem validada** neste marco.
