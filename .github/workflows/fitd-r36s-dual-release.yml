@@ -1,0 +1,87 @@
+name: FITD-R36S v1.0.0 Dual ARM64 PortMaster Release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["release/r36s-aarch64-safe-20261101"]
+    paths:
+      - "v2/assemble_dual_release.py"
+      - "v2/DUAL_FIRMWARE_README.md"
+      - ".github/workflows/fitd-r36s-dual-release.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  package-dual-aarch64:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout PortMaster scripts and release metadata
+        uses: actions/checkout@v4
+
+      - name: Install verification tools and check launcher tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binutils unzip zip
+          bash -n v2/port/FITD-R36S-ARM64-RELEASE.sh
+          bash v2/test_arm64_launcher_selection.sh
+          python3 -m py_compile v2/assemble_dual_release.py
+
+      - name: Download validated modern AArch64 build (dArkOSRE)
+        uses: actions/download-artifact@v4
+        with:
+          name: FITD-R36S-AARCH64-RELEASE-RK3326-60FPS-NO-DEBUG
+          run-id: 41561105602
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: work/input/modern
+
+      - name: Download validated legacy AArch64 build (ArkOS4Clone)
+        uses: actions/download-artifact@v4
+        with:
+          name: FITD-R36S-ARM64-GLIBC230-ARKOSCLONE-TEST
+          run-id: 41562095088
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: work/input/legacy
+
+      - name: Verify original artifact checksums
+        run: |
+          set -euo pipefail
+          ( cd work/input/modern && sha256sum -c SHA256SUMS.txt )
+          ( cd work/input/legacy && sha256sum -c legacy-SHA256SUMS.txt )
+
+      - name: Assemble one ARM64 package and audit ALL bundled ELF objects
+        run: |
+          set -euo pipefail
+          python3 v2/assemble_dual_release.py \
+            --modern work/input/modern/fitdr36s.zip \
+            --legacy work/input/legacy/fitd-arkos4clone-arm64-legacy-test.zip \
+            --launcher v2/port/FITD-R36S-ARM64-RELEASE.sh \
+            --readme v2/DUAL_FIRMWARE_README.md \
+            --output work/release/fitdr36s.zip
+
+      - name: Verify ZIP structure, metadata and final checksum
+        run: |
+          set -euo pipefail
+          ( cd work/release && sha256sum -c SHA256SUMS.txt )
+          unzip -t work/release/fitdr36s.zip | tail -n 1
+          unzip -Z1 work/release/fitdr36s.zip | grep -Fx 'FITD-R36S-ARM64.sh'
+          unzip -Z1 work/release/fitdr36s.zip | grep -Fx 'fitdr36s/fitd.aarch64'
+          unzip -Z1 work/release/fitdr36s.zip | grep -Fx 'fitdr36s/fitd.glibc230.aarch64'
+          unzip -Z1 work/release/fitdr36s.zip | grep -Fx 'fitdr36s/libs.aarch64/libstdc++.so.6'
+          unzip -Z1 work/release/fitdr36s.zip | grep -Fx 'fitdr36s/libs.glibc230/libstdc++.so.6'
+          unzip -Z1 work/release/fitdr36s.zip | grep -Fx 'port.json'
+          unzip -Z1 work/release/fitdr36s.zip | grep -Fx 'gameinfo.xml'
+          cp v2/RELEASE_NOTES_v1.0.0.md work/release/RELEASE_NOTES_v1.0.0.md
+
+      - name: Upload publishable dual-firmware GitHub Release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: FITD-R36S-v1.0.0-DUAL-ARM64-PORTMASTER
+          path: |
+            work/release/fitdr36s.zip
+            work/release/SHA256SUMS.txt
+            work/release/RELEASE_NOTES_v1.0.0.md
+          if-no-files-found: error
+          retention-days: 90
