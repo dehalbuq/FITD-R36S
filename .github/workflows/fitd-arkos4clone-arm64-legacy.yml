@@ -5,6 +5,7 @@ on:
     branches: ["release/r36s-aarch64-safe-20261101"]
     paths:
       - "v2/build_arkos_legacy_container.sh"
+      - "v2/port/FITD-R36S-ARM64-RELEASE.sh"
       - "v2/audit_arm64_abi.py"
       - ".github/workflows/fitd-arkos4clone-arm64-legacy.yml"
   workflow_dispatch:
@@ -39,8 +40,8 @@ jobs:
           set -euo pipefail
           python3 v2/audit_arm64_abi.py \
             --max-glibc 2.30 --max-glibcxx 3.4.28 \
-            work/arkos-legacy/fitd.aarch64 \
-            work/arkos-legacy/libs.aarch64
+            work/arkos-legacy/fitd.glibc230.aarch64 \
+            work/arkos-legacy/libs.glibc230
           unzip -t work/fitd-arkos4clone-arm64-legacy-test.zip
           ( cd work && sha256sum fitd-arkos4clone-arm64-legacy-test.zip > legacy-SHA256SUMS.txt )
 
