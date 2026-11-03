@@ -15,7 +15,7 @@ rm -f /etc/apt/sources.list.d/*.list
 apt-get -o Acquire::Check-Valid-Until=false update
 apt-get -y --no-install-recommends install \
   ca-certificates git python3 python3-pil python3-pip fonts-dejavu-core \
-  gcc-10 g++-10 make pkg-config ninja-build zip unzip file binutils \
+  gcc-8 g++-8 make pkg-config ninja-build zip unzip file binutils \
   libasound2-dev libpulse-dev libjack-jackd2-dev \
   libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev \
   libxi-dev libxss-dev libxtst-dev libxkbcommon-dev libdrm-dev \
@@ -27,8 +27,8 @@ apt-get -y --no-install-recommends install \
 python3 -m pip install --no-cache-dir 'pip==23.3.2'
 python3 -m pip install --no-cache-dir 'cmake==3.27.9'
 export PATH="/usr/local/bin:$PATH"
-export CC=/usr/bin/gcc-10
-export CXX=/usr/bin/g++-10
+export CC=/usr/bin/gcc-8
+export CXX=/usr/bin/g++-8
 
 echo "[LEGACY] compiler: $("$CXX" --version | head -n 1)"
 echo "[LEGACY] cmake: $(cmake --version | head -n 1)"
