@@ -193,8 +193,10 @@ int main(int argc, char** argv) {
                 }
             } else if (event.type == SDL_CONTROLLERDEVICEADDED ||
                        event.type == SDL_JOYDEVICEADDED) {
-                openPad(event.type == SDL_CONTROLLERDEVICEADDED ?
-                    event.cdevice.which : event.jdevice.which);
+                // Never open the reported index directly: Android can enqueue
+                // IR/virtual devices before a real Bluetooth controller.
+                // findPad() below evaluates every available input in order.
+                SDL_Log("FITD-ANDROID-PAD: device added, evaluating physical candidates");
             } else if (event.type == SDL_CONTROLLERDEVICEREMOVED ||
                        event.type == SDL_JOYDEVICEREMOVED) {
                 Sint32 removed = event.type == SDL_CONTROLLERDEVICEREMOVED ?
