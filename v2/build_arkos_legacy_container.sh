@@ -9,7 +9,6 @@ export DEBIAN_FRONTEND=noninteractive
 # Debian 10 is end-of-life; these are READ-ONLY archives, not system upgrade repos.
 printf '%s\n' \
   'deb [check-valid-until=no] http://archive.debian.org/debian buster main' \
-  'deb [check-valid-until=no] http://archive.debian.org/debian buster-backports main' \
   > /etc/apt/sources.list
 rm -f /etc/apt/sources.list.d/*.list
 apt-get -o Acquire::Check-Valid-Until=false update
