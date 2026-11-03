@@ -30,6 +30,8 @@ jobs:
           assert Path('v2/PORTMASTER_SUBMISSION.md').is_file()
           print('PortMaster static submission preflight passed')
           PY
+      - name: Test ArkOS4Clone and dArkOSRE launcher routing
+        run: bash v2/test_arm64_launcher_selection.sh
       - name: Install native AArch64 build dependencies
         run: |
           sudo apt-get update
