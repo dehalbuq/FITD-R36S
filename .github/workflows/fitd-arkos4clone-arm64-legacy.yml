@@ -38,6 +38,11 @@ jobs:
       - name: Verify exact firmware ABI and ZIP
         run: |
           set -euo pipefail
+          # Docker creates work/ as root. The Actions runner needs write access
+          # to place the checksum alongside the successfully built ZIP.
+          sudo chown "$(id -u):$(id -g)" work
+          sudo chown -R "$(id -u):$(id -g)" work/arkos-legacy
+          sudo chown "$(id -u):$(id -g)" work/fitd-arkos4clone-arm64-legacy-test.zip
           python3 v2/audit_arm64_abi.py \
             --max-glibc 2.30 --max-glibcxx 3.4.28 \
             work/arkos-legacy/fitd.glibc230.aarch64 \
