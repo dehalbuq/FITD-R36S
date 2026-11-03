@@ -120,6 +120,25 @@ BIN="$(find work/arm64 -type f -name Fitd -perm /111 | head -n1)"
 test -n "$BIN"
 file "$BIN"
 readelf -h "$BIN" | grep -q AArch64
+# Isolated legacy build: DO NOT overwrite the validated dArkOSRE PortMaster ZIP.
+# Produces an experimental AArch64 binary and ABI-matched user-space libraries.
+if [ "${FITD_BINARY_ONLY:-0}" = "1" ]; then
+  [ "$FITD_RELEASE" = "1" ] || { echo "Legacy requires FITD_RELEASE=1" >&2; exit 30; }
+  LEGACY="$ROOT/work/arkos-legacy"
+  mkdir -p "$LEGACY/libs.aarch64"
+  cp "$BIN" "$LEGACY/fitd.aarch64"
+  strip --strip-unneeded "$LEGACY/fitd.aarch64"
+  for lib in libstdc++.so.6 libgcc_s.so.1 libatomic.so.1; do
+    found="$(ldconfig -p | awk -v name="$lib" '$1 == name && /aarch64/ {print $NF; exit}')"
+    [ -f "$found" ] && cp -L "$found" "$LEGACY/libs.aarch64/$lib"
+  done
+  # A hard stop avoids claiming ArkOS4Clone support while any object needs
+  # GLIBC >2.30. Audit each bundled library, not just the game executable.
+  python3 v2/audit_arm64_abi.py --max-glibc 2.30 --max-glibcxx 3.4.28 \
+    "$LEGACY/fitd.aarch64" "$LEGACY/libs.aarch64"
+  echo "LEGACY ARM64 BINARY READY: $LEGACY"
+  exit 0
+fi
 PORT="$ROOT/work/package"
 mkdir -p "$PORT/fitdr36s/data" "$PORT/fitdr36s/libs.aarch64" "$PORT/fitdr36s/splash" "$PORT/fitdr36s/licenses"
 cp "$BIN" "$PORT/fitdr36s/fitd.aarch64"
