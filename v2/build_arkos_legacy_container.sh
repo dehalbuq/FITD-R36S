@@ -18,7 +18,7 @@ apt-cache policy libc6 libc6-dev gcc-8-base gcc-8 g++-8 libgcc-8-dev libstdc++-8
 apt-get -y --allow-downgrades --no-install-recommends install   libc6=2.28-10+deb10u1
 apt-get -y --no-install-recommends -o Debug::pkgProblemResolver=yes install   libc6-dev libstdc++-8-dev gcc-8 g++-8
 apt-get -y --no-install-recommends install \
-  ca-certificates git python3 python3-pil python3-pip fonts-dejavu-core \
+  ca-certificates git python3 python3-pil python3-pip fonts-dejavu-core fonts-dejavu-extra \
   make pkg-config ninja-build zip unzip file binutils \
   libasound2-dev \
   libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev \
