@@ -1,102 +1,103 @@
 # FITD-R36S — Alone in the Dark (1992) no R36S
 
-**Port experimental e aberto para contribuições.** O objetivo é executar o motor de *Alone in the Dark* no R36S com os recursos e a jogabilidade clássicos, corrigindo problemas de compatibilidade e lógica sem acrescentar remasterização ou melhorias visuais nesta fase.
+**Port comunitário do motor aberto FITD para Linux ARM64, com compatibilidade confirmada de inicialização em ArkOS4Clone e histórico de testes no dArkOSRE.** Esta é a base da primeira versão unificada **v1.0.0**.
 
-> **Projeto em desenvolvimento, não lançamento oficial do PortMaster.** Este repositório disponibiliza scripts e patches do motor; **não distribui os dados comerciais do jogo**. É necessário possuir uma cópia legítima de *Alone in the Dark*.
+> **Este projeto NÃO distribui o jogo original.** Para jogar, você precisa de uma cópia adquirida legalmente de *Alone in the Dark* (1992) e fornecer os arquivos originais. O port não tem vínculo ou aprovação dos titulares do jogo nem é, por si só, um lançamento oficial do catálogo PortMaster.
 
-## Qual versão usar?
+## Download
 
-| Linha | Situação | Código e compilação |
+- [GitHub Releases](https://github.com/dehalbuq/FITD-R36S/releases) — local dos pacotes publicados; procure o arquivo **`fitdr36s.zip`** da versão v1.0.0.
+- [Branch do port ARM64](https://github.com/dehalbuq/FITD-R36S/tree/release/r36s-aarch64-safe-20261101) — código, patches, testes e ferramentas de montagem.
+- [Guia de publicação da v1.0.0](https://github.com/dehalbuq/FITD-R36S/blob/release/r36s-aarch64-safe-20261101/v2/RELEASE_PUBLICATION.md) — como publicar o ZIP correto e o checksum.
+
+**Importante:** a versão unificada está preparada, mas o ZIP final reunindo as duas variantes deve ser testado nos dois firmwares antes de ser anunciado como amplamente estável. A campanha completa não foi homologada.
+
+## Firmwares e seleção automática
+
+| Sistema | Evidência atual | Binário selecionado |
 | --- | --- | --- |
-| **ARM64 / AArch64 — desenvolvimento atual** | Testada no R36S com dArkOSRE; foco em correção de bugs e diagnóstico | [Branch de referência](https://github.com/dehalbuq/FITD-R36S/tree/fix/orb-hit-object-rehaunted-20261028) · [Build validado no GitHub Actions](https://github.com/dehalbuq/FITD-R36S/actions/runs/40771399610) |
-| **ARMHF / ARMv7 — legado** | Experimento anterior com gl4es e sdl12-compat; não representa as correções ARM64 mais recentes | Branch `main` · [Workflow ARMHF](https://github.com/dehalbuq/FITD-R36S/actions/workflows/fitd-r36s.yml) |
+| **ArkOS4Clone / Kinhank K36** | Inicialização confirmada em dispositivo real; Ubuntu 19.10, glibc 2.30, AArch64 | `fitd.glibc230.aarch64` + `libs.glibc230/` |
+| **dArkOSRE / R36S RK3326** | Histórico de testes reais de boot, controles, áudio, save/load e áreas da campanha; a variante moderna tem build ARM64 aprovado | `fitd.aarch64` + `libs.aarch64/` |
+| Outros firmwares ARM64 | **Não homologados** | Depende da glibc; renderização/controles precisam de testes |
 
-**Atenção:** a branch padrão `main` ainda contém os scripts ARMHF antigos. O desenvolvimento ARM64 e as correções recentes estão na branch **`fix/orb-hit-object-rehaunted-20261028`**, não foram incorporados ao motor ARMHF. Para contribuir com o port atual, use essa branch como base.
+O launcher `FITD-R36S-ARM64.sh` usa `getconf GNU_LIBC_VERSION` para escolher:
+- **glibc 2.30–2.34:** variante **legacy**, compilada em Debian 10/Clang 11 com ABI auditada para glibc até 2.30;
+- **glibc 2.35 ou mais recente:** variante **moderna**, compilada em Ubuntu 22.04 ARM64.
 
-## Estado dos testes — 28/10/2026
+A seleção evita distribuir `libc.so.6`, o carregador ELF, os drivers Mali, EGL e GBM dentro do port. **Não substitua bibliotecas do firmware.**
 
-Alvo de teste: **R36S-V20 / Rockchip RK3326**, **dArkOSRE**, Linux **AArch64**, renderização **OpenGL ES 3.0** via SDL/KMSDRM/bgfx. Executável com símbolos de diagnóstico; a taxa observada em trechos de teste ficou próxima de 55–59 FPS, sem garantia de desempenho uniforme.
+## Instalação / atualização
 
-| Funcionalidade | Estado | Observações |
-| --- | --- | --- |
-| Inicialização e controles | ✅ Testado | Executa no R36S e permite retornar ao menu |
-| Salvar/carregar | ✅ Testado | Correções de estabilidade e leitura de objetos de mundo |
-| Porta secreta e itens da biblioteca | ✅ Testado | Proteção de índices de salas inválidos na colisão |
-| Uso e descarte do punhal | ✅ Testado | Proteção contra modelos 3D ausentes no arremesso |
-| Inimigos do salão: dano por contato | ✅ **Confirmado no console** | `HIT_OBJ` / ação 8 adaptada do ReHaunted; o jogo passa a reconhecer os acertos |
-| Inimigos do salão: efeito sonoro | ✅ **Confirmado no console** | Amostra 88 acionada pelo comando `LM_REP_SAMPLE` |
-| Tremor de tela | ✅ Testado | Primeira implementação de `LM_SHAKING` |
-| Salas que deveriam estar escuras | ❌ Pendente | Biblioteca e outros locais continuam excessivamente claros |
-| Câmera após a sequência do verme | ⚠️ Reportado | Cena pode permanecer presa na câmera do verme; diagnóstico existente, correção pendente |
-| Campanha completa | 🔎 Não validada | Testes progressivos por área; outros bugs podem existir |
+1. Faça backup da pasta de instalação e de seus saves (`SAVE*.ITD`).
+2. Baixe **`fitdr36s.zip`**, não o ZIP externo do GitHub Actions.
+3. Extraia o conteúdo do ZIP em **`/roms/ports/`** ou no diretório `ports` usado pelo seu firmware.
+4. Copie **seus próprios arquivos do jogo** para `/roms/ports/fitdr36s/data/`; por exemplo `LISTBOD2.PAK`, `LISTLIFE.PAK`, `LISTSAMP.PAK` e os demais arquivos originais.
+5. Abra `FITD-R36S-ARM64.sh` em **Ports**.
 
-**Os estados “testado” descrevem sessões reais no console, não uma certificação de todos os caminhos do jogo.** O último teste confirmou o funcionamento do dano e do som dos inimigos; a iluminação foi intencionalmente deixada para depois.
-
-Mais detalhes e histórico: [CHANGELOG.md](CHANGELOG.md) · [Como contribuir](CONTRIBUTING.md).
-
-## Download da versão ARM64
-
-1. Abra a [execução ARM64 de referência](https://github.com/dehalbuq/FITD-R36S/actions/runs/40771399610).
-2. Na seção **Artifacts**, obtenha `FITD-R36S-AARCH64-HIT-OBJECT-REHAUNTED-DIAG`. Pode ser necessário estar autenticado no GitHub; artefatos do Actions têm prazo de retenção.
-3. Extraia o ZIP fornecido pelo GitHub; dentro dele está `fitdr36s-aarch64-hit-object-rehaunted-debug.zip`.
-4. Extraia **o conteúdo do ZIP interno** para `/roms/ports/` (ou a partição de ROMs configurada no seu dispositivo).
-
-Estrutura do pacote **ARM64**:
+**Estrutura do ZIP:**
 
 ```text
-/roms/ports/
+ports/
 ├── FITD-R36S-ARM64.sh
+├── port.json
+├── gameinfo.xml
+├── README.md
 └── fitdr36s/
     ├── fitd.aarch64
-    ├── port.json
-    ├── libs/                  # bibliotecas auxiliares empacotadas quando disponíveis
-    ├── LICENSE.FITD.txt
-    ├── build-diagnostics.txt
-    ├── logs/                  # criada pelo launcher na primeira execução
-    │   ├── fitd-debug.log
-    │   └── fitd-debug-previous.log
-    └── data/
-        └── ...               # arquivos do jogo original, fornecidos pelo usuário
+    ├── libs.aarch64/
+    ├── fitd.glibc230.aarch64
+    ├── libs.glibc230/
+    ├── data/                 # incluir somente seus arquivos originais
+    ├── splash/
+    ├── font.conf
+    ├── graphics.conf
+    ├── splash.conf
+    └── licenses/
 ```
 
-Copie os arquivos da instalação original de *Alone in the Dark 1* para `fitdr36s/data/` (por exemplo `LISTBOD2.PAK`, `LISTLIFE.PAK`, `LISTSAMP.PAK` e os demais arquivos da versão original). Não altere os nomes dos arquivos.
+Ao atualizar, **não apague nem substitua a pasta `data/` inteira**, pois ela contém o jogo comercial e pode conter saves.
 
-**Atualizando uma instalação existente:** faça backup de `fitd.aarch64` e dos saves (`SAVE*.ITD`) antes de substituí-los. **Não sobrescreva sua pasta `data/` nem os saves** com conteúdo de um pacote de teste. Execute `FITD-R36S-ARM64.sh` pelo menu de ports.
+## Recursos
 
-### Diagnóstico e problemas comuns
+- Motor FITD ARM64, renderizador **OpenGL ES 3.0** via SDL3/KMSDRM/BGFX.
+- Compilação Release com otimizações conservadoras para Cortex-A35, sem seções de debug.
+- Correções de estabilidade na gravação/carregamento, áudio, colisões e áreas específicas.
+- Fonte alternativa legível CP850 (com opção de fonte clássica), máscara gráfica clássica por padrão.
+- Telas iniciais de créditos e de informação legal; FPS máximo configurável (padrão 60) e VSync desligado por padrão.
+- Compatibilidade **OpenGL ES 2.0 e ARMv7/ARMHF não incluída** nesta Release.
 
-- **Não abre / tela preta:** verifique `fitdr36s/logs/fitd-debug.log`, `SDL_VIDEODRIVER`, EGL/GLES e as bibliotecas do firmware. O build usa OpenGL ES 3.0; **OpenGL ES 2.0 não está validado**.
-- **`GLIBC_2.xx not found`:** consulte `build-diagnostics.txt` e a versão da glibc do sistema; não substitua `libc.so.6` nem o carregador ELF do firmware por arquivos aleatórios.
-- **Sem áudio:** registre o backend ALSA e procure `AUDIO PLAY` ou `SOUND sample=` no log.
-- **Crash ou bug de jogabilidade:** informe o cenário, como reproduzir, o commit/branch e o log completo. Logs de `HIT_OBJ`, `FITD-ORB`, `FITD-WORM-CAM`, `FITD-SAVE` e `FITD-CRASH` ajudam a localizar a causa.
-- O launcher de diagnóstico aceita variáveis como `FITD_DEEP_TRACE`, `FITD_AI_TRACE`, `FITD_GDB`, `FITD_FPS_LIMIT` e `FITD_PERF_TRACE`. Algumas opções geram logs volumosos.
+## Diagnóstico e limites atuais
 
-## Compilação e organização
-
-O build **ARM64** está na branch de desenvolvimento: `v2/build_arm64.sh` e `.github/workflows/fitd-r36s-arm64.yml`. O workflow usa um runner nativo **Ubuntu 24.04 ARM64**, clona [yaz0r/FITD](https://github.com/yaz0r/FITD) no commit fixado `543e22bc`, aplica uma sequência de patches Python em `v2/`, compila o motor e monta o pacote de teste.
+Para registrar erros de inicialização, pelo terminal/SSH:
 
 ```bash
-git clone https://github.com/dehalbuq/FITD-R36S.git
-cd FITD-R36S
-git switch fix/orb-hit-object-rehaunted-20261028
-bash v2/build_arm64.sh
+FITD_RELEASE_LOG=1 bash /roms/ports/FITD-R36S-ARM64.sh
+sh /roms/ports/fitdr36s/check_compatibility.sh
 ```
 
-A execução local requer ambiente **Linux AArch64** e as dependências de compilação descritas no workflow; no computador x86_64, prefira o GitHub Actions ou um ambiente ARM64 apropriado. O build de diagnóstico não representa uma distribuição otimizada para produção.
+Os relatórios ficam em `fitdr36s/logs/fitd-release.log` e `fitdr36s/compatibility-report.txt`.
 
-As correções ficam em patches aplicados **após** baixar o upstream, em vez de alterar diretamente o código do jogo comercial. Em particular, `v2/patch_hit_object_rehaunted.py` incorpora apenas a lógica de colisão/dano de `HIT_OBJ` do [AloneInTheDarkReHaunted](https://github.com/spacefarergames/AloneInTheDarkReHaunted) — **não** incorpora seus efeitos visuais ou sistemas HD.
+**Pendências conhecidas:** a campanha completa não foi validada; iluminação clássica de algumas salas, câmera/ações na sequência do verme e sincronização de alguns eventos com FPS altos podem precisar de ajustes. A experiência em ArkOS4Clone teve a inicialização confirmada, mas ainda demanda teste estendido de controles, som, save/load e encerramento com o ZIP unificado. Não afirmar suporte irrestrito a outros dispositivos ou firmwares.
 
-## Como ajudar
+Para reportar bugs, inclua firmware, modelo do console, os passos para reproduzir e os logs. Não envie arquivos comerciais `.PAK` ou saves privados.
 
-São bem-vindas contribuições em **C/C++**, **Python**, **GitHub Actions**, SDL/KMSDRM, ARM64, áudio, câmeras, colisões, testes no console e documentação. Prioridades atuais: **iluminação clássica das salas** e **câmera na toca do verme**, mantendo as correções comprovadamente funcionais.
+## Status e código-fonte
 
-Leia [CONTRIBUTING.md](CONTRIBUTING.md) antes de abrir uma issue ou pull request. Inclua passos reproduzíveis e mantenha mudanças pequenas para reduzir regressões.
+A branch **`main`** mantém ferramentas e experimentos históricos **ARMHF**. A linha de lançamento **ARM64** é [`release/r36s-aarch64-safe-20261101`](https://github.com/dehalbuq/FITD-R36S/tree/release/r36s-aarch64-safe-20261101). Para histórico de mudanças e problemas anteriores, consulte [CHANGELOG.md](CHANGELOG.md).
 
-## Créditos e licenças
+### Compilações de origem da v1.0.0
 
-- **Jogo original:** *Alone in the Dark* — os recursos comerciais pertencem aos seus titulares e não são distribuídos aqui.
-- **Motor FITD:** [jmimu/FITD](https://github.com/jmimu/FITD) e [yaz0r/FITD](https://github.com/yaz0r/FITD).
-- **Referência de correção `HIT_OBJ`:** [spacefarergames/AloneInTheDarkReHaunted](https://github.com/spacefarergames/AloneInTheDarkReHaunted) (GPLv2).
-- **Port, scripts, diagnósticos e testes R36S:** colaboradores deste repositório.
+- [ARM64 moderna (dArkOSRE), GitHub Actions #41561105602](https://github.com/dehalbuq/FITD-R36S/actions/runs/41561105602).
+- [ARM64 legacy (ArkOS4Clone), GitHub Actions #41562095088](https://github.com/dehalbuq/FITD-R36S/actions/runs/41562095088).
 
-Preserve os cabeçalhos de autoria e as licenças do código adaptado. Consulte o arquivo de licença empacotado e os repositórios de origem para detalhes.
+O pacote final combina os dois **sem substituir um pelo outro**, e passa por auditoria de arquitetura, símbolos GLIBC e integridade de ZIP.
+
+## Créditos e licença
+
+- Jogo original: **Infogrames** e respectivos titulares de *Alone in the Dark*.
+- Motor livre FITD: [jmimu/FITD](https://github.com/jmimu/FITD) e [yaz0r/FITD](https://github.com/yaz0r/FITD).
+- Referência para correções de colisão: [AloneInTheDarkReHaunted](https://github.com/spacefarergames/AloneInTheDarkReHaunted).
+- Port, scripts, testes e integração RK3326: **dehalbuq** e colaboradores.
+- Licenças e avisos de dependências: pasta `fitdr36s/licenses/` do ZIP.
+
+**Os dados comerciais do jogo não são licenciados nem redistribuídos por este projeto.**
