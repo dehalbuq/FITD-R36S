@@ -1,0 +1,188 @@
+name: Android ARMv7 API19 FITD game-data import and native PAK validation
+
+on:
+  push:
+    branches: ["port/android-kitkat-api19"]
+    paths:
+      - "v2/android-kitkat/engine-core/**"
+      - ".github/workflows/android-armv7-game-data.yml"
+      - "v2/android-kitkat/fitd_gamepad_select_sdl2.h"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fitd-game-data-api19:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Install API19 toolchain
+        run: |
+          set -euo pipefail
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install \
+            "ndk;23.2.8568313" "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Fetch pinned upstream FITD core source
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/fitd-upstream
+          git -C /tmp/fitd-upstream init
+          git -C /tmp/fitd-upstream remote add origin https://github.com/yaz0r/FITD.git
+          git -C /tmp/fitd-upstream fetch --depth=1 origin 543e22bc78b64405537ae545ecd382dcdf2c12b2
+          git -C /tmp/fitd-upstream checkout --detach FETCH_HEAD
+          test -s /tmp/fitd-upstream/FitdLib/unpack.cpp
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("/tmp/fitd-upstream/FitdLib/config.h")
+          s=p.read_text()
+          old="#include <format>"
+          assert s.count(old)==1
+          # NDK r23c API19 cannot compile the upstream std::format header.
+          # The selected original core files do not call std::format.
+          s=s.replace(old,"#ifndef __ANDROID__\n#include <format>\n#endif")
+          s+="\n#ifdef __ANDROID__\n#undef FITD_DEBUGGER\n#undef USE_IMGUI\n#endif\n"
+          p.write_text(s)
+          PY
+
+      - name: Build SDL2 ARMv7 API19
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch release-2.30.12 https://github.com/libsdl-org/SDL.git /tmp/SDL2
+          cmake -S /tmp/SDL2 -B /tmp/sdl2-build -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/23.2.8568313/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-19 \
+            -DANDROID_STL=c++_static -DCMAKE_BUILD_TYPE=Release \
+            -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TEST=OFF -DSDL_TESTS=OFF
+          cmake --build /tmp/sdl2-build --target SDL2 --parallel 2
+
+      - name: Compile actual FITD PAK engine into SDL2 GLES2 test
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/fitd-engine-core-build
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("v2/android-kitkat/gles2_probe.cpp")
+          s=p.read_text()
+          needle="    SDL_GameControllerEventState(SDL_ENABLE);"
+          assert s.count(needle)==1
+          s='extern "C" int fitd_android_core_selftest();\n'+s
+          s=s.replace(needle,
+             '    const int engineStatus = fitd_android_core_selftest();\n'
+             '    if (engineStatus != 0) {\n'
+             '        SDL_Log("FITD-CORE: selftest FAILED status=%d", engineStatus);\n'
+             '        SDL_Quit(); return engineStatus;\n'
+             '    }\n'
+             +needle)
+          # Test 05: after engine core selftest, inspect actual imported data.
+          s='extern "C" int fitd_android_game_data_probe();\\n'+s
+          data_anchor="    SDL_GameControllerEventState(SDL_ENABLE);"
+          assert s.count(data_anchor)==1
+          s=s.replace(data_anchor,
+             '    const int dataResult = fitd_android_game_data_probe();\\n'
+             '    SDL_Log("FITD-GAME-DATA: native verification result=%d", dataResult);\\n'
+             +data_anchor)
+          old_color=('        glUniform3f(uColor, pressed ? 0.95f : 0.15f,\\n'
+                     '                            pressed ? 0.25f : 0.7f, 0.35f);')
+          assert s.count(old_color)==1, 'Unable to locate triangle color expression'
+          new_color=('        glUniform3f(uColor, pressed ? 0.95f : 0.10f,\\n'
+                     '                            pressed ? 0.25f : 0.72f,\\n'
+                     '                            dataResult > 0 ? 0.88f : 0.12f);')
+          s=s.replace(old_color,new_color)
+          Path("/tmp/fitd-engine-core-build/fitd_engine_probe.cpp").write_text(s)
+          PY
+          cmake -S v2/android-kitkat/engine-core -B /tmp/fitd-engine-core-build -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/23.2.8568313/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-19 \
+            -DANDROID_STL=c++_static -DCMAKE_BUILD_TYPE=Release \
+            -DSDL2_ROOT=/tmp/sdl2-build -DSDL2_INCLUDE_DIR=/tmp/SDL2/include \
+            -DFITD_UPSTREAM_DIR=/tmp/fitd-upstream \
+            -DFITD_GAME_DATA_PROBE=ON
+          cmake --build /tmp/fitd-engine-core-build --target main --parallel 2
+          test -s /tmp/fitd-engine-core-build/libmain.so
+          "$ANDROID_HOME/ndk/23.2.8568313/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" \
+            -h /tmp/fitd-engine-core-build/libmain.so | tee /tmp/fitd-core-elf.txt
+          grep -q 'Class: *ELF32' /tmp/fitd-core-elf.txt
+          grep -q 'Machine: *ARM' /tmp/fitd-core-elf.txt
+          "$ANDROID_HOME/ndk/23.2.8568313/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm" \
+            -C /tmp/fitd-engine-core-build/libmain.so | grep -E 'PAK_deflate|PAK_getNumFiles|cosTable'
+
+      - name: Package separate test Android APK
+        run: |
+          set -euo pipefail
+          mkdir -p work
+          cp -a v2/android-kitkat/android work/fitd-core-android
+          mkdir -p work/fitd-core-android/app/src/main/java
+          mkdir -p work/fitd-core-android/app/src/main/jniLibs/armeabi-v7a
+          cp -a /tmp/SDL2/android-project/app/src/main/java/. work/fitd-core-android/app/src/main/java/
+          cp v2/android-kitkat/engine-core/FITDGameDataActivity.java \
+            work/fitd-core-android/app/src/main/java/org/libsdl/app/
+          cp /tmp/sdl2-build/libSDL2.so work/fitd-core-android/app/src/main/jniLibs/armeabi-v7a/
+          cp /tmp/fitd-engine-core-build/libmain.so work/fitd-core-android/app/src/main/jniLibs/armeabi-v7a/
+          python3 - <<'PY'
+          from pathlib import Path
+          app=Path("work/fitd-core-android/app")
+          gradle=app/"build.gradle"
+          s=gradle.read_text()
+          assert s.count("io.github.dehalbuq.fitdkitkatprobe")==1
+          s=s.replace("io.github.dehalbuq.fitdkitkatprobe","io.github.dehalbuq.fitdandroidassets")
+          s=s.replace("versionName '0.1'","versionName '0.2.0-gamedata'")
+          gradle.write_text(s)
+          manifest=app/"src/main/AndroidManifest.xml"
+          m=manifest.read_text()
+          old_name='android:name="org.libsdl.app.SDLActivity"'
+          assert m.count(old_name)==1
+          m=m.replace(old_name,'android:name="org.libsdl.app.FITDGameDataActivity"',1)
+          old_end='        </activity>\n    </application>'
+          assert m.count(old_end)==1
+          m=m.replace(old_end,
+              '        </activity>\n'
+              '        <activity android:name="org.libsdl.app.SDLActivity"\n'
+              '            android:exported="false" android:screenOrientation="landscape"\n'
+              '            android:configChanges="layoutDirection|locale|orientation|uiMode|screenLayout|screenSize|smallestScreenSize|keyboard|keyboardHidden|navigation" />\n'
+              '    </application>')
+          manifest.write_text(m)
+          label=app/"src/main/res/values/strings.xml"
+          label.write_text(label.read_text().replace("FITD GLES2 Test","FITD Game Data Test 05"))
+          PY
+
+      - name: Assemble installable APK
+        run: |
+          set -euo pipefail
+          curl -fsSL https://services.gradle.org/distributions/gradle-8.1.1-bin.zip -o /tmp/gradle-8.1.1-bin.zip
+          unzip -q /tmp/gradle-8.1.1-bin.zip -d /tmp
+          (cd work/fitd-core-android && /tmp/gradle-8.1.1/bin/gradle --no-daemon --stacktrace :app:assembleDebug)
+          mkdir -p dist
+          cp work/fitd-core-android/app/build/outputs/apk/debug/app-debug.apk \
+            dist/FITD-Android-ARMv7-GAME-DATA-API19-TEST.apk
+
+      - name: Verify ABI, Android 4.4 minimum, GLES2 and genuine engine code
+        run: |
+          set -euo pipefail
+          APK=dist/FITD-Android-ARMv7-GAME-DATA-API19-TEST.apk
+          "$ANDROID_HOME/build-tools/34.0.0/aapt" dump badging "$APK" | tee /tmp/core-apk-badging.txt
+          grep -Fq "sdkVersion:'19'" /tmp/core-apk-badging.txt
+          grep -Eq "uses-gl-es: '0x0*20000'" /tmp/core-apk-badging.txt
+          grep -Fq "native-code: 'armeabi-v7a'" /tmp/core-apk-badging.txt
+          unzip -Z1 "$APK" | tee /tmp/core-apk-entries.txt
+          grep -Fq "lib/armeabi-v7a/libmain.so" /tmp/core-apk-entries.txt
+          grep -Fq "lib/armeabi-v7a/libSDL2.so" /tmp/core-apk-entries.txt
+          if grep -Ei '\.(pak|itd)$' /tmp/core-apk-entries.txt; then
+            echo 'Game data must not be packaged' >&2
+            exit 43
+          fi
+          sha256sum "$APK" > dist/SHA256SUMS.txt
+
+      - name: Upload native FITD PAK verification APK with Android document importer
+        uses: actions/upload-artifact@v4
+        with:
+          name: FITD-ANDROID-ARMV7-API19-GAME-DATA-TEST
+          path: |
+            dist/FITD-Android-ARMv7-GAME-DATA-API19-TEST.apk
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
