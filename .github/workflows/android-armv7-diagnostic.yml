@@ -1,0 +1,146 @@
+name: FITD Android ARMv7 API19 hardware and input diagnostic APK
+
+on:
+  push:
+    branches: ["port/android-kitkat-api19"]
+    paths:
+      - "v2/android-kitkat/diagnostic/**"
+      - ".github/workflows/android-armv7-diagnostic.yml"
+  workflow_dispatch:
+
+jobs:
+  armv7-api19-input-diagnostic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout port sources
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install Android SDK and API19-compatible NDK
+        run: |
+          set -euo pipefail
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install \
+            "ndk;23.2.8568313" "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Download SDL2 release 2.30.12
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch release-2.30.12 \
+            https://github.com/libsdl-org/SDL.git /tmp/SDL2
+
+      - name: Compile SDL2 ARMv7 Android 4.4
+        run: |
+          set -euo pipefail
+          cmake -S /tmp/SDL2 -B /tmp/sdl2-build -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/23.2.8568313/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-19 \
+            -DANDROID_STL=c++_static -DCMAKE_BUILD_TYPE=Release \
+            -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TEST=OFF -DSDL_TESTS=OFF
+          cmake --build /tmp/sdl2-build --target SDL2 --parallel 2
+          test -s /tmp/sdl2-build/libSDL2.so
+
+      - name: Compile native GLES2/joystick diagnostics
+        run: |
+          set -euo pipefail
+          cmake -S v2/android-kitkat/diagnostic -B /tmp/fitd-diag-native -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/23.2.8568313/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-19 \
+            -DANDROID_STL=c++_static -DCMAKE_BUILD_TYPE=Release \
+            -DSDL2_ROOT=/tmp/sdl2-build -DSDL2_INCLUDE_DIR=/tmp/SDL2/include
+          cmake --build /tmp/fitd-diag-native --target main --parallel 2
+          test -s /tmp/fitd-diag-native/libmain.so
+          "$ANDROID_HOME/ndk/23.2.8568313/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" \
+            -h /tmp/fitd-diag-native/libmain.so | grep -E 'ELF32|ARM'
+
+      - name: Construct standalone diagnostic app with on-screen TXT export
+        run: |
+          set -euo pipefail
+          mkdir -p work
+          cp -a v2/android-kitkat/android work/fitd-android-diagnostic
+          mkdir -p work/fitd-android-diagnostic/app/src/main/java/org/libsdl/app
+          mkdir -p work/fitd-android-diagnostic/app/src/main/jniLibs/armeabi-v7a
+          cp -a /tmp/SDL2/android-project/app/src/main/java/. \
+            work/fitd-android-diagnostic/app/src/main/java/
+          cp v2/android-kitkat/diagnostic/FITDDiagnosticActivity.java \
+            work/fitd-android-diagnostic/app/src/main/java/org/libsdl/app/
+          cp /tmp/sdl2-build/libSDL2.so \
+            work/fitd-android-diagnostic/app/src/main/jniLibs/armeabi-v7a/
+          cp /tmp/fitd-diag-native/libmain.so \
+            work/fitd-android-diagnostic/app/src/main/jniLibs/armeabi-v7a/
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path("work/fitd-android-diagnostic/app")
+          gradle=root/"build.gradle"
+          s=gradle.read_text()
+          assert s.count("io.github.dehalbuq.fitdkitkatprobe")==1
+          s=s.replace("io.github.dehalbuq.fitdkitkatprobe",
+                      "io.github.dehalbuq.fitdarmv7diagnostic")
+          s=s.replace("versionCode 1","versionCode 2")
+          s=s.replace("versionName '0.1'","versionName '0.2-inputdiag'")
+          gradle.write_text(s)
+          manifest=root/"src/main/AndroidManifest.xml"
+          s=manifest.read_text()
+          assert s.count('android:name="org.libsdl.app.SDLActivity"')==1
+          s=s.replace('android:name="org.libsdl.app.SDLActivity"',
+                      'android:name="org.libsdl.app.FITDDiagnosticActivity"')
+          manifest.write_text(s)
+          label=root/"src/main/res/values/strings.xml"
+          s=label.read_text()
+          s=s.replace("FITD GLES2 Test","FITD ARMv7 Diagnostico")
+          label.write_text(s)
+          PY
+
+      - name: Assemble Android 4.4 installable APK
+        run: |
+          set -euo pipefail
+          curl -fsSL https://services.gradle.org/distributions/gradle-8.1.1-bin.zip \
+            -o /tmp/gradle-8.1.1-bin.zip
+          unzip -q /tmp/gradle-8.1.1-bin.zip -d /tmp
+          (cd work/fitd-android-diagnostic && \
+           /tmp/gradle-8.1.1/bin/gradle --no-daemon --stacktrace :app:assembleDebug)
+          mkdir -p dist
+          cp work/fitd-android-diagnostic/app/build/outputs/apk/debug/app-debug.apk \
+            dist/FITD-Android-ARMv7-DIAGNOSTICO-API19.apk
+
+      - name: Validate APK ABI, API19, GLES2 and harmless permissions
+        run: |
+          set -euo pipefail
+          APK=dist/FITD-Android-ARMv7-DIAGNOSTICO-API19.apk
+          "$ANDROID_HOME/build-tools/34.0.0/aapt" dump badging "$APK" | tee /tmp/fitd-diagnostic-badging.txt
+          grep -Fq "sdkVersion:'19'" /tmp/fitd-diagnostic-badging.txt
+          grep -Eq "uses-gl-es: '0x0*20000'" /tmp/fitd-diagnostic-badging.txt
+          grep -Fq "native-code: 'armeabi-v7a'" /tmp/fitd-diagnostic-badging.txt
+          "$ANDROID_HOME/build-tools/34.0.0/aapt" dump permissions "$APK" | tee /tmp/fitd-diagnostic-permissions.txt
+          if grep -Ei 'READ_CONTACTS|ACCESS_FINE_LOCATION|CAMERA|RECORD_AUDIO|READ_PHONE_STATE|INTERNET' /tmp/fitd-diagnostic-permissions.txt; then
+            echo "Diagnostic APK requests an unexpected dangerous/network permission" >&2
+            exit 42
+          fi
+          unzip -l "$APK" | tee /tmp/fitd-diagnostic-apk-content.txt
+          grep -Fq 'lib/armeabi-v7a/libmain.so' /tmp/fitd-diagnostic-apk-content.txt
+          grep -Fq 'lib/armeabi-v7a/libSDL2.so' /tmp/fitd-diagnostic-apk-content.txt
+          if grep -E 'lib/(arm64-v8a|x86|x86_64)/' /tmp/fitd-diagnostic-apk-content.txt; then
+            echo "Unexpected architecture in diagnostic APK" >&2
+            exit 43
+          fi
+          if unzip -Z1 "$APK" | grep -Ei '(\.PAK$|\.ITD$)'; then
+            echo "Game files must not be included in diagnostics" >&2
+            exit 44
+          fi
+          sha256sum "$APK" > dist/SHA256SUMS.txt
+
+      - name: Upload diagnostic APK and checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: FITD-Android-ARMv7-DIAGNOSTICO-API19
+          path: |
+            dist/FITD-Android-ARMv7-DIAGNOSTICO-API19.apk
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
