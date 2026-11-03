@@ -3,6 +3,7 @@
 // armv7a / Android API 19 / GLSL ES 1.00. No GLES3 functions or features.
 #include <SDL.h>
 #include <SDL_opengles2.h>
+#include "fitd_gamepad_select_sdl2.h"
 #include <cstdio>
 
 namespace {
@@ -39,9 +40,18 @@ void openPad(int index) {
 }
 void findPad() {
     if (controller || fallback) return;
-    for (int i = 0; i < SDL_NumJoysticks(); ++i) {
-        openPad(i);
-        if (controller || fallback) return;
+    // The Chanuo A1 firmware exposes its IR remote and three virtual-search
+    // entries as GameControllers at index 0..3; PG-9068 is index 4.
+    // A first-found strategy picks the remote and silently loses Bluetooth.
+    const fitd_android::GamepadChoice candidate =
+        fitd_android::selectBestPhysicalGamepad();
+    if (candidate.index >= 0) {
+        SDL_Log("FITD-ANDROID-PAD: selected physical index=%d instance=%d score=%d name=%s",
+                candidate.index, (int)candidate.id, candidate.score,
+                SDL_JoystickNameForIndex(candidate.index));
+        openPad(candidate.index);
+    } else {
+        SDL_Log("FITD-ANDROID-PAD: no physical gamepad found; keyboard still active");
     }
 }
 int axisX() {
