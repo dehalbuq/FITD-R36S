@@ -95,6 +95,12 @@ int main(int argc, char** argv) {
     }
     SDL_GameControllerEventState(SDL_ENABLE);
     SDL_JoystickEventState(SDL_ENABLE);
+    SDL_Log("FITD-ANDROID-INPUT: initial joystick count=%d", SDL_NumJoysticks());
+    for (int index=0; index<SDL_NumJoysticks(); ++index) {
+        SDL_Log("FITD-ANDROID-INPUT: device[%d] name=%s isGameController=%d axes=%d",
+          index, SDL_JoystickNameForIndex(index) ? SDL_JoystickNameForIndex(index) : "(unknown)",
+          SDL_IsGameController(index), 0);
+    }
     findPad();
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
@@ -150,12 +156,31 @@ int main(int argc, char** argv) {
     Uint32 started = SDL_GetTicks();
     float posX = 0.0f, posY = 0.0f;
     bool wasPressing = false;
+    bool sawKeyboard = false;
+    Uint32 lastDiagnostic = 0;
     while (running) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_QUIT ||
                 (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE)) {
                 running = false;
+            } else if (event.type == SDL_KEYDOWN) {
+                sawKeyboard = true;
+                SDL_Log("FITD-ANDROID-INPUT: KEYDOWN scancode=%d key=%s repeat=%d",
+                        (int)event.key.keysym.scancode,
+                        SDL_GetKeyName(event.key.keysym.sym), (int)event.key.repeat);
+            } else if (event.type == SDL_CONTROLLERBUTTONDOWN) {
+                SDL_Log("FITD-ANDROID-INPUT: CONTROLLER button=%u", (unsigned)event.cbutton.button);
+            } else if (event.type == SDL_JOYBUTTONDOWN) {
+                SDL_Log("FITD-ANDROID-INPUT: JOYSTICK button=%u", (unsigned)event.jbutton.button);
+            } else if (event.type == SDL_JOYHATMOTION) {
+                SDL_Log("FITD-ANDROID-INPUT: JOYSTICK hat=%u value=%u",
+                        (unsigned)event.jhat.hat, (unsigned)event.jhat.value);
+            } else if (event.type == SDL_JOYAXISMOTION) {
+                if (event.jaxis.value < -16000 || event.jaxis.value > 16000) {
+                    SDL_Log("FITD-ANDROID-INPUT: JOYSTICK axis=%u value=%d",
+                            (unsigned)event.jaxis.axis, (int)event.jaxis.value);
+                }
             } else if (event.type == SDL_CONTROLLERDEVICEADDED ||
                        event.type == SDL_JOYDEVICEADDED) {
                 openPad(event.type == SDL_CONTROLLERDEVICEADDED ?
@@ -181,13 +206,27 @@ int main(int argc, char** argv) {
         if (dpad(SDL_CONTROLLER_BUTTON_DPAD_RIGHT, SDL_HAT_RIGHT)) dx = 1.0f;
         if (dpad(SDL_CONTROLLER_BUTTON_DPAD_UP, SDL_HAT_UP)) dy = -1.0f;
         if (dpad(SDL_CONTROLLER_BUTTON_DPAD_DOWN, SDL_HAT_DOWN)) dy = 1.0f;
+        // Some Android 9 TV/projector firmwares translate Bluetooth HID D-pads
+        // into keyboard arrows rather than SDL joystick axes/hats.
+        const Uint8* keys = SDL_GetKeyboardState(nullptr);
+        if (keys[SDL_SCANCODE_LEFT] || keys[SDL_SCANCODE_A]) dx = -1.0f;
+        if (keys[SDL_SCANCODE_RIGHT] || keys[SDL_SCANCODE_D]) dx = 1.0f;
+        if (keys[SDL_SCANCODE_UP] || keys[SDL_SCANCODE_W]) dy = -1.0f;
+        if (keys[SDL_SCANCODE_DOWN] || keys[SDL_SCANCODE_S]) dy = 1.0f;
         posX += dx * 0.014f; posY -= dy * 0.014f;
         if (posX < -0.60f) posX = -0.60f;
         if (posX > 0.60f) posX = 0.60f;
         if (posY < -0.60f) posY = -0.60f;
         if (posY > 0.60f) posY = 0.60f;
-        bool pressed = buttonA();
-        if (pressed && !wasPressing) SDL_Log("FITD-ANDROID-PAD: A action detected");
+        bool pressed = buttonA() || keys[SDL_SCANCODE_RETURN] ||
+                       keys[SDL_SCANCODE_SPACE] || keys[SDL_SCANCODE_Z];
+        if (pressed && !wasPressing) SDL_Log("FITD-ANDROID-PAD: A/action detected");
+        if (SDL_GetTicks() - lastDiagnostic > 3000) {
+            SDL_Log("FITD-ANDROID-INPUT: status controller=%d raw=%d keyboard=%d axisX=%d axisY=%d buttons=%d",
+                    controller != nullptr, fallback != nullptr, sawKeyboard,
+                    x, y, (int)pressed);
+            lastDiagnostic = SDL_GetTicks();
+        }
         wasPressing = pressed;
         if (buttonExit()) {
             SDL_Log("FITD-ANDROID-PAD: exit button detected");
@@ -206,6 +245,23 @@ int main(int argc, char** argv) {
         glEnableVertexAttribArray(0);
         glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
         glDrawArrays(GL_TRIANGLES, 0, 3);
+        // Colored indicators, no font required on GLES2/Android 4.4.
+        // Top left: GREEN=SDL controller, YELLOW=raw joystick,
+        // RED=not enumerated; top right PURPLE=keyboard input observed.
+        if (width > 128 && height > 90) {
+            glEnable(GL_SCISSOR_TEST);
+            glScissor(14, height - 66, 48, 48);
+            if (controller) glClearColor(0.1f, 0.8f, 0.2f, 1.0f);
+            else if (fallback) glClearColor(0.95f, 0.7f, 0.1f, 1.0f);
+            else glClearColor(0.9f, 0.12f, 0.12f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
+            if (sawKeyboard) {
+                glScissor(width - 62, height - 66, 48, 48);
+                glClearColor(0.75f, 0.2f, 0.9f, 1.0f);
+                glClear(GL_COLOR_BUFFER_BIT);
+            }
+            glDisable(GL_SCISSOR_TEST);
+        }
         SDL_GL_SwapWindow(win);
         // Hardware validation app, not a game: auto-close after 90 seconds.
         if (SDL_GetTicks() - started > 90000) running = false;
