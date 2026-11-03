@@ -61,3 +61,17 @@ FITD. Manual: https://m.ipega.hk/uploads/201806/5b2ca38e19381.pdf
 indicadores; testar D-pad, analógico esquerdo, botão A e B/START. Caso não
 responda, enviar `adb logcat -d | grep FITD-ANDROID-INPUT` quando ADB
 estiver disponível. O teste ainda não contém o motor comercial.
+
+
+## Resultado do Teste 03 — Chanuo A1 / iPega PG-9068
+
+O usuário confirmou que o diagnóstico moveu o triângulo e mudou sua cor. O relatório exportado mostra:
+
+- Android InputDevice id=9: PG-9068, VID 6473, PID 1026.
+- SDL2 enumerou seis joysticks: índice 0 receptor IR `gpio_ir_recv`, 1–3 `virtual-search`, índice 4 `PG-9068`, índice 5 acelerômetro.
+- PG-9068: 6 eixos, 19 botões, mapeamento SDL GameController. Eventos reais `SDL_JOYSTICK_BUTTON dev=4 button=13/14` e `SDL_JOYSTICK_AXIS dev=4 axis=0/1`.
+- Mali-T720, contexto GLES 2.0 criado. Driver reporta GLES 3.1; não valida GPU limitada somente a GLES2.
+- SDL áudio openslES; sistema reporta 48 kHz.
+- Firmware declara release '12' e SDK 27, metadados conflitantes (API27 = Android 8.1).
+
+**Causa do bug:** o teste inicial abria o primeiro SDL GameController: era o controle remoto infravermelho, não o iPega. O diagnóstico percorreu todos os dispositivos e funcionou. O helper `fitd_gamepad_select_sdl2.h` agora prioriza controles físicos e ignora entradas IR/virtuais conhecidas; integrado ao teste GLES2 e pronto para adaptação ao motor FITD. Ainda requer validação no dispositivo e em outros controles.
