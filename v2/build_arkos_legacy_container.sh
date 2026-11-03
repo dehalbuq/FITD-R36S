@@ -41,12 +41,15 @@ test -s work/arkos-legacy/fitd.aarch64
 test -s work/arkos-legacy/libs.aarch64/libstdc++.so.6
 test -s work/arkos-legacy/libs.aarch64/libgcc_s.so.1
 
+# Ship only additional files; do not overwrite the working dArkOSRE binary.
+mv work/arkos-legacy/fitd.aarch64 work/arkos-legacy/fitd.glibc230.aarch64
+mv work/arkos-legacy/libs.aarch64 work/arkos-legacy/libs.glibc230
 mkdir -p work/arkos-legacy
 cat >work/arkos-legacy/README-LEGACY.txt <<'TXT'
 FITD-R36S experimental ARM64 legacy ABI build (glibc <=2.30).
 Designed for evaluation on ArkOS4Clone (Ubuntu 19.10 / glibc 2.30).
 Do not replace the working dArkOSRE variant with these files.
-Only install for a controlled test after backing up the whole port.
+After backing up the port, extract into the existing fitdr36s/ folder.\nIt adds fitd.glibc230.aarch64 and libs.glibc230/; no existing file is replaced.\nRequires the updated launcher that selects glibc230 on older systems.
 Compiled from the same source + gameplay patches as dArkOSRE release.
 Not a complete PortMaster port or verified multi-firmware build.
 TXT
