@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Regression test: glibc 2.30 uses legacy; glibc 2.35 preserves dArkOSRE.
+# Regression test: glibc <2.35 uses legacy; glibc >=2.35 preserves dArkOSRE.
 # The executable files in this test are harmless shell stubs, not the game.
 set -Eeuo pipefail
 cd "$(dirname "$0")/.."
@@ -26,7 +26,7 @@ cat > "$TMP/fitdr36s/fitd.glibc230.aarch64" <<'EOF'
 printf "arkos4clone\n" > "$FITD_TEST_OUTPUT"
 EOF
 chmod +x "$TMP/fakebin/getconf" "$TMP/fitdr36s/"*.aarch64
-for spec in "2.30:arkos4clone" "2.28:arkos4clone" "2.35:darkosre" "2.39:darkosre"; do
+for spec in "2.30:arkos4clone" "2.28:arkos4clone" "2.31:arkos4clone" "2.34:arkos4clone" "2.35:darkosre" "2.39:darkosre"; do
   ver="${spec%%:*}"
   expected="${spec#*:}"
   export FITD_TEST_GLIBC="$ver" FITD_TEST_OUTPUT="$TMP/selected"
