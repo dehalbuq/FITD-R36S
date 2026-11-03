@@ -106,6 +106,12 @@ grep -Fq '[FITD-CELLAR] FOUND_ACTION' work/source/FitdLib/main.cpp
 grep -Fq '[FITD-CELLAR] INVALID_DELETE' work/source/FitdLib/life.cpp
 grep -Fq '[FITD-CELLAR] EVAL_BAD_OBJECT' work/source/FitdLib/evalVar.cpp
 echo 'FITD R36S: verified save/audio fixes and library invalid-room diagnostics'
+# Debian Buster's GCC8 libstdc++ ships std::filesystem in libstdc++fs.a.
+# Link it ONLY for the separate legacy binary; leave dArkOSRE build intact.
+CMAKE_LEGACY_CXX_LIBS=()
+if [ "${FITD_BINARY_ONLY:-0}" = "1" ]; then
+  CMAKE_LEGACY_CXX_LIBS=("-DCMAKE_CXX_STANDARD_LIBRARIES=-lstdc++fs")
+fi
 cmake -S work/source -B work/arm64 -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_C_FLAGS="-DFITD_R36S=1 -DBGFX_CONFIG_MULTITHREADED=0 -DBGFX_CONFIG_RENDERER_OPENGL=0 -DBGFX_CONFIG_RENDERER_OPENGLES=30" \
@@ -114,7 +120,8 @@ cmake -S work/source -B work/arm64 -G Ninja \
     -DCMAKE_CXX_FLAGS_RELEASE="$FITD_BUILD_FLAGS" \
     -DCMAKE_EXE_LINKER_FLAGS="$FITD_LINK_FLAGS" \
     -DSDL_KMSDRM=ON \
-    -DSDL_SHARED=OFF -DSDL_STATIC=ON
+    -DSDL_SHARED=OFF -DSDL_STATIC=ON \
+    "${CMAKE_LEGACY_CXX_LIBS[@]}"
 cmake --build work/arm64 --target Fitd --parallel 2
 BIN="$(find work/arm64 -type f -name Fitd -perm /111 | head -n1)"
 test -n "$BIN"
