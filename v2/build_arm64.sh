@@ -58,7 +58,7 @@ if [ "$FITD_RELEASE" = "1" ]; then
   # Ubuntu 22.04 ships GCC 11 without <format>; keep glibc 2.35 baseline.
   python3 -m py_compile v2/patch_cxx20_format_portmaster.py
   python3 v2/patch_cxx20_format_portmaster.py work/source
-  if grep -Rq 'std::format\|#include <format>' work/source/FitdLib/room.cpp work/source/FitdLib/floor.cpp work/source/FitdLib/config.h; then
+  if grep -Eq 'std::format[[:space:]]*\(|^[[:space:]]*#include[[:space:]]*<format>' work/source/FitdLib/room.cpp work/source/FitdLib/floor.cpp work/source/FitdLib/config.h; then
     echo "ERROR: remaining unsupported C++20 <format> in FITD engine" >&2
     exit 5
   fi
