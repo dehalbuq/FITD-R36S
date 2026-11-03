@@ -1,4 +1,5 @@
 // Android 4.4 ARMv7: smoke-test ACTUAL upstream FITD core code.
+#include "config.h"
 #include "unpack.h"
 #include "pak.h"
 #include "cosTable.h"
