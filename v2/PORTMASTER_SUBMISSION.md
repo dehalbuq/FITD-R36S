@@ -77,3 +77,29 @@ A future timing refactor must separate render frames from simulation updates.
   automatically guarantee compatibility with every PortMaster firmware.
 - The current Release build must pass GitHub Actions and physical gameplay
   tests before its compatibility can be claimed.
+
+## ArkOS4Clone Kinhank K36: verified diagnostic (7 Nov 2025 device clock)
+
+- Linux AArch64 / kernel 4.4.189 / Ubuntu 19.10 / glibc **2.30**.
+- The deployed executable requires GLIBC_2.34 and bundled GNU libraries
+  require GLIBC_2.35. Loader rejection occurs BEFORE SDL/EGL starts.
+- The firmware has /dev/dri/card0, renderD128, EGL/GLES/GBM Mali links and
+  SDL2; these are not sufficient to prove SDL3/GLES3 initialization works.
+- Original game .PAK data is present; do not copy or redistribute game files.
+- PortMaster control.txt exists under /opt/system/Tools/PortMaster.
+- The user's previously tested dArkOSRE binary **MUST NOT be overwritten**
+  by the experimental legacy build.
+
+## Backward compatibility strategy
+
+- Modern dArkOSRE: keep the original fitd.aarch64 and libs.aarch64/.
+- Older glibc <= 2.30: use fitd.glibc230.aarch64 and libs.glibc230/
+  ONLY after each old binary/library passes the readelf ABI audit.
+- Launcher chooses using getconf GNU_LIBC_VERSION and reports a clear error
+  if the old binary has not been packaged; it does not run a known-bad ABI.
+- Do not change port.json's min_glibc from 2.35 until a verified **single ZIP
+  containing both** binaries and both lib sets is built and tested.
+- After the ABI issue is fixed, capture actual game startup logs, then check
+  Mali GLES3/EGL/KMSDRM, audio, input mapping, save/load and quit separately
+  on BOTH ArkOS4Clone and dArkOSRE.
+- No firmware compatibility is guaranteed by a successful compile alone.
