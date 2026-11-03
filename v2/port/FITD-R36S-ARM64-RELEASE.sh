@@ -29,7 +29,24 @@ fi
 PORTDIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 GAMEDIR="$PORTDIR/fitdr36s"
 BIN="$GAMEDIR/fitd.aarch64"
+LIBDIR="$GAMEDIR/libs.aarch64"
 DATA="$GAMEDIR/data"
+# Keep the original dArkOSRE executable as the default. ArkOS4Clone's
+# glibc 2.30 requires a separately ABI-audited binary and library set.
+# Select the legacy variant only on an older glibc; never replace the
+# known dArkOSRE executable or override the firmware's GPU/GLIBC libraries.
+GLIBC_TEXT="$(getconf GNU_LIBC_VERSION 2>/dev/null || true)"
+GLIBC_MINOR="$(printf '%s\n' "$GLIBC_TEXT" | sed -n 's/^glibc 2\\.\\([0-9]*\\).*$/\\1/p')"
+if [ -n "$GLIBC_MINOR" ] && [ "$GLIBC_MINOR" -le 30 ]; then
+    BIN="$GAMEDIR/fitd.glibc230.aarch64"
+    LIBDIR="$GAMEDIR/libs.glibc230"
+    if [ ! -x "$BIN" ]; then
+        mkdir -p "$GAMEDIR/logs" || true
+        echo "FITD: firmware uses $GLIBC_TEXT; needs ABI-audited glibc<=2.30 ARM64 executable." | tee "$GAMEDIR/logs/compatibility-error.txt" >&2
+        echo "FITD: the dArkOSRE binary is intentionally preserved, not replaced." >&2
+        exit 25
+    fi
+fi
 ARCH=${DEVICE_ARCH:-$(uname -m)}
 case "$ARCH" in
     aarch64|arm64) ;;
@@ -57,8 +74,8 @@ if [ "$found" -eq 0 ]; then
 fi
 
 # Select platform-specific dependencies. Do not bundle glibc/EGL/DRM/GPU stack.
-if [ -d "$GAMEDIR/libs.aarch64" ]; then
-    export LD_LIBRARY_PATH="$GAMEDIR/libs.aarch64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+if [ -d "$LIBDIR" ]; then
+    export LD_LIBRARY_PATH="$LIBDIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 fi
 if [ -n "${sdl_controllerconfig:-}" ]; then
     export SDL_GAMECONTROLLERCONFIG="$sdl_controllerconfig"
