@@ -58,6 +58,18 @@ CPP
 "$CXX" -std=c++20 /tmp/fitd-clang11-preflight.cpp -o /tmp/fitd-clang11-preflight
 /tmp/fitd-clang11-preflight
 python3 v2/audit_arm64_abi.py --max-glibc 2.30 --max-glibcxx 3.4.28 /tmp/fitd-clang11-preflight
+# GCC 8's filesystem ABI is in a separate static library on Buster.
+# Check the exact shaderc link requirement before compiling the entire game.
+cat >/tmp/fitd-legacy-filesystem.cpp <<'CPP'
+#include <filesystem>
+int main() {
+    auto path = std::filesystem::absolute(std::filesystem::path("."));
+    return path.empty();
+}
+CPP
+"$CXX" -std=c++17 /tmp/fitd-legacy-filesystem.cpp -o /tmp/fitd-legacy-filesystem -lstdc++fs
+/tmp/fitd-legacy-filesystem
+python3 v2/audit_arm64_abi.py --max-glibc 2.30 --max-glibcxx 3.4.28 /tmp/fitd-legacy-filesystem
 
 echo "[LEGACY] compiler: $("$CXX" --version | head -n 1)"
 echo "[LEGACY] cmake: $(cmake --version | head -n 1)"
@@ -78,7 +90,9 @@ cat >work/arkos-legacy/README-LEGACY.txt <<'TXT'
 FITD-R36S experimental ARM64 legacy ABI build (glibc <=2.30).
 Designed for evaluation on ArkOS4Clone (Ubuntu 19.10 / glibc 2.30).
 Do not replace the working dArkOSRE variant with these files.
-After backing up the port, extract into the existing fitdr36s/ folder.\nIt adds fitd.glibc230.aarch64 and libs.glibc230/; no existing file is replaced.\nRequires the updated launcher that selects glibc230 on older systems.
+After backing up the port, extract into the existing fitdr36s/ folder.
+It adds fitd.glibc230.aarch64 and libs.glibc230/; no existing file is replaced.
+Requires the updated launcher that selects glibc230 on older systems.
 Compiled from the same source + gameplay patches as dArkOSRE release.
 Not a complete PortMaster port or verified multi-firmware build.
 TXT
