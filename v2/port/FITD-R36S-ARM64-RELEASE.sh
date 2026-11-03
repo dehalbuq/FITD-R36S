@@ -36,7 +36,7 @@ DATA="$GAMEDIR/data"
 # Select the legacy variant only on an older glibc; never replace the
 # known dArkOSRE executable or override the firmware's GPU/GLIBC libraries.
 GLIBC_TEXT="$(getconf GNU_LIBC_VERSION 2>/dev/null || true)"
-GLIBC_MINOR="$(printf '%s\n' "$GLIBC_TEXT" | sed -n 's/^glibc 2\\.\\([0-9]*\\).*$/\\1/p')"
+GLIBC_MINOR="$(printf '%s\n' "$GLIBC_TEXT" | sed -n 's/^glibc 2\.\([0-9]*\).*$/\1/p')"
 if [ -n "$GLIBC_MINOR" ] && [ "$GLIBC_MINOR" -le 30 ]; then
     BIN="$GAMEDIR/fitd.glibc230.aarch64"
     LIBDIR="$GAMEDIR/libs.glibc230"
