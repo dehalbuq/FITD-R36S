@@ -32,3 +32,32 @@ Este APK **não é o jogo**. Ele valida o caminho Android 4.4/API19 -> SDL2 -> G
 **Lição da tentativa anterior:** a branch `port/android-armeabi-v7a-release-20261031` era SDL3/GLES3/API21 e nunca entregou um APK funcional do motor. Seu último erro de build incluía `undefined symbol: HQR_Reset<sBody>`, mas corrigir esse erro isoladamente não a tornaria compatível com Android 4.4/GLES2.
 
 **Isolamento:** essa linha Android é independente da Release ARM64 para dArkOSRE/ArkOS4Clone.
+
+
+## Diagnóstico PG-9068 — projetor Chanuo A1 / Android 9 (Teste 02)
+
+No Teste 01, o triângulo foi exibido e o aplicativo foi encerrado com B/START,
+mas o iPega PG-9068 não moveu o triângulo. Isso indica possível entrada parcial;
+não afirmar que nenhum botão foi reconhecido sem confirmar o método de saída.
+
+A variante do Teste 02 inclui:
+
+- Suporte ao direcional HID do Android quando entregue como teclas **setas**
+  (e também W/A/S/D), além de SDL GameController e joystick genérico;
+- Ação por A do controle ou Enter/Espaço/Z;
+- Logs `FITD-ANDROID-INPUT` para teclas, botões, hats e eixos;
+- Dois indicadores visuais de diagnóstico no canto superior: **verde**
+  (SDL GameController), **amarelo** (joystick genérico), **vermelho**
+  (nenhum dispositivo enumerado); **roxo** no canto superior direito
+  indica que pelo menos um evento de teclado foi recebido.
+
+**Emparelhamento PG-9068:** segundo o manual oficial, desligue/remova a
+conexão anterior, segure **Android + HOME** por aproximadamente 2 segundos,
+emparelhe `PG-9068` e confirme **LED1 ligado** (modo HID/Gamepad). LED2
+indica modo mouse/multimídia. Esses modos são do próprio controle, não do
+FITD. Manual: https://m.ipega.hk/uploads/201806/5b2ca38e19381.pdf
+
+**Como testar:** iniciar com controle conectado; anotar cores dos
+indicadores; testar D-pad, analógico esquerdo, botão A e B/START. Caso não
+responda, enviar `adb logcat -d | grep FITD-ANDROID-INPUT` quando ADB
+estiver disponível. O teste ainda não contém o motor comercial.
