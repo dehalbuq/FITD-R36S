@@ -43,6 +43,7 @@ public final class FITDGameDataActivity extends Activity {
     private boolean copying = false;
     private TextView status;
     private Button importButton;
+    private Button manualButton;
     private Button startButton;
 
     @Override public void onCreate(Bundle state) {
@@ -88,6 +89,11 @@ public final class FITDGameDataActivity extends Activity {
         importButton.setOnClickListener(v -> selectGameFiles());
         layout.addView(importButton);
 
+        manualButton = new Button(this);
+        manualButton.setText("SELECIONAR ARQUIVOS MANUALMENTE");
+        manualButton.setOnClickListener(v -> selectIndividualFiles());
+        layout.addView(manualButton);
+
         startButton = new Button(this);
         startButton.setText("TESTAR LEITURA DO MOTOR");
         startButton.setOnClickListener(v -> {
@@ -120,10 +126,24 @@ public final class FITDGameDataActivity extends Activity {
 
     private void refresh() {
         importButton.setEnabled(!copying);
+        manualButton.setEnabled(!copying);
         startButton.setEnabled(!copying && hasRequiredFiles());
         if (!copying) status.setText(hasRequiredFiles()
             ? "Arquivos básicos presentes. Pronto para testar a leitura."
             : "Dados do jogo ausentes. Importe a pasta/arquivos originais.");
+    }
+
+    private void selectIndividualFiles() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        try {
+            startActivityForResult(intent, REQUEST_FILES);
+        } catch (Exception e) {
+            status.setText("Seletor de arquivos indisponível: " + e.getMessage());
+        }
     }
 
     private void selectGameFiles() {
@@ -156,6 +176,7 @@ public final class FITDGameDataActivity extends Activity {
         copiedBytes = 0;
         status.setText("Importando arquivos. Não feche o aplicativo...");
         importButton.setEnabled(false);
+        manualButton.setEnabled(false);
         startButton.setEnabled(false);
         final Intent picked = data;
         final int method = request;
