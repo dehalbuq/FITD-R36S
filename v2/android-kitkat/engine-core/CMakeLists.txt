@@ -26,6 +26,11 @@ add_library(main SHARED
     "${CMAKE_CURRENT_BINARY_DIR}/fitd_engine_probe.cpp"
     fitd_core_selftest.cpp
 )
+if(FITD_GAME_DATA_PROBE)
+    target_sources(main PRIVATE fitd_game_data_probe.cpp)
+    target_compile_definitions(main PRIVATE FITD_GAME_DATA_PROBE=1)
+endif()
+
 target_include_directories(main PRIVATE
     "${SDL2_INCLUDE_DIR}"
     "${FITD_UPSTREAM_DIR}/FitdLib"
