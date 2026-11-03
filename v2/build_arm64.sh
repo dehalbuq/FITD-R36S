@@ -55,6 +55,13 @@ python3 v2/test_graphics_profile.py work/source
 python3 -m py_compile v2/patch_startup_splash.py v2/generate_startup_splash.py
 python3 v2/patch_startup_splash.py work/source
 if [ "$FITD_RELEASE" = "1" ]; then
+  # Ubuntu 22.04 ships GCC 11 without <format>; keep glibc 2.35 baseline.
+  python3 -m py_compile v2/patch_cxx20_format_portmaster.py
+  python3 v2/patch_cxx20_format_portmaster.py work/source
+  if grep -Rq 'std::format\|#include <format>' work/source/FitdLib/room.cpp work/source/FitdLib/floor.cpp work/source/FitdLib/config.h; then
+    echo "ERROR: remaining unsupported C++20 <format> in FITD engine" >&2
+    exit 5
+  fi
   python3 -m py_compile v2/prepare_release_arm64.py
   python3 v2/prepare_release_arm64.py work/source
   grep -Fq 'R36S_RELEASE_TIMEBASE' work/source/FitdLib/osystemSDL.cpp
