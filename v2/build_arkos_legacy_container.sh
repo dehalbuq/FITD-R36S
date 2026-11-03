@@ -30,6 +30,8 @@ apt-get -y --no-install-recommends install \
 # CMake wheel WITHOUT upgrading glibc, libstdc++ or Debian runtime packages.
 python3 -m pip install --no-cache-dir 'pip==23.3.2'
 python3 -m pip install --no-cache-dir 'cmake==3.27.9'
+# Debian Buster Pillow is too old for font.getlength()/baseline anchor.
+python3 -m pip install --no-cache-dir 'Pillow==9.5.0'
 export PATH="/usr/local/bin:$PATH"
 export CC=/usr/bin/gcc-8
 export CXX=/usr/bin/g++-8
