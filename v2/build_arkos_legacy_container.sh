@@ -13,6 +13,9 @@ printf '%s\n' \
 rm -f /etc/apt/sources.list.d/*.list
 apt-get -o Acquire::Check-Valid-Until=false update
 apt-cache policy libc6 libc6-dev gcc-8-base gcc-8 g++-8 libgcc-8-dev libstdc++-8-dev libstdc++6 libudev1 || true
+# Debian's EOL container has libc6 u3, while the archived libc6-dev is u1.
+# Align them ONLY inside this disposable build container; never on handhelds.
+apt-get -y --allow-downgrades --no-install-recommends install   libc6=2.28-10+deb10u1
 apt-get -y --no-install-recommends -o Debug::pkgProblemResolver=yes install   libc6-dev libstdc++-8-dev gcc-8 g++-8
 apt-get -y --no-install-recommends install \
   ca-certificates git python3 python3-pil python3-pip fonts-dejavu-core \
