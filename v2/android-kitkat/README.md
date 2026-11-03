@@ -142,3 +142,47 @@ públicos. O projeto Linux/PortMaster publicado não foi alterado.
 - Validar cena inicial, ações, áudio, saída e salvamento, com logs específicos.
 
 A fase de gameplay **ainda não foi compilada nem validada** neste marco.
+
+
+## Teste 06 — renderização de câmeras reais em OpenGL ES 2.0
+
+**Código:** `v2/android-kitkat/engine-scene/fitd_scene_preview.cpp` e CMakeLists.
+**CI:** `.github/workflows/android-armv7-engine-scene.yml`.
+**Objetivo:** primeira imagem **real** do jogo, antes do gameplay completo.
+O workflow compila SDL2 e os módulos FITD originais `pak.cpp`,
+`unpack.cpp` e `cosTable.cpp` em `libmain.so` ARMv7 API19, sem SDL3.
+
+Na execução:
+
+1. Obtém os recursos originais instalados na pasta privada do aplicativo;
+2. Usa a rotina original `loadPak()` para ler `CAMERA00.PAK` ou uma câmera
+   disponível dos arquivos `CAMERA01..07.PAK`;
+3. Usa `ITD_RESS.PAK`, entrada 3, como paleta do AITD1, segundo
+   `FitdLib/main.cpp::loadPalette()`;
+4. Converte a imagem indexada de 320×200 para uma textura RGBA no GLES2;
+5. Renderiza uma viewport **4:3 com barras pretas** quando necessário,
+   preservando o aspecto de exibição DOS;
+6. Permite percorrer câmeras pelo direcional/analógico do gamepad físico
+   (sem priorizar `gpio_ir_recv`), e pisos pelos ombros L/R.
+
+**Comandos de pré-visualização:** esquerda/direita percorre câmeras;
+A avança, X retrocede; L1/R1 muda piso `CAMERA00..07`;
+B ou START encerra. Setas do teclado e PageUp/PageDown também funcionam.
+
+**Limitações declaradas:** esta é uma pré-visualização de cenários,
+não uma inicialização de gameplay (sem personagens, eventos, áudio,
+colisões ou salvamentos). O Android ainda não executa `FitdMain`
+nem o renderizador completo de polígonos; a prévia usa o parser original,
+mas um backend GLES2 simples para as imagens dos cenários.
+CI comprova compilação / formato da biblioteca, não o resultado visual
+até a execução no hardware.
+
+**Dados comerciais:** não são publicados no GitHub nem nos artefatos CI.
+A versão de teste privada utiliza apenas os arquivos enviados pelo usuário.
+Uma nova assinatura de APK pode requerer desinstalação do Teste 05; isso
+remove dados privados dessa instalação. Não instalar sobre versões
+com saves sem backup. A Release Linux do R36S permanece separada.
+
+**Próximo marco:** implementar inicialização efetiva da simulação
+(`FitdMain`), adaptar a camada SDL3 do upstream para SDL2 e desenvolver
+o backend de personagens/objetos em GLES2, com FPS sem acelerar a lógica.
