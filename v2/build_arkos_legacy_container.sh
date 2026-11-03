@@ -12,14 +12,15 @@ printf '%s\n' \
   > /etc/apt/sources.list
 rm -f /etc/apt/sources.list.d/*.list
 apt-get -o Acquire::Check-Valid-Until=false update
+apt-cache policy gcc-8 g++-8 libstdc++-8-dev libstdc++6 libudev1 || true
 apt-get -y --no-install-recommends install \
   ca-certificates git python3 python3-pil python3-pip fonts-dejavu-core \
   gcc-8 g++-8 make pkg-config ninja-build zip unzip file binutils \
-  libasound2-dev libpulse-dev libjack-jackd2-dev \
+  libasound2-dev \
   libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev \
   libxi-dev libxss-dev libxtst-dev libxkbcommon-dev libdrm-dev \
   libgbm-dev libgl1-mesa-dev libgles2-mesa-dev libegl1-mesa-dev \
-  libdbus-1-dev libudev-dev libwayland-dev
+  libdbus-1-dev libwayland-dev
 
 # System CMake in Debian 10 is too old for modern SDL3; install a pinned
 # CMake wheel WITHOUT upgrading glibc, libstdc++ or Debian runtime packages.
