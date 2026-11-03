@@ -1,0 +1,77 @@
+name: FITD R36S v1.0.0 dual ARM64 PortMaster release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["release/r36s-aarch64-safe-20261101"]
+    paths:
+      - ".github/workflows/fitd-r36s-dual-arm64-release.yml"
+      - "v2/assemble_dual_arm64_release.py"
+      - "v2/test_arm64_launcher_selection.sh"
+      - "v2/port/FITD-R36S-ARM64-RELEASE.sh"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  package-dual-arm64:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout release scripts
+        uses: actions/checkout@v4
+
+      - name: Download dArkOSRE ARM64 artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p work/input-modern
+          gh run download 41561105602 --repo "$GITHUB_REPOSITORY" \
+            --name FITD-R36S-AARCH64-RELEASE-RK3326-60FPS-NO-DEBUG \
+            --dir work/input-modern
+          test -s work/input-modern/fitdr36s.zip
+
+      - name: Download ArkOS4Clone legacy ARM64 artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p work/input-legacy
+          gh run download 41562095088 --repo "$GITHUB_REPOSITORY" \
+            --name FITD-R36S-ARM64-GLIBC230-ARKOSCLONE-TEST \
+            --dir work/input-legacy
+          test -s work/input-legacy/fitd-arkos4clone-arm64-legacy-test.zip
+
+      - name: Validate launcher routing and scripts
+        run: |
+          set -euo pipefail
+          bash -n v2/port/FITD-R36S-ARM64-RELEASE.sh
+          python3 -m py_compile v2/assemble_dual_arm64_release.py v2/audit_arm64_abi.py
+          bash v2/test_arm64_launcher_selection.sh
+
+      - name: Assemble dual firmware release
+        run: |
+          set -euo pipefail
+          python3 v2/assemble_dual_arm64_release.py \
+            --modern work/input-modern/fitdr36s.zip \
+            --legacy work/input-legacy/fitd-arkos4clone-arm64-legacy-test.zip \
+            --launcher v2/port/FITD-R36S-ARM64-RELEASE.sh \
+            --out work/final
+          mkdir -p work/check
+          unzip -q work/final/FITD-R36S-v1.0.0-ARM64-PortMaster.zip -d work/check
+          python3 v2/audit_arm64_abi.py --max-glibc 2.30 --max-glibcxx 3.4.28 \
+            work/check/fitdr36s/fitd.glibc230.aarch64 work/check/fitdr36s/libs.glibc230
+          (cd work/final && sha256sum -c SHA256SUMS.txt)
+          unzip -t work/final/FITD-R36S-v1.0.0-ARM64-PortMaster.zip | tail -n 2
+
+      - name: Upload unified ARM64 ZIP and checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: FITD-R36S-v1.0.0-ARM64-PortMaster
+          path: |
+            work/final/FITD-R36S-v1.0.0-ARM64-PortMaster.zip
+            work/final/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 90
