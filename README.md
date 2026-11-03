@@ -1,5 +1,21 @@
 # FITD-R36S — Alone in the Dark (1992) no R36S
 
+> **Novidade — FITD-R36S v1.0.0 ARM64 (dArkOSRE + ArkOS4Clone):** dois executáveis ARM64 em um único PortMaster ZIP, com seleção automática por glibc. A variante ArkOS4Clone (glibc 2.30) iniciou no console do portador; builds de ambos os firmwares passaram no GitHub Actions. O pacote unificado e o conjunto de testes de regressão ainda precisam ser validados antes da publicação como estável final. [Workflow para baixar o ZIP](https://github.com/dehalbuq/FITD-R36S/actions/workflows/fitd-r36s-dual-arm64-release.yml) · [Tutorial de publicação](https://github.com/dehalbuq/FITD-R36S/blob/release/r36s-aarch64-safe-20261101/v2/PUBLISH_V1.0.0_GITHUB.md) · [Notas da Release](https://github.com/dehalbuq/FITD-R36S/blob/release/r36s-aarch64-safe-20261101/v2/RELEASE_NOTES_V1.0.0.md).
+
+## ARM64 v1.0.0: compatibilidade dupla
+
+| Firmware | Binário selecionado | Requisito ABI | Evidência |
+|---|---|---|---|
+| **dArkOSRE** | `fitd.aarch64` + `libs.aarch64/` | base Ubuntu 22.04, glibc até 2.35 | build GitHub Actions verde e testes anteriores no hardware |
+| **ArkOS4Clone** | `fitd.glibc230.aarch64` + `libs.glibc230/` | símbolos GLIBC do executável até 2.27; firmware glibc 2.30 | build GitHub Actions verde + inicialização confirmada pelo portador |
+
+O launcher utiliza `getconf GNU_LIBC_VERSION` para selecionar a variante. Os dados originais do jogo não acompanham o pacote. Faça backup dos arquivos `SAVE*.ITD` e da pasta `data/` antes de atualizar. O pacote usa **ARM64 / OpenGL ES 3.0** e não garante suporte a ARMHF ou GLES 2.0.
+
+**Instalação:** extraia `FITD-R36S-v1.0.0-ARM64-PortMaster.zip` na pasta `/roms/ports/`; adicione os arquivos do jogo original em `fitdr36s/data/`; abra `FITD-R36S-ARM64.sh` no menu Ports. Não substitua a glibc, a EGL ou os drivers GPU do firmware. A versão ARMHF anterior permanece na branch `main`.
+
+**Status:** a inicialização no ArkOS4Clone foi confirmada, mas o pacote unificado e a campanha completa ainda necessitam testes físicos. O projeto não é uma Release oficial do catálogo PortMaster.
+
+
 **Port comunitário do motor aberto FITD para Linux ARM64, com compatibilidade confirmada de inicialização em ArkOS4Clone e histórico de testes no dArkOSRE.** Esta é a base da primeira versão unificada **v1.0.0**.
 
 > **Este projeto NÃO distribui o jogo original.** Para jogar, você precisa de uma cópia adquirida legalmente de *Alone in the Dark* (1992) e fornecer os arquivos originais. O port não tem vínculo ou aprovação dos titulares do jogo nem é, por si só, um lançamento oficial do catálogo PortMaster.
