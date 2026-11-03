@@ -4,7 +4,15 @@ on:
   push:
     branches: [main, "port/fitd-yaz0r-aarch64", "debug/audio-door-room-crash-20261027", "debug/library-room-crash-20261028", "debug/throw-null-body-20261028", "debug/ball-enemies-hit-shake-20261028", "debug/worm-camera-orb-audio-20261028", "fix/orb-hit-object-rehaunted-20261028", "fix/cellar-revolver-inventory-spawn-20261029", "fix/rehaunted-mask-reptile-diagnostic-20261030", "debug/cellar-barrels-stuck-20261030", "fix/cellar-wall-readable-font-20261030", "fix/female-graphics-mask-isolation-20261031", "feat/startup-credits-legal-splash-20261031", "release/r36s-aarch64-safe-20261101"]
     paths:
-      - "v2/**"
+      - "v2/build_arm64.sh"
+      - "v2/patch_*.py"
+      - "v2/gen_readable_font.py"
+      - "v2/generate_startup_splash.py"
+      - "v2/prepare_release_arm64.py"
+      - "v2/port/**"
+      - "v2/package_portmaster_release.py"
+      - "v2/test_*.sh"
+      - "v2/test_*.py"
       - ".github/workflows/fitd-r36s-arm64.yml"
   workflow_dispatch:
 
