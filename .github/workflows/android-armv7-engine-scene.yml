@@ -1,0 +1,155 @@
+name: Android ARMv7 API19 real FITD camera scenes GLES2
+
+on:
+  push:
+    branches: ["port/android-kitkat-api19"]
+    paths:
+      - "v2/android-kitkat/engine-scene/**"
+      - ".github/workflows/android-armv7-engine-scene.yml"
+      - "v2/android-kitkat/fitd_gamepad_select_sdl2.h"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fitd-camera-scene-api19:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Install API19 toolchain
+        run: |
+          set -euo pipefail
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install \
+            "ndk;23.2.8568313" "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Fetch pinned upstream FITD core source
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/fitd-upstream
+          git -C /tmp/fitd-upstream init
+          git -C /tmp/fitd-upstream remote add origin https://github.com/yaz0r/FITD.git
+          git -C /tmp/fitd-upstream fetch --depth=1 origin 543e22bc78b64405537ae545ecd382dcdf2c12b2
+          git -C /tmp/fitd-upstream checkout --detach FETCH_HEAD
+          test -s /tmp/fitd-upstream/FitdLib/unpack.cpp
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("/tmp/fitd-upstream/FitdLib/config.h")
+          s=p.read_text()
+          old="#include <format>"
+          assert s.count(old)==1
+          # NDK r23c API19 cannot compile the upstream std::format header.
+          # The selected original core files do not call std::format.
+          s=s.replace(old,"#ifndef __ANDROID__\n#include <format>\n#endif")
+          s+="\n#ifdef __ANDROID__\n#undef FITD_DEBUGGER\n#undef USE_IMGUI\n#endif\n"
+          p.write_text(s)
+          PY
+
+      - name: Build SDL2 ARMv7 API19
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch release-2.30.12 https://github.com/libsdl-org/SDL.git /tmp/SDL2
+          cmake -S /tmp/SDL2 -B /tmp/sdl2-build -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/23.2.8568313/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-19 \
+            -DANDROID_STL=c++_static -DCMAKE_BUILD_TYPE=Release \
+            -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TEST=OFF -DSDL_TESTS=OFF
+          cmake --build /tmp/sdl2-build --target SDL2 --parallel 2
+
+      - name: Compile real camera PAK renderer for GLES2
+        run: |
+          set -euo pipefail
+          cmake -S v2/android-kitkat/engine-scene -B /tmp/fitd-engine-core-build -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/23.2.8568313/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-19 \
+            -DANDROID_STL=c++_static -DCMAKE_BUILD_TYPE=Release \
+            -DSDL2_ROOT=/tmp/sdl2-build -DSDL2_INCLUDE_DIR=/tmp/SDL2/include \
+            -DFITD_UPSTREAM_DIR=/tmp/fitd-upstream
+          cmake --build /tmp/fitd-engine-core-build --target main --parallel 2
+          test -s /tmp/fitd-engine-core-build/libmain.so
+          "$ANDROID_HOME/ndk/23.2.8568313/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" \
+            -h /tmp/fitd-engine-core-build/libmain.so | tee /tmp/fitd-scene-elf.txt
+          grep -q 'Class: *ELF32' /tmp/fitd-scene-elf.txt
+          grep -q 'Machine: *ARM' /tmp/fitd-scene-elf.txt
+          "$ANDROID_HOME/ndk/23.2.8568313/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm" \
+            -C /tmp/fitd-engine-core-build/libmain.so | grep -E 'PAK_deflate|PAK_getNumFiles|loadPak'
+
+      - name: Package separate test Android APK
+        run: |
+          set -euo pipefail
+          mkdir -p work
+          cp -a v2/android-kitkat/android work/fitd-core-android
+          mkdir -p work/fitd-core-android/app/src/main/java
+          mkdir -p work/fitd-core-android/app/src/main/jniLibs/armeabi-v7a
+          cp -a /tmp/SDL2/android-project/app/src/main/java/. work/fitd-core-android/app/src/main/java/
+          cp v2/android-kitkat/engine-core/FITDGameDataActivity.java \
+            work/fitd-core-android/app/src/main/java/org/libsdl/app/
+          cp /tmp/sdl2-build/libSDL2.so work/fitd-core-android/app/src/main/jniLibs/armeabi-v7a/
+          cp /tmp/fitd-engine-core-build/libmain.so work/fitd-core-android/app/src/main/jniLibs/armeabi-v7a/
+          python3 - <<'PY'
+          from pathlib import Path
+          app=Path("work/fitd-core-android/app")
+          gradle=app/"build.gradle"
+          s=gradle.read_text()
+          assert s.count("io.github.dehalbuq.fitdkitkatprobe")==1
+          s=s.replace("io.github.dehalbuq.fitdkitkatprobe","io.github.dehalbuq.fitdcameratest")
+          s=s.replace("versionName '0.1'","versionName '0.3.0-camera-preview'")
+          gradle.write_text(s)
+          manifest=app/"src/main/AndroidManifest.xml"
+          m=manifest.read_text()
+          old_name='android:name="org.libsdl.app.SDLActivity"'
+          assert m.count(old_name)==1
+          m=m.replace(old_name,'android:name="org.libsdl.app.FITDGameDataActivity"',1)
+          old_end='        </activity>\n    </application>'
+          assert m.count(old_end)==1
+          m=m.replace(old_end,
+              '        </activity>\n'
+              '        <activity android:name="org.libsdl.app.SDLActivity"\n'
+              '            android:exported="false" android:screenOrientation="landscape"\n'
+              '            android:configChanges="layoutDirection|locale|orientation|uiMode|screenLayout|screenSize|smallestScreenSize|keyboard|keyboardHidden|navigation" />\n'
+              '    </application>')
+          manifest.write_text(m)
+          label=app/"src/main/res/values/strings.xml"
+          label.write_text(label.read_text().replace("FITD GLES2 Test","FITD Real Camera Test 06"))
+          PY
+
+      - name: Assemble installable APK
+        run: |
+          set -euo pipefail
+          curl -fsSL https://services.gradle.org/distributions/gradle-8.1.1-bin.zip -o /tmp/gradle-8.1.1-bin.zip
+          unzip -q /tmp/gradle-8.1.1-bin.zip -d /tmp
+          (cd work/fitd-core-android && /tmp/gradle-8.1.1/bin/gradle --no-daemon --stacktrace :app:assembleDebug)
+          mkdir -p dist
+          cp work/fitd-core-android/app/build/outputs/apk/debug/app-debug.apk \
+            dist/FITD-Android-ARMv7-GLES2-REAL-CAMERA-TEST06.apk
+
+      - name: Verify ABI, Android 4.4 minimum, GLES2 and genuine engine code
+        run: |
+          set -euo pipefail
+          APK=dist/FITD-Android-ARMv7-GLES2-REAL-CAMERA-TEST06.apk
+          "$ANDROID_HOME/build-tools/34.0.0/aapt" dump badging "$APK" | tee /tmp/core-apk-badging.txt
+          grep -Fq "sdkVersion:'19'" /tmp/core-apk-badging.txt
+          grep -Eq "uses-gl-es: '0x0*20000'" /tmp/core-apk-badging.txt
+          grep -Fq "native-code: 'armeabi-v7a'" /tmp/core-apk-badging.txt
+          unzip -Z1 "$APK" | tee /tmp/core-apk-entries.txt
+          grep -Fq "lib/armeabi-v7a/libmain.so" /tmp/core-apk-entries.txt
+          grep -Fq "lib/armeabi-v7a/libSDL2.so" /tmp/core-apk-entries.txt
+          if grep -Ei '\.(pak|itd)$' /tmp/core-apk-entries.txt; then
+            echo 'Game data must not be packaged' >&2
+            exit 43
+          fi
+          sha256sum "$APK" > dist/SHA256SUMS.txt
+
+      - name: Upload first real 320x200 FITD camera preview GLES2 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: FITD-ANDROID-ARMV7-API19-REAL-CAMERA-TEST06
+          path: |
+            dist/FITD-Android-ARMv7-GLES2-REAL-CAMERA-TEST06.apk
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
