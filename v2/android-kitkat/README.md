@@ -75,3 +75,44 @@ O usuário confirmou que o diagnóstico moveu o triângulo e mudou sua cor. O re
 - Firmware declara release '12' e SDK 27, metadados conflitantes (API27 = Android 8.1).
 
 **Causa do bug:** o teste inicial abria o primeiro SDL GameController: era o controle remoto infravermelho, não o iPega. O diagnóstico percorreu todos os dispositivos e funcionou. O helper `fitd_gamepad_select_sdl2.h` agora prioriza controles físicos e ignora entradas IR/virtuais conhecidas; integrado ao teste GLES2 e pronto para adaptação ao motor FITD. Ainda requer validação no dispositivo e em outros controles.
+
+
+## Teste 04 — núcleo original do FITD confirmado no Chanuo A1
+
+O usuário confirmou que o APK ARMv7 API19 com os módulos originais
+`FitdLib/unpack.cpp`, `pak.cpp` e `cosTable.cpp` abriu e respondeu
+aos comandos no projetor Chanuo A1. O teste gráfico chama primeiro
+`fitd_android_core_selftest()`: valida diretório privado, tabela matemática,
+PAK inexistente e descompressão DEFLATE com um bloco artificial sem dados
+comerciais. Isto **não** significa que o gameplay foi executado.
+
+## Teste 05 — seleção de dados locais, parser PAK e controles
+
+Workflow: `.github/workflows/android-armv7-game-data.yml`.
+APK: `FITD-Android-ARMv7-GAME-DATA-API19-TEST.apk`.
+Pacote distinto: `io.github.dehalbuq.fitdandroidassets`.
+
+Este APK mantém SDL2, API19, GPU GLES2, e o seletor de iPega físico para evitar
+o controle remoto IR que ocupa a primeira entrada do SDL. Foi acrescentada uma
+tela Java antes do teste nativo, com duas maneiras de importar dados originais:
+
+- **Android 5.0 ou superior:** escolher uma pasta inteira via Document Tree,
+  com botão de seleção manual de múltiplos arquivos como alternativa;
+- **Android 4.4:** selecionar múltiplos documentos com
+  `ACTION_OPEN_DOCUMENT`, disponível desde API19.
+
+A importação copia arquivos reconhecidos `.PAK`, `.ITD`, `.TAT`,
+`.CC1`, `.BBS`, `.COM` e `.BIN` para `getFilesDir()`,
+sem internet ou privilégios de root, ignorando `SAVE*.ITD`. A verificação
+nativa lê os arquivos `LISTBOD2.PAK` e `LISTBODY.PAK`, valida
+pré-requisitos de cabeçalho e invoca o **leitor original**
+`PAK_getNumFiles()`; arquivos opcionais também são examinados.
+O triângulo é **azulado/ciano** quando os dados passaram no teste e o
+botão A continua tornando-o avermelhado. Logs usam a marca
+`FITD-GAME-DATA:`.
+
+**Importante:** ainda não há motor completo jogável neste APK. Falta
+compilar e migrar vídeo bgfx/shaders e ciclo de jogo SDL3 para SDL2/GLES2,
+além do áudio, transições, salvamento e controles do gameplay. A aprovação
+do CI não comprova leitura correta de PAK comercial até testada no aparelho.
+Nenhum arquivo comercial é incluído no artefato.
