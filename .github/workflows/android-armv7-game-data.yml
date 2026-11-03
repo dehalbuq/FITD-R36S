@@ -80,18 +80,18 @@ jobs:
              '    }\n'
              +needle)
           # Test 05: after engine core selftest, inspect actual imported data.
-          s='extern "C" int fitd_android_game_data_probe();\\n'+s
+          s='extern "C" int fitd_android_game_data_probe();\n'+s
           data_anchor="    SDL_GameControllerEventState(SDL_ENABLE);"
           assert s.count(data_anchor)==1
           s=s.replace(data_anchor,
-             '    const int dataResult = fitd_android_game_data_probe();\\n'
-             '    SDL_Log("FITD-GAME-DATA: native verification result=%d", dataResult);\\n'
+             '    const int dataResult = fitd_android_game_data_probe();\n'
+             '    SDL_Log("FITD-GAME-DATA: native verification result=%d", dataResult);\n'
              +data_anchor)
-          old_color=('        glUniform3f(uColor, pressed ? 0.95f : 0.15f,\\n'
+          old_color=('        glUniform3f(uColor, pressed ? 0.95f : 0.15f,\n'
                      '                            pressed ? 0.25f : 0.7f, 0.35f);')
           assert s.count(old_color)==1, 'Unable to locate triangle color expression'
-          new_color=('        glUniform3f(uColor, pressed ? 0.95f : 0.10f,\\n'
-                     '                            pressed ? 0.25f : 0.72f,\\n'
+          new_color=('        glUniform3f(uColor, pressed ? 0.95f : 0.10f,\n'
+                     '                            pressed ? 0.25f : 0.72f,\n'
                      '                            dataResult > 0 ? 0.88f : 0.12f);')
           s=s.replace(old_color,new_color)
           Path("/tmp/fitd-engine-core-build/fitd_engine_probe.cpp").write_text(s)
