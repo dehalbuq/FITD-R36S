@@ -1,0 +1,54 @@
+name: FITD R36S ARM64 legacy ABI test (ArkOS4Clone)
+
+on:
+  push:
+    branches: ["release/r36s-aarch64-safe-20261101"]
+    paths:
+      - "v2/build_arkos_legacy_container.sh"
+      - "v2/audit_arm64_abi.py"
+      - ".github/workflows/fitd-arkos4clone-arm64-legacy.yml"
+  workflow_dispatch:
+
+jobs:
+  build-legacy-aarch64:
+    runs-on: ubuntu-22.04-arm
+    timeout-minutes: 150
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout FITD port scripts
+        uses: actions/checkout@v4
+
+      - name: Check scripts, preserve dArkOSRE pipeline
+        run: |
+          bash -n v2/build_arkos_legacy_container.sh
+          bash -n v2/build_arm64.sh
+          python3 -m py_compile v2/audit_arm64_abi.py
+          test -f .github/workflows/fitd-r36s-arm64.yml
+
+      - name: Build legacy ARM64 binary using Debian 10 glibc 2.28
+        run: |
+          docker run --rm --platform linux/arm64 \
+            -v "$GITHUB_WORKSPACE:/workspace" \
+            -w /workspace \
+            debian:buster \
+            bash v2/build_arkos_legacy_container.sh
+
+      - name: Verify exact firmware ABI and ZIP
+        run: |
+          set -euo pipefail
+          python3 v2/audit_arm64_abi.py \
+            --max-glibc 2.30 --max-glibcxx 3.4.28 \
+            work/arkos-legacy/fitd.aarch64 \
+            work/arkos-legacy/libs.aarch64
+          unzip -t work/fitd-arkos4clone-arm64-legacy-test.zip
+          ( cd work && sha256sum fitd-arkos4clone-arm64-legacy-test.zip > legacy-SHA256SUMS.txt )
+
+      - name: Upload experimental ARM64 legacy ABI test (not PortMaster release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: FITD-R36S-ARM64-GLIBC230-ARKOSCLONE-TEST
+          path: |
+            work/fitd-arkos4clone-arm64-legacy-test.zip
+            work/legacy-SHA256SUMS.txt
+          if-no-files-found: error
