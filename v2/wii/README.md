@@ -112,3 +112,27 @@ na integração completa do motor.
 Não contém arquivos comerciais do Alone in the Dark.
 Use arquivos de sua cópia legitimamente adquirida.
 Nintendo não é afiliada ao projeto.
+
+
+## Teste 03.1 — correção do diagnóstico no cartão SD
+
+Esta revisão não modifica a renderização dos modelos BODY.
+Ela melhora a gravação do log quando o Homebrew fecha:
+
+- A primeira tela exibe DIAGNOSTIC LOG: e o caminho usado; a criação
+  do arquivo é testada antes de entrar no GX.
+- Caminho prioritário: SD:/fitd-wii-test03-diagnostic.txt, na RAIZ do SD.
+- Em caso de erro na raiz, o programa tenta:
+  SD:/apps/fitd-wii/wii-diagnostic.txt.
+- A cada 300 quadros (aproximadamente 5 segundos), o log é fechado e
+  reaberto, para atualizar o arquivo no FAT antes de qualquer saída abrupta.
+- Ao sair normalmente, o aplicativo também tenta copiar o log da raiz
+  para a pasta apps/fitd-wii, mantendo a versão original caso falhe.
+- Se SD permitir ler os PAKs mas não permitir gravar, a tela inicial
+  mostra WARNING: DIAGNOSTIC NOT SAVED (errno=...).
+  Verifique proteção de gravação e espaço livre.
+
+Para testar, abra o app, verifique a mensagem SD write test: PASS,
+pressione A, alterne alguns modelos, saia com HOME e envie o arquivo
+encontrado em um dos caminhos acima. A prévia BODY permanece idêntica
+à do Teste 03.
