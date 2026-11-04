@@ -1,8 +1,8 @@
-name: FITD Android API19 REAL GAME link and APK experiment
+name: FITD Android ARMv7 TEST10 60Hz GLES2 experimental
 
 on:
   push:
-    branches: ["port/android-kitkat-api19"]
+    branches: ["port/android-kitkat-api19", "fix/android-armv7-test10-60fps-gles2"]
     paths:
       - "v2/android-kitkat/engine-runtime/**"
       - ".github/workflows/android-armv7-fitdmain-link.yml"
@@ -117,7 +117,7 @@ jobs:
           old="io.github.dehalbuq.fitdkitkatprobe"
           assert s.count(old)==1
           s=s.replace(old,"io.github.dehalbuq.fitdrealgameexperiment")
-          s=s.replace("versionName '0.1'","versionName '0.8.0-experimental-realengine'")
+          s=s.replace("versionName '0.1'","versionName '0.10.0-test10-60hz-gles2'")
           gradle.write_text(s)
           m=app/"src/main/AndroidManifest.xml"
           v=m.read_text()
@@ -134,13 +134,13 @@ jobs:
             '    </application>')
           m.write_text(v)
           label=app/"src/main/res/values/strings.xml"
-          label.write_text(label.read_text().replace("FITD GLES2 Test","FITD REAL GAME - EXPERIMENTAL"))
+          label.write_text(label.read_text().replace("FITD GLES2 Test","FITD Android TEST10"))
           PY
           curl -fsSL https://services.gradle.org/distributions/gradle-8.1.1-bin.zip -o /tmp/gradle.zip
           unzip -q /tmp/gradle.zip -d /tmp
           (cd work/fitd-realgame && /tmp/gradle-8.1.1/bin/gradle --no-daemon :app:assembleDebug)
           mkdir -p dist
-          cp work/fitd-realgame/app/build/outputs/apk/debug/app-debug.apk dist/FITD-Android-ARMv7-REAL-GAME-EXPERIMENTAL-API19.apk
+          cp work/fitd-realgame/app/build/outputs/apk/debug/app-debug.apk dist/FITD-Android-ARMv7-TEST10-60FPS-GLES2-API19.apk
 
       - name: Validate native executable and no proprietary data
         run: |
@@ -160,6 +160,6 @@ jobs:
       - name: Upload real engine experimental APK (no original game files)
         uses: actions/upload-artifact@v4
         with:
-          name: FITD-ANDROID-ARMV7-API19-REAL-FITDMAIN-EXPERIMENTAL-NO-ASSETS
+          name: FITD-ANDROID-ARMV7-TEST10-GLES2-NO-ASSETS
           path: dist/*
           if-no-files-found: error
