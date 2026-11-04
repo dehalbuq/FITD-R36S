@@ -82,3 +82,44 @@ target_compile_options(fitd_android_gameplay_core_objects PRIVATE
     -O2 -DNDEBUG -fno-strict-aliasing -fvisibility=hidden)
 target_compile_definitions(fitd_android_gameplay_core_objects PRIVATE
     FMT_HEADER_ONLY=1 BGFX_CONFIG_MULTITHREADED=0)
+
+
+# Phase 3: attempt a TRUE installable engine library. Uses the original
+# FitdMain/PlayWorld and all non-debug gameplay source modules with our GLES2
+# compatibility renderer instead of upstream BGFX/SDL3. Sound is deliberately
+# silent for this first boot prototype; never treat it as release-ready.
+if(FITD_LINK_REAL_ANDROID_GAME)
+    if(NOT SDL2_ROOT OR NOT EXISTS "${SDL2_ROOT}/libSDL2.so")
+        message(FATAL_ERROR "FITD_LINK_REAL_ANDROID_GAME requires SDL2_ROOT/libSDL2.so")
+    endif()
+    set(FITD_BOOT_SOURCES ${FITD_RUNTIME_ALL_SOURCES})
+    list(REMOVE_ITEM FITD_BOOT_SOURCES
+        "${FITD_UPSTREAM_DIR}/FitdLib/osystemAL.cpp")
+    add_library(main SHARED
+        ${FITD_BOOT_SOURCES}
+        fitd_sdl2_platform.cpp
+        fitd_sdl2_input.cpp
+        fitd_android_entry.cpp
+        fitd_gles2_renderer.cpp
+        fitd_audio_silent.cpp
+    )
+    target_compile_features(main PRIVATE cxx_std_17)
+    target_include_directories(main PRIVATE
+        "${FITD_UPSTREAM_DIR}/FitdLib"
+        "${SDL2_INCLUDE_DIR}"
+        "${FMT_INCLUDE_DIR}"
+        "${FITD_UPSTREAM_DIR}/ThirdParty/bgfx.cmake/bgfx/include"
+        "${FITD_UPSTREAM_DIR}/ThirdParty/bgfx.cmake/bx/include"
+        "${FITD_UPSTREAM_DIR}/ThirdParty/bgfx.cmake/bimg/include"
+        "${CMAKE_CURRENT_LIST_DIR}/.."
+        "${CMAKE_CURRENT_LIST_DIR}/../engine-gameplay"
+    )
+    target_compile_options(main PRIVATE
+        -O2 -DNDEBUG -fno-strict-aliasing -fvisibility=hidden)
+    target_compile_definitions(main PRIVATE
+        FMT_HEADER_ONLY=1 BGFX_CONFIG_MULTITHREADED=0)
+    target_link_libraries(main PRIVATE
+        "${SDL2_ROOT}/libSDL2.so"
+        GLESv2 EGL android log z)
+    target_link_options(main PRIVATE "-Wl,--no-undefined")
+endif()
