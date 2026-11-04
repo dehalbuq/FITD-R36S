@@ -305,3 +305,45 @@ o APK anterior: fazer backup de saves antes da desinstalacao.
 Proximo passo: teste real do boot no projetor, relato do que aparece na
 tela e inspecao do TXT do runtime; depois corrigir renderer, audio,
 controles e persistencia antes de considerar release.
+
+## Teste 08 no Chanuo A1 — feedback físico e log
+
+O usuário confirmou que o jogo verdadeiro abriu no projetor, mas relatou
+lentidão, inimigo preso, opção Abandonar inoperante, áudio ausente,
+geometria fora de posição, máscaras de oclusão não funcionando e app
+invisível na lista do launcher. O TXT recebido contém apenas 2 mensagens:
+registro do caminho do log e detecção dos arquivos de dados.
+
+Causas confirmadas no código Teste 08: compilação baseada em yaz0r/FITD
+sem as correções selecionadas de R36S; áudio propositalmente silenciado;
+funções osystem_createMask/osystem_drawMask vazias; menu mostra opção 6
+mas não possui case 6; launcher sem categoria LEANBACK_LAUNCHER.
+
+## Teste 09 — compilado; ainda não testado no Chanuo A1
+
+Compilação do motor real e APK sem dados:
+https://github.com/dehalbuq/FITD-R36S/actions/runs/41758236866
+Launcher Android TV alternativo, sem dados:
+https://github.com/dehalbuq/FITD-R36S/actions/runs/41758331387
+
+Correções incluídas:
+- patch_fitd_gameplay_api19.py: flag AF_SPECIAL|AF_ANIMATED;
+  menu Abandonar, 300 registros de save, gravação temporária atômica
+  e debounce dos samples 3/4 de portas;
+- Scripts originais de R36S reaplicados: patch_library_room_crash.py,
+  patch_throw_null_body.py, patch_hit_object_rehaunted.py e
+  patch_cellar_evalvar.py, sem os patches incompatíveis de SDL3, KMSDRM ou BGFX;
+- fitd_gles2_renderer.cpp agora usa máscaras originais de 320x200 para
+  restaurar pixels do fundo acima de polígonos 3D, ainda sem profundidade
+  perfeita, dither ou todos os efeitos de transparência;
+- fitd_sdl2_audio.cpp: saída SDL2 S16 de 44.1kHz com música original OPL
+  e efeitos PCM de LISTSAMP, limitada a 10 vozes;
+- Tempo: ticks lógicos de 40 ms com recuperação quando um quadro demora;
+- Diagnóstico: SDL_Log mais stdout/stderr no TXT;
+- Manifesto com LAUNCHER e LEANBACK_LAUNCHER e banner 320x180.
+
+Os 37 arquivos comerciais fornecidos pelo usuário são incorporados
+apenas em APK privado local e distribuídos dentro de ZIP. Nenhum dado
+comercial é publicado no GitHub. É experimental e não passou ainda pelo
+teste físico; nem todos os patches do port Linux foram automaticamente
+transferidos. O Teste 07 aprovado e a release R36S permanecem preservados.
