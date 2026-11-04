@@ -16,6 +16,7 @@
 #include <SDL_thread.h>
 #include <SDL_mutex.h>
 #include <atomic>
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -68,6 +69,15 @@ static void openRuntimeLog() {
         char path[512]={};
         snprintf(path,sizeof(path),"%s/fitd-test08-runtime.txt",root);
         externalRuntimeLog=fopen(path,"w");
+        if(externalRuntimeLog){
+            // Preserve upstream printf()/fprintf(stderr) checkpoints in TXT
+            // as well as SDL_Log, even across the native engine worker thread.
+            fflush(stdout);fflush(stderr);
+            dup2(fileno(externalRuntimeLog),STDOUT_FILENO);
+            dup2(fileno(externalRuntimeLog),STDERR_FILENO);
+            setvbuf(stdout,nullptr,_IONBF,0);
+            setvbuf(stderr,nullptr,_IONBF,0);
+        }
         SDL_LogSetOutputFunction(fitdRuntimeLogCallback,nullptr);
         SDL_LogSetAllPriority(SDL_LOG_PRIORITY_INFO);
         SDL_Log("FITD-RUNTIME: log_file=%s",path);
@@ -79,7 +89,7 @@ void osystem_delay(int time) {
 }
 void osystem_updateImage() {}
 
-extern "C" void Sound_Quit(void) {}
+// Sound_Quit is now implemented by the native SDL2 audio backend.
 void OPL_musicPlayer(void* context, Uint8* stream, int count) {
     musicUpdate(context,stream,count);
 }
@@ -225,7 +235,25 @@ u32 osystem_startOfFrame() {
     StartFrame();
     osystem_startFrame();
     bFirst=false;
-    return 1; // one logic step; no automatic frame skipping
+    // The original DOS engine uses a 40 ms logic clock (25 Hz). If one
+    // rendered frame takes longer than 40 ms, return enough logical ticks
+    // to maintain real-time animation speed, instead of slowing the game.
+    // Do not artificially accelerate when rendering faster than 25 Hz:
+    // FitdInit's UI-thread pacing retains the 40 ms clock minimum.
+    static Uint32 lastClock=0, remainder=0, sampled=0;
+    const Uint32 now=SDL_GetTicks();
+    if(lastClock==0)lastClock=now;
+    const Uint32 elapsed=now-lastClock;
+    lastClock=now;
+    remainder+=std::min(200u,elapsed);
+    u32 timeSteps=remainder/40u;
+    remainder%=40u;
+    if(timeSteps==0)timeSteps=1;
+    if(timeSteps>5)timeSteps=5;
+    if(++sampled%100u==0u)
+        SDL_Log("FITD-PERF: gameFrames=%u recentFrameMs=%u logicalTicks=%u",
+            sampled,elapsed,timeSteps);
+    return timeSteps;
 }
 void osystem_endOfFrame() {
     osystem_flushPendingPrimitives();
