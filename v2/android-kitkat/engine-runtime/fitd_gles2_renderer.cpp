@@ -125,6 +125,8 @@ static void updateViewport(){
 static void drawTexture(GLuint tex,const unsigned char* data,bool useAlpha) {
     if(!graphicsReady||!tex)return;
     rgbaFromIndexed(data,useAlpha);
+    // Always upload on texture unit zero; presentation may have used unit 1.
+    glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D,tex);
     glTexSubImage2D(GL_TEXTURE_2D,0,0,0,320,200,GL_RGBA,
                     GL_UNSIGNED_BYTE,converted.data());
