@@ -31,6 +31,7 @@ jobs:
           git -C /tmp/fitd-upstream fetch -q --depth=1 origin 543e22bc78b64405537ae545ecd382dcdf2c12b2
           git -C /tmp/fitd-upstream checkout -q --detach FETCH_HEAD
           git -C /tmp/fitd-upstream submodule update --init --recursive --depth 1 ThirdParty/bgfx.cmake
+          git -C /tmp/fitd-upstream submodule update --init --recursive --depth 1 ThirdParty/soloud.cmake/soloud
           git clone -q --depth 1 --branch release-2.30.12 https://github.com/libsdl-org/SDL.git /tmp/SDL2
           git clone -q --depth 1 --branch 10.2.1 https://github.com/fmtlib/fmt.git /tmp/fmt
           test -s /tmp/fitd-upstream/ThirdParty/bgfx.cmake/bgfx/include/bgfx/bgfx.h
@@ -70,11 +71,24 @@ jobs:
           grep -q 'fitd_sdl2_platform.cpp.o' /tmp/fitd-real-object-files.txt
           grep -q 'fitd_sdl2_input.cpp.o' /tmp/fitd-real-object-files.txt
           echo 'FITD-RUNTIME: original FitdMain and PlayWorld translation units compile on Android API19 ARMv7.'
+          echo 'FITD-RUNTIME: compiling all remaining original engine gameplay modules (excluding BGFX/SDL3/MP3)'
+          cmake --build /tmp/fitd-runtime-api19 --target fitd_android_gameplay_core_objects --parallel 2
+          find /tmp/fitd-runtime-api19/CMakeFiles/fitd_android_gameplay_core_objects.dir -name '*.o' \
+            -print | sort > /tmp/fitd-gameplay-core-object-files.txt
+          echo "Original game object count: $(wc -l < /tmp/fitd-gameplay-core-object-files.txt)"
+          grep -q '/anim.cpp.o' /tmp/fitd-gameplay-core-object-files.txt
+          grep -q '/renderer.cpp.o' /tmp/fitd-gameplay-core-object-files.txt
+          grep -q '/life.cpp.o' /tmp/fitd-gameplay-core-object-files.txt
+          grep -q '/save.cpp.o' /tmp/fitd-gameplay-core-object-files.txt
+          grep -q '/floor.cpp.o' /tmp/fitd-gameplay-core-object-files.txt
+          echo 'FITD-RUNTIME: original gameplay, actor, animation, life scripts, saves and floor sources compiled for ARMv7'
 
       - name: Upload compile audit without proprietary resources
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: FITD-ANDROID-ARMV7-FITDMAIN-COMPILE-AUDIT
-          path: /tmp/fitd-real-object-files.txt
+          path: |
+            /tmp/fitd-real-object-files.txt
+            /tmp/fitd-gameplay-core-object-files.txt
           if-no-files-found: ignore
