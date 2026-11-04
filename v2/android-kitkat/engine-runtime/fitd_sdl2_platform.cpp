@@ -61,7 +61,7 @@ static void openRuntimeLog() {
         snprintf(path,sizeof(path),"%s/fitd-test08-runtime.txt",root);
         externalRuntimeLog=fopen(path,"w");
         SDL_LogSetOutputFunction(fitdRuntimeLogCallback,nullptr);
-        SDL_SetLogPriorities(SDL_LOG_PRIORITY_INFO);
+        SDL_LogSetAllPriority(SDL_LOG_PRIORITY_INFO);
         SDL_Log("FITD-RUNTIME: log_file=%s",path);
     }
 }
