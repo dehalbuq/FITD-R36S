@@ -169,3 +169,79 @@ one("FitdLib/tatou.cpp",
     }
 #endif''',
     "port R36S repeated door sample filter")
+
+# Android TEST11: verify that the old single-slot save implementation actually
+# persisted its bytes before reporting success. This retains the proven
+# R36S atomic-write and 300-object fixes already installed above.
+p=root/"FitdLib/save.cpp"
+save=p.read_text()
+needle='''    SDL_Log("FITD-ANDROID: save complete slot=%d bytes=%ld",entry,savedBytes);'''
+replacement='''    FILE* check=fopen(buffer,"rb");
+    if(!check) {
+        SDL_Log("FITD-SAVE: ERROR cannot reopen %s after rename",buffer);
+        return 0;
+    }
+    const int seekStatus=fseek(check,0,SEEK_END);
+    const long verifiedSize=seekStatus==0?ftell(check):-1;
+    fclose(check);
+    if(verifiedSize!=savedBytes || verifiedSize<1024) {
+        SDL_Log("FITD-SAVE: ERROR mismatched length expected=%ld actual=%ld",
+                savedBytes,verifiedSize);
+        return 0;
+    }
+    SDL_Log("FITD-SAVE: VERIFIED slot=%d path=%s bytes=%ld",
+            entry,buffer,verifiedSize);'''
+assert save.count(needle)==1, "TEST11: save verification hook changed"
+save=save.replace(needle,replacement,1)
+needle='''int makeSave(int arg0)
+{
+    return(makeSaveFile(0));
+}'''
+replacement='''int makeSave(int arg0)
+{
+    // Original game has one autosave slot; avoid implying a slot selector.
+    SDL_Log("FITD-SAVE: request slot=0 current CWD is private app storage");
+    const int ok=makeSaveFile(0);
+    SDL_Log("FITD-SAVE: completed status=%d",ok);
+    return ok;
+}'''
+assert save.count(needle)==1, "TEST11: makeSave hook changed"
+save=save.replace(needle,replacement,1)
+needle='''    fHandle = fopen(buffer,"rb");
+
+    if(!fHandle)
+    {
+        return(0);
+    }'''
+replacement='''    fHandle = fopen(buffer,"rb");
+    if(!fHandle)
+    {
+        SDL_Log("FITD-SAVE: restore slot=%d not present: %s",saveNumber,buffer);
+        return 0;
+    }
+    SDL_Log("FITD-SAVE: restore opening slot=%d path=%s",saveNumber,buffer);'''
+assert save.count(needle)==1, "TEST11: loadSave opening hook changed"
+save=save.replace(needle,replacement,1)
+p.write_text(save)
+
+p=root/"FitdLib/systemMenu.cpp"
+menu=p.read_text()
+needle='''                    case 1: // save
+                        makeSave(45);
+                        break;'''
+replacement='''                    case 1: // save
+#ifdef FITD_R36S
+                        if(makeSave(45)) {
+                            SDL_Log("FITD-SAVE: menu save succeeded; returning to game");
+                            exitMenu=1;
+                        } else {
+                            SDL_Log("FITD-SAVE: menu save FAILED; check runtime log");
+                        }
+#else
+                        makeSave(45);
+#endif
+                        break;'''
+assert menu.count(needle)==1, "TEST11: system menu save item changed"
+menu=menu.replace(needle,replacement,1)
+p.write_text(menu)
+print("FITD-API19: TEST11 save create/read/verify and menu feedback guards")
