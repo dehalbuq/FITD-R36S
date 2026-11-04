@@ -69,6 +69,12 @@ int fitd_stage_camera(const FitdStage *stage,unsigned index,
                       FitdStageCamera *camera);
 int fitd_stage_raster_polygon(uint8_t *mask,size_t pixels,
                               const int16_t *xy,unsigned point_count);
+/* selected_mask=-1 composites every mask (old Test05 behavior).
+   selected_mask>=0 composites only that physical mask; out->masks
+   still reports the total original mask count for browsing. */
+int fitd_stage_masks_selected(const FitdStage *stage,unsigned camera_index,
+                              int room_index,int selected_mask,
+                              FitdStageMask *out,FILE *log);
 int fitd_stage_masks(const FitdStage *stage,unsigned camera_index,
                      int room_index,FitdStageMask *out,FILE *log);
 bool fitd_stage_collision_xz(const FitdStageRoom *room,
