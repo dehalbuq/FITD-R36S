@@ -5,6 +5,7 @@ on:
     branches: ["port/android-kitkat-api19"]
     paths:
       - "v2/android-kitkat/engine-scene/**"
+      - "v2/android-kitkat/engine-gameplay/**"
       - ".github/workflows/android-armv7-engine-scene.yml"
       - "v2/android-kitkat/fitd_gamepad_select_sdl2.h"
   workflow_dispatch:
