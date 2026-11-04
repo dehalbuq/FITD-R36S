@@ -28,6 +28,8 @@ struct Voice {
 };
 static std::vector<Voice> voices;
 static std::atomic<float> audioVolume{0.80f};
+static std::atomic<bool> musicEnabledAndroid{true};
+static std::atomic<bool> effectsEnabledAndroid{true};
 static bool initialized=false;
 
 static void SDLCALL audioCallback(void*,Uint8* stream,int bytes){
@@ -36,15 +38,17 @@ static void SDLCALL audioCallback(void*,Uint8* stream,int bytes){
     if(n<1||!initialized)return;
     // The original OPL emulator synthesizes the game's music at 44.1kHz.
     musicUpdate(nullptr,(uint8*)stream,n*(int)sizeof(int16_t));
+    const bool playMusic=musicEnabledAndroid.load(std::memory_order_relaxed);
+    const bool playEffects=effectsEnabledAndroid.load(std::memory_order_relaxed);
     int16_t* out=(int16_t*)stream;
     const float level=audioVolume.load(std::memory_order_relaxed);
     for(int i=0;i<n;i++){
-        float sample=(float)out[i]*level;
+        float sample=playMusic?(float)out[i]*level:0.f;
         for(Voice& v:voices){
             const size_t cursor=(size_t)v.position;
             if(cursor>=v.pcm.size())continue;
             const float sound=(float)((int)v.pcm[cursor]-128)*230.f;
-            sample+=sound*level;
+            if(playEffects)sample+=sound*level;
             v.position+=v.sampleStep;
         }
         if(sample>32767.f)sample=32767.f;
@@ -90,7 +94,7 @@ extern "C" void Sound_Quit(void){
     voices.clear();
 }
 void osystem_playSample(char* sample,int size){
-    if(!sample||size<34||!device)return;
+    if(!sample||size<34||!device || !effectsEnabledAndroid.load())return;
     if((uint8_t)sample[26]!=1)return;
     const unsigned hdr=(unsigned char)sample[26]|
         ((unsigned)(unsigned char)sample[27]<<8)|
@@ -121,3 +125,12 @@ int osystem_playTrack(int track){
 }
 void osystem_playAdlib(){}
 void osystemAL_adlib_Update(){}
+
+// Game menu toggles act on the actual OPL and PCM mixer, not just labels.
+// Use atomics: callback executes on a separate SDL audio thread.
+extern "C" void fitdAndroidSetAudioEnabled(int music,int effects){
+    musicEnabledAndroid.store(music!=0,std::memory_order_relaxed);
+    effectsEnabledAndroid.store(effects!=0,std::memory_order_relaxed);
+    SDL_Log("FITD-OPTIONS: music=%s effects=%s",
+            music?"ON":"OFF",effects?"ON":"OFF");
+}
