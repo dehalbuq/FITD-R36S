@@ -90,7 +90,7 @@ static void openRuntimeLog() {
     const char* root=SDL_AndroidGetExternalStoragePath();
     if(root && strlen(root)<440) {
         char path[512]={};
-        snprintf(path,sizeof(path),"%s/fitd-test12-runtime.txt",root);
+        snprintf(path,sizeof(path),"%s/fitd-test13-runtime.txt",root);
         externalRuntimeLog=fopen(path,"w");
         if(externalRuntimeLog){
             // Preserve upstream printf()/fprintf(stderr) checkpoints in TXT
@@ -133,8 +133,10 @@ static int SDLCALL fitdEngineThread(void*) {
         // The 60 Hz presentation cap is enforced by a monotonic clock, not
         // by requesting extra simulation ticks. Disable vsync where possible;
         // the physical display/driver can still impose its refresh rate.
-        if(SDL_GL_SetSwapInterval(0)!=0)
-            SDL_Log("FITD-PERF: swap interval 0 unavailable: %s",SDL_GetError());
+        const int swapStatus=SDL_GL_SetSwapInterval(0);
+        const int effectiveInterval=SDL_GL_GetSwapInterval();
+        SDL_Log("FITD-GPU: requested_vsync=OFF set_result=%d effective_swap_interval=%d error=%s",
+                swapStatus,effectiveInterval,swapStatus==0?"none":SDL_GetError());
         SDL_Log("FITD-RUNTIME: GL ES context ownership transferred to worker");
         engineWorkerResult.store(FitdMain(0,nullptr));
     }
@@ -180,6 +182,9 @@ int FitdInit(int argc,char* argv[]) {
         SDL_Log("FITD-RUNTIME: E_SEMAPHORE %s",SDL_GetError());
         SDL_Quit();return 13;
     }
+    // Android GLES is GPU-backed by EGL; request a hardware accelerated visual.
+    // Unlike SDL_Renderer, this app renders directly through GLES2.
+    SDL_GL_SetAttribute(SDL_GL_ACCELERATED_VISUAL,1);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,SDL_GL_CONTEXT_PROFILE_ES);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION,2);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION,0);
@@ -194,6 +199,11 @@ int FitdInit(int argc,char* argv[]) {
         SDL_Quit();return 14;
     }
     engineContext=SDL_GL_CreateContext(engineWindow);
+    if(!engineContext) {
+        SDL_Log("FITD-GPU: accelerated visual unavailable; retrying GLES2 default EGL config: %s",SDL_GetError());
+        SDL_GL_SetAttribute(SDL_GL_ACCELERATED_VISUAL,0);
+        engineContext=SDL_GL_CreateContext(engineWindow);
+    }
     if(!engineContext) {
         SDL_Log("FITD-RUNTIME: E_GLES2 %s",SDL_GetError());
         SDL_DestroyWindow(engineWindow);SDL_Quit();return 15;
@@ -273,17 +283,36 @@ u32 osystem_startOfFrame() {
     // 60 Hz while waiting for the next 40 ms GAME tick from the SDL UI thread.
     // A repeated frame is not an additional simulation update.
     const Uint32 waitStarted=SDL_GetTicks();
+    static uint32_t idleAttempts=0,idleSuccess=0,idleNoCache=0;
+    static Uint32 lastIdleReport=0;
     for(;;) {
         const int waitResult=SDL_SemWaitTimeout(startOfRender,2);
-        if(waitResult==0)break;
+        if(waitResult==0) {
+            const Uint32 now=SDL_GetTicks();
+            if(!lastIdleReport)lastIdleReport=now;
+            if(now-lastIdleReport>=5000u) {
+                SDL_Log("FITD-PERF: idle_present attempts=%u success=%u no_cache=%u last_wait_ms=%u",
+                        idleAttempts,idleSuccess,idleNoCache,now-waitStarted);
+                idleAttempts=idleSuccess=idleNoCache=0;
+                lastIdleReport=now;
+            }
+            break;
+        }
         if(waitResult!=SDL_MUTEX_TIMEDOUT || SDL_GetTicks()-waitStarted>30000u) {
             SDL_Log("FITD-RUNTIME: E_WAIT_FOR_FRAME %s",SDL_GetError());
             engineExitRequested.store(true);
             return 1;
         }
         if(engineExitRequested.load()) return 1;
-        if(presentationDue() && fitdAndroidPresentCachedFrame())
-            notePresentation();
+        if(presentationDue()) {
+            ++idleAttempts;
+            if(fitdAndroidPresentCachedFrame()) {
+                ++idleSuccess;
+                notePresentation();
+            } else {
+                ++idleNoCache;
+            }
+        }
     }
     StartFrame();
     osystem_startFrame();
