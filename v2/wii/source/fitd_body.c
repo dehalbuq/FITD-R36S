@@ -229,7 +229,7 @@ static void vertex(const FitdBody *b,uint16_t idx){
                      (float)v->y-b->center[1],
                      (float)v->z-b->center[2]);
 }
-void fitd_body_draw(const FitdBody *b,const Mtx view,const Mtx44 projection,
+void fitd_body_draw(const FitdBody *b,Mtx view,Mtx44 projection,
                     float yaw_deg,float px,float pz){
     if(!b || !b->valid || !b->vertex_count)return;
     GX_LoadProjectionMtx(projection,GX_PERSPECTIVE);
