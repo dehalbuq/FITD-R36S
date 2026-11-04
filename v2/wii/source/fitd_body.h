@@ -49,7 +49,7 @@ typedef struct {
 int fitd_body_parse(const uint8_t *src,size_t len,FitdBody *out);
 bool fitd_body_load(FitdBody *b,const char *directory,unsigned index,FILE *log);
 #ifndef FITD_HOST_TEST
-void fitd_body_draw(const FitdBody *b,const Mtx view,const Mtx44 projection,
+void fitd_body_draw(const FitdBody *b,Mtx view,Mtx44 projection,
                     float yaw_deg,float x,float z);
 #endif
 void fitd_body_release(FitdBody *b);
