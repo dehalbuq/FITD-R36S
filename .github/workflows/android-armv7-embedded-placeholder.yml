@@ -56,7 +56,42 @@ jobs:
           anchor='        </activity>\n    </application>'
           assert s.count(anchor)==1
           s=s.replace(anchor,'        </activity>\n        <activity android:name="org.libsdl.app.SDLActivity" android:exported="false" android:screenOrientation="landscape" android:configChanges="layoutDirection|locale|orientation|uiMode|screenLayout|screenSize|smallestScreenSize|keyboard|keyboardHidden|navigation" />\n    </application>')
+          # Make the application discoverable in both Android phone and
+          # Android TV/projector leanback launchers.
+          launcher='<category android:name="android.intent.category.LAUNCHER" />'
+          assert s.count(launcher)==1
+          s=s.replace(launcher,launcher+'\n                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />')
+          assert s.count('<application')==1
+          s=s.replace('<application','<uses-feature android:name="android.software.leanback" android:required="false" />\n    <application',1)
+          assert s.count('android:label="@string/app_name"')==1
+          s=s.replace('android:label="@string/app_name"','android:label="@string/app_name"\n        android:banner="@drawable/fitd_tv_banner"',1)
           m.write_text(s)
+          # Generate simple 320x180 banner entirely in stdlib, with no external
+          # image files, commercial assets or network image dependencies.
+          import struct,zlib
+          w,h=320,180
+          scan=[]
+          for y in range(h):
+              pix=bytearray()
+              for x in range(w):
+                  border=(8<=x<w-8 and 8<=y<h-8)
+                  band=(32<y<116 and 27<x<292)
+                  gold=(band and ((x//18+y//13)%7==0))
+                  if not border: color=(9,10,22)
+                  elif gold: color=(170,124,46)
+                  elif band: color=(30,39,70)
+                  else: color=(14,19,39)
+                  pix.extend((*color,255))
+              scan.append(b'\x00'+pix)
+          def chunk(tag,raw):
+              return struct.pack('>I',len(raw))+tag+raw+struct.pack('>I',zlib.crc32(tag+raw)&0xffffffff)
+          out=(b'\x89PNG\r\n\x1a\n'
+              +chunk(b'IHDR',struct.pack('>IIBBBBB',w,h,8,6,0,0,0))
+              +chunk(b'IDAT',zlib.compress(b''.join(scan),9))
+              +chunk(b'IEND',b''))
+          banner=app/'src/main/res/drawable-nodpi/fitd_tv_banner.png'
+          banner.parent.mkdir(parents=True,exist_ok=True)
+          banner.write_bytes(out)
           a=app/'src/main/assets'
           fake=bytes([0,0,0,0,12,0,0,0,8,0,0,0])
           names=['LISTBODY.PAK','LISTBOD2.PAK']
