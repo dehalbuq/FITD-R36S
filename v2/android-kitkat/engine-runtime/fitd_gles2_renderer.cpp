@@ -15,6 +15,8 @@
 #include <SDL.h>
 #include <SDL_opengles2.h>
 #include <vector>
+#include <map>
+#include <utility>
 #include <array>
 #include <algorithm>
 #include <cmath>
@@ -35,7 +37,9 @@ std::array<unsigned char,320*200> uiLayer={};
 
 namespace {
 static unsigned char palette[256*3]={};
-static GLuint texProg=0,polyProg=0,backgroundTexture=0,uiTexture=0;
+static GLuint texProg=0,polyProg=0,maskProg=0,backgroundTexture=0,uiTexture=0;
+static std::map<std::pair<int,int>,GLuint> maskTextures;
+static unsigned maskRendered=0;
 static GLuint quadVbo=0,triVbo=0;
 static int targetWidth=640,targetHeight=480,viewportW=640,viewportH=480;
 static int viewportX=0,viewportY=0;
@@ -159,9 +163,16 @@ static bool initGL(){
                    "varying vec4 col;void main(){col=color;gl_Position=vec4(p,0.,1.);}";
     const char* pF="precision mediump float;varying vec4 col;"
                    "void main(){gl_FragColor=col;}";
+    const char* maskF=
+        "precision mediump float;varying vec2 t;"
+        "uniform sampler2D maskTex;uniform sampler2D bgTex;"
+        "void main(){float visible=texture2D(maskTex,t).r;"
+        "if(visible<0.001)discard;"
+        "gl_FragColor=texture2D(bgTex,t);}";
     texProg=makeProgram(tV,tF,"p","uv");
     polyProg=makeProgram(pV,pF,"p","color");
-    if(!texProg||!polyProg)return false;
+    maskProg=makeProgram(tV,maskF,"p","uv");
+    if(!texProg||!polyProg||!maskProg)return false;
     static const GLfloat quad[]={-1,1,0,0, -1,-1,0,1,
                                   1,1,1,0, 1,-1,1,1};
     glGenBuffers(1,&quadVbo);
@@ -199,6 +210,13 @@ void deleteBgfxGlue() {
     if(uiTexture)glDeleteTextures(1,&uiTexture);
     if(texProg)glDeleteProgram(texProg);
     if(polyProg)glDeleteProgram(polyProg);
+    if(maskProg)glDeleteProgram(maskProg);
+    for(const auto& item:maskTextures){
+        GLuint tex=item.second;
+        glDeleteTextures(1,&tex);
+    }
+    maskTextures.clear();
+    maskProg=0;texProg=0;polyProg=0;
     graphicsReady=false;
 }
 void StartFrame() {
@@ -338,11 +356,63 @@ void osystem_flip(unsigned char* buffer){
     if(buffer)osystem_draw320x200BufferToScreen(buffer);
     osystem_flushPendingPrimitives();
 }
-void osystem_createMask(const std::array<u8,320*200>&,
-                        int,int,int,int,int,int){
-    // Occlusion masks require depth-aware overlay ordering; deferred.
+void osystem_createMask(const std::array<u8,320*200>& mask,
+                        int roomId,int maskId,int,int,int,int){
+    if(!graphicsReady||roomId<0||roomId>255||maskId<0||maskId>255)return;
+    auto id=std::make_pair(roomId,maskId);
+    auto existing=maskTextures.find(id);
+    if(existing!=maskTextures.end()){
+        GLuint oldTex=existing->second;
+        glDeleteTextures(1,&oldTex);
+        maskTextures.erase(existing);
+    }
+    if(maskTextures.size()>=512){
+        SDL_Log("FITD-GLES2: mask texture limit reached");
+        return;
+    }
+    GLuint tex=0;glGenTextures(1,&tex);
+    if(!tex)return;
+    glBindTexture(GL_TEXTURE_2D,tex);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+    // Original camera mask is 320x200 indexed bytes; each nonzero byte
+    // restores the original background OVER an already drawn 3D actor.
+    // GL_LUMINANCE is supported by GLES2 without integer textures.
+    glTexImage2D(GL_TEXTURE_2D,0,GL_LUMINANCE,320,200,0,
+                 GL_LUMINANCE,GL_UNSIGNED_BYTE,mask.data());
+    maskTextures[id]=tex;
+    SDL_Log("FITD-GLES2: mask created room=%d mask=%d total=%u",
+        roomId,maskId,(unsigned)maskTextures.size());
 }
-void osystem_drawMask(int,int){}
+void osystem_drawMask(int roomId,int maskId){
+    if(!graphicsReady||!maskProg)return;
+    auto it=maskTextures.find(std::make_pair(roomId,maskId));
+    if(it==maskTextures.end())return;
+    glDisable(GL_BLEND);
+    glUseProgram(maskProg);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D,it->second);
+    glUniform1i(glGetUniformLocation(maskProg,"maskTex"),0);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D,backgroundTexture);
+    glUniform1i(glGetUniformLocation(maskProg,"bgTex"),1);
+    glBindBuffer(GL_ARRAY_BUFFER,quadVbo);
+    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(0,2,GL_FLOAT,GL_FALSE,4*sizeof(float),(void*)0);
+    glVertexAttribPointer(1,2,GL_FLOAT,GL_FALSE,4*sizeof(float),
+                          (void*)(2*sizeof(float)));
+    glDrawArrays(GL_TRIANGLE_STRIP,0,4);
+    glDisableVertexAttribArray(0);
+    glDisableVertexAttribArray(1);
+    glActiveTexture(GL_TEXTURE0);
+    ++maskRendered;
+    if(maskRendered%500==1)
+        SDL_Log("FITD-GLES2: occlusion mask drawn count=%u floor=%d mask=%d",
+                maskRendered,roomId,maskId);
+}
 void osystem_startBgPoly(){}
 void osystem_endBgPoly(){}
 void osystem_addBgPolyPoint(int,int){}
