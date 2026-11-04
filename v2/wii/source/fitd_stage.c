@@ -313,8 +313,9 @@ int fitd_stage_raster_polygon(uint8_t *mask,size_t pixels,
     }
     return (int)filled;
 }
-int fitd_stage_masks(const FitdStage *stage,unsigned camera_index,
-                     int room_index,FitdStageMask *out,FILE *log){
+int fitd_stage_masks_selected(const FitdStage *stage,unsigned camera_index,
+                              int room_index,int selected_mask,
+                              FitdStageMask *out,FILE *log){
     if(!out)return -1;
     memset(out,0,sizeof(*out));
     if(!stage || !stage->valid)return -2;
@@ -340,11 +341,14 @@ int fitd_stage_masks(const FitdStage *stage,unsigned camera_index,
     if(base<cam.raw_offset || !fits(end,base,2))return -6;
     const unsigned masks=u16(d,base);
     if(masks>64)return -7;
+    if(selected_mask< -1 || (selected_mask>=0 &&
+       (unsigned)selected_mask>=masks))return -15;
     size_t rec=base+2;
     for(unsigned m=0;m<masks;m++){
         if(!fits(end,rec,4))return -8;
         const unsigned rects=u16(d,rec);
         const unsigned poly_offset=u16(d,rec+2);
+        const bool include=(selected_mask<0 || (unsigned)selected_mask==m);
         if(rects>128 || !fits(end,rec+4,(size_t)rects*8u))
             return -9;
         const size_t poly_base=base+poly_offset;
@@ -361,11 +365,13 @@ int fitd_stage_masks(const FitdStage *stage,unsigned camera_index,
                 points[j*2]=s16(d,p+j*4u);
                 points[j*2+1]=s16(d,p+j*4u+2u);
             }
-            int added=fitd_stage_raster_polygon(out->covered,
+            if(include){
+                int added=fitd_stage_raster_polygon(out->covered,
                                                  sizeof(out->covered),points,n);
-            if(added<0)return -14;
-            out->covered_pixels+=(unsigned)added;
-            out->polygons++;
+                if(added<0)return -14;
+                out->covered_pixels+=(unsigned)added;
+                out->polygons++;
+            }
             p+=(size_t)n*4u;
         }
         rec+=4+(size_t)rects*8u;
@@ -374,10 +380,16 @@ int fitd_stage_masks(const FitdStage *stage,unsigned camera_index,
     out->valid=true;
     if(log){
         fprintf(log,"FITD-WII-MASK05 OK camera=%u room=%d "
-                "masks=%u polygons=%u covered_pixels=%u\n",
+                "masks=%u polygons=%u covered_pixels=%u selected=%d\n",
                 camera_index,out->viewed_room,out->masks,
-                out->polygons,out->covered_pixels);
+                out->polygons,out->covered_pixels,selected_mask);
         fflush(log);
     }
     return 0;
+}
+
+int fitd_stage_masks(const FitdStage *stage,unsigned camera_index,
+                     int room_index,FitdStageMask *out,FILE *log){
+    return fitd_stage_masks_selected(stage,camera_index,room_index,
+                                     -1,out,log);
 }
