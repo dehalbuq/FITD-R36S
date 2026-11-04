@@ -1,5 +1,5 @@
 /*
- * FITD Wii GX original ETAGE PAK count fix + mask preview v0.5.1 -- Wii homebrew hardware/renderer validation.
+ * FITD Wii GX original ETAGE inner room/camera table fix + mask preview v0.5.2 -- Wii homebrew hardware/renderer validation.
  *
  * This is NOT the FITD game engine yet. It exercises native PowerPC,
  * Hollywood GX 3D + Z-buffer, 480p/480i VI, Wii Remote/GameCube inputs,
@@ -35,7 +35,7 @@
 #define GX_FIFO_BYTES (256u*1024u)
 #define DATA_DIR "sd:/apps/fitd-wii/data"
 #define LOG_FILE "sd:/apps/fitd-wii/wii-diagnostic.txt"
-#define ROOT_LOG_FILE "sd:/fitd-wii-test05-1-diagnostic.txt"
+#define ROOT_LOG_FILE "sd:/fitd-wii-test05-2-diagnostic.txt"
 
 static GXRModeObj *videoMode;
 static void *xfb[2]={NULL,NULL};
@@ -160,7 +160,7 @@ static void diagnostic_open(void){
         const char *path=candidates[i];
         FILE *f=fopen(path,"wb");
         if(!f){firstLogError=errno;continue;}
-        const int bad=fputs("FITD Wii Test05.1 - log created at boot\n",f)==EOF
+        const int bad=fputs("FITD Wii Test05.2 - log created at boot\n",f)==EOF
                     || fflush(f)!=0 || ferror(f);
         const int closed=fclose(f);
         if(bad || closed!=0){firstLogError=errno;continue;}
@@ -232,7 +232,7 @@ static void inspect_game_data(void){
     }
 }
 static void scan_hardware(void){
-    puts("FITD Wii / GX Teste 05.1 (ETAGE corrected)");
+    puts("FITD Wii / GX Teste 05.2 (ETAGE rooms/masks)");
     puts("----------------------------------------");
     puts("Native Wii Broadway PowerPC / libogc");
     printf("Framebuffer: %ux%u, EFB height: %u\n",
@@ -269,7 +269,7 @@ static void scan_hardware(void){
     puts("HOME / GC START: exit");
     puts("");
     puts("Press A. Without data: original GX demo.");
-    record("build","wii-etage-room-mask-test05-1-physical-pak-count");
+    record("build","wii-etage-room-mask-test05-2-inner-stage-table");
     record("gx_stage","waiting-input");
 }
 static void present_console(void){
@@ -424,7 +424,7 @@ int main(int argc,char **argv){
     sdReady=fatInitDefault()?1:0;
     diagnostic_open();
     if(diag){
-        fprintf(diag,"FITD WII GX ETAGE camera/masks PAK count fix v0.5.1\n");
+        fprintf(diag,"FITD WII GX ETAGE inner table fix v0.5.2\n");
         fprintf(diag,"log_path=%s\n",activeLogPath);
         fprintf(diag,"native_ppc_endian=%s\n",fitd_is_big_endian()?"BE":"LE");
         fprintf(diag,"framebuffer=%ux%u efb=%u\n",
