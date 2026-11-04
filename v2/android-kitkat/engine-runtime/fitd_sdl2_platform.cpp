@@ -83,6 +83,7 @@ static SDL_sem* startOfRender = nullptr;
 static SDL_sem* endOfRender = nullptr;
 static SDL_Thread* engineThread = nullptr;
 static std::atomic<bool> engineExitRequested{false};
+struct FitdAndroidStopEngine {};
 static std::atomic<bool> engineWorkerExited{false};
 static std::atomic<int> engineWorkerResult{-1};
 extern "C" void fitdAndroidRequestExit(void) {
@@ -113,7 +114,7 @@ static void openRuntimeLog() {
     const char* root=SDL_AndroidGetExternalStoragePath();
     if(root && strlen(root)<440) {
         char path[512]={};
-        snprintf(path,sizeof(path),"%s/fitd-test16-runtime.txt",root);
+        snprintf(path,sizeof(path),"%s/fitd-test17-runtime.txt",root);
         externalRuntimeLog=fopen(path,"w");
         if(externalRuntimeLog){
             // Preserve upstream printf()/fprintf(stderr) checkpoints in TXT
@@ -161,7 +162,12 @@ static int SDLCALL fitdEngineThread(void*) {
         SDL_Log("FITD-GPU: requested_vsync=OFF set_result=%d effective_swap_interval=%d error=%s",
                 swapStatus,effectiveInterval,swapStatus==0?"none":SDL_GetError());
         SDL_Log("FITD-RUNTIME: GL ES context ownership transferred to worker");
-        engineWorkerResult.store(FitdMain(0,nullptr));
+        try {
+            engineWorkerResult.store(FitdMain(0,nullptr));
+        } catch(const FitdAndroidStopEngine&) {
+            SDL_Log("FITD-RUNTIME: engine worker cancelled cleanly at frame boundary");
+            engineWorkerResult.store(0);
+        }
     }
     engineWorkerExited.store(true);
     engineExitRequested.store(true);
@@ -283,11 +289,19 @@ int FitdInit(int argc,char* argv[]) {
         if(static_cast<Sint32>(after-nextLogic)>=0)
             nextLogic=after+logicMs;
     }
+    // An Android activity recreation can request cancellation while the
+    // native game loop is blocked on the next semaphore. Wake it and allow
+    // the frame-boundary cancellation exception to unwind to worker entry.
     if(!engineWorkerExited.load()) {
-        // The original engine has no cooperative cancellation yet.
-        // Don't delete GL resources while its worker may be using them.
-        SDL_Log("FITD-RUNTIME: engine worker did not exit; preserving GPU context");
-        return 18;
+        SDL_SemPost(startOfRender);
+        const Uint32 deadline=SDL_GetTicks()+1000u;
+        while(!engineWorkerExited.load() &&
+              static_cast<Sint32>(SDL_GetTicks()-deadline)<0)
+            SDL_Delay(2);
+        if(!engineWorkerExited.load()) {
+            SDL_Log("FITD-RUNTIME: WARN engine worker still active on shutdown");
+            return 18;
+        }
     }
     int result=engineWorkerResult.load();
     SDL_WaitThread(engineThread,nullptr);
@@ -307,7 +321,7 @@ u32 osystem_startOfFrame() {
     // Do not hold the worker waiting for a 25Hz game tick before presenting.
     const Uint32 waitStarted=SDL_GetTicks();
     for(;;) {
-        if(engineExitRequested.load())return 1;
+        if(engineExitRequested.load())throw FitdAndroidStopEngine{};
         presentOnFixedClock();
         const int waitResult=SDL_SemWaitTimeout(startOfRender,1);
         if(waitResult==0)break;
@@ -336,6 +350,7 @@ void osystem_endOfFrame() {
     osystem_drawUILayer();
     renderGameWindow();
     fitdAndroidCaptureFrame(); // swap GLES2 FBO attachments, no pixel copy
+    if(engineExitRequested.load())throw FitdAndroidStopEngine{};
     // Do NOT block the 25Hz game thread until a 60Hz presentation is due.
     // That coupled the two clocks and lost 8-10 output frames per second.
     // The first and all subsequent GPU presentations happen exclusively in
