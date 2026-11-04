@@ -1,0 +1,157 @@
+name: FITD Android API19 REAL GAME link and APK experiment
+
+on:
+  push:
+    branches: ["port/android-kitkat-api19"]
+    paths:
+      - "v2/android-kitkat/engine-runtime/**"
+      - ".github/workflows/android-armv7-fitdmain-link.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-fitdmain-api19-link:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Prepare Android API19 C++ and Java toolchains
+        run: |
+          set -euo pipefail
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install \
+            "ndk;23.2.8568313" "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Fetch original FITD source, bgfx headers, SDL2 and fmt (NO game data)
+        run: |
+          set -euo pipefail
+          git clone -q --no-checkout https://github.com/yaz0r/FITD.git /tmp/fitd-upstream
+          git -C /tmp/fitd-upstream fetch -q --depth=1 origin 543e22bc78b64405537ae545ecd382dcdf2c12b2
+          git -C /tmp/fitd-upstream checkout -q --detach FETCH_HEAD
+          git -C /tmp/fitd-upstream submodule update --init --recursive --depth 1 ThirdParty/bgfx.cmake
+          git clone -q --depth 1 --branch release-2.30.12 https://github.com/libsdl-org/SDL.git /tmp/SDL2
+          git clone -q --depth 1 --branch 10.2.1 https://github.com/fmtlib/fmt.git /tmp/fmt
+          test -s /tmp/fitd-upstream/FitdLib/main.cpp
+          test -s /tmp/fitd-upstream/ThirdParty/bgfx.cmake/bgfx/include/bgfx/bgfx.h
+
+      - name: Prepare original upstream release gameplay for Android API19
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          config=Path('/tmp/fitd-upstream/FitdLib/config.h')
+          value=config.read_text()
+          needle='#include <format>'
+          assert value.count(needle)==1
+          value=value.replace(needle,
+              '#include <fmt/format.h>\nnamespace std {using fmt::format;}',1)
+          for macro in ('FITD_DEBUGGER','USE_IMGUI'):
+              value += '\n#ifdef '+macro+'\n#undef '+macro+'\n#endif\n'
+          config.write_text(value)
+          PY
+          python3 -m py_compile v2/android-kitkat/engine-runtime/patch_fitd_gameplay_api19.py
+          python3 v2/android-kitkat/engine-runtime/patch_fitd_gameplay_api19.py /tmp/fitd-upstream
+
+      - name: Build SDL2 ARMv7 Android 4.4 shared library
+        run: |
+          set -euo pipefail
+          cmake -S /tmp/SDL2 -B /tmp/sdl2-build -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/23.2.8568313/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-19 \
+            -DANDROID_STL=c++_static -DCMAKE_BUILD_TYPE=Release \
+            -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TEST=OFF -DSDL_TESTS=OFF
+          cmake --build /tmp/sdl2-build --target SDL2 --parallel 2
+
+      - name: Attempt complete real FITD game Android GLES2 libmain.so link
+        run: |
+          set -euo pipefail
+          cmake -S v2/android-kitkat/engine-runtime -B /tmp/fitd-runtime-link -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/23.2.8568313/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-19 \
+            -DANDROID_STL=c++_static -DCMAKE_BUILD_TYPE=Release \
+            -DFITD_UPSTREAM_DIR=/tmp/fitd-upstream \
+            -DSDL2_INCLUDE_DIR=/tmp/SDL2/include \
+            -DFMT_INCLUDE_DIR=/tmp/fmt/include \
+            -DSDL2_ROOT=/tmp/sdl2-build \
+            -DFITD_LINK_REAL_ANDROID_GAME=ON
+          cmake --build /tmp/fitd-runtime-link --target main --parallel 2
+          test -s /tmp/fitd-runtime-link/libmain.so
+          "$ANDROID_HOME/ndk/23.2.8568313/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" \
+            -h /tmp/fitd-runtime-link/libmain.so | tee /tmp/fitd-link-elf.txt
+          grep -q 'Class: *ELF32' /tmp/fitd-link-elf.txt
+          grep -q 'Machine: *ARM' /tmp/fitd-link-elf.txt
+          "$ANDROID_HOME/ndk/23.2.8568313/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm" \
+            -D /tmp/fitd-runtime-link/libmain.so | grep ' SDL_main'
+          "$ANDROID_HOME/ndk/23.2.8568313/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm" \
+            -C /tmp/fitd-runtime-link/libmain.so | grep ' FitdMain'
+
+      - name: Assemble experimental Android API19 APK without game assets
+        run: |
+          set -euo pipefail
+          mkdir -p work
+          cp -a v2/android-kitkat/android work/fitd-realgame
+          APP=work/fitd-realgame/app
+          mkdir -p "$APP/src/main/java/org/libsdl/app" "$APP/src/main/jniLibs/armeabi-v7a"
+          cp -a /tmp/SDL2/android-project/app/src/main/java/. "$APP/src/main/java/"
+          cp v2/android-kitkat/engine-core/FITDGameDataActivity.java "$APP/src/main/java/org/libsdl/app/"
+          cp /tmp/sdl2-build/libSDL2.so "$APP/src/main/jniLibs/armeabi-v7a/"
+          cp /tmp/fitd-runtime-link/libmain.so "$APP/src/main/jniLibs/armeabi-v7a/"
+          python3 - <<'PY'
+          from pathlib import Path
+          app=Path("work/fitd-realgame/app")
+          gradle=app/"build.gradle"
+          s=gradle.read_text()
+          old="io.github.dehalbuq.fitdkitkatprobe"
+          assert s.count(old)==1
+          s=s.replace(old,"io.github.dehalbuq.fitdrealgameexperiment")
+          s=s.replace("versionName '0.1'","versionName '0.8.0-experimental-realengine'")
+          gradle.write_text(s)
+          m=app/"src/main/AndroidManifest.xml"
+          v=m.read_text()
+          old_name='android:name="org.libsdl.app.SDLActivity"'
+          assert v.count(old_name)==1
+          v=v.replace(old_name,'android:name="org.libsdl.app.FITDGameDataActivity"',1)
+          anchor='        </activity>\n    </application>'
+          assert v.count(anchor)==1
+          v=v.replace(anchor,
+            '        </activity>\n'
+            '        <activity android:name="org.libsdl.app.SDLActivity" '
+            'android:exported="false" android:screenOrientation="landscape" '
+            'android:configChanges="layoutDirection|locale|orientation|uiMode|screenLayout|screenSize|smallestScreenSize|keyboard|keyboardHidden|navigation" />\n'
+            '    </application>')
+          m.write_text(v)
+          label=app/"src/main/res/values/strings.xml"
+          label.write_text(label.read_text().replace("FITD GLES2 Test","FITD REAL GAME - EXPERIMENTAL"))
+          PY
+          curl -fsSL https://services.gradle.org/distributions/gradle-8.1.1-bin.zip -o /tmp/gradle.zip
+          unzip -q /tmp/gradle.zip -d /tmp
+          (cd work/fitd-realgame && /tmp/gradle-8.1.1/bin/gradle --no-daemon :app:assembleDebug)
+          mkdir -p dist
+          cp work/fitd-realgame/app/build/outputs/apk/debug/app-debug.apk dist/FITD-Android-ARMv7-REAL-GAME-EXPERIMENTAL-API19.apk
+
+      - name: Validate native executable and no proprietary data
+        run: |
+          set -euo pipefail
+          apk=dist/FITD-Android-ARMv7-REAL-GAME-EXPERIMENTAL-API19.apk
+          "$ANDROID_HOME/build-tools/34.0.0/aapt" dump badging "$apk" | tee /tmp/fitd-realgame-badging.txt
+          grep -Fq "sdkVersion:'19'" /tmp/fitd-realgame-badging.txt
+          grep -Fq "native-code: 'armeabi-v7a'" /tmp/fitd-realgame-badging.txt
+          grep -Eq "uses-gl-es: '0x0*20000'" /tmp/fitd-realgame-badging.txt
+          unzip -Z1 "$apk" | grep -E '^lib/armeabi-v7a/lib(SDL2|main).so$'
+          if unzip -Z1 "$apk" | grep -Ei '\.(PAK|ITD|TAT|CC1|BBS)$'; then
+            echo 'Commercial game data must not be present in CI APK' >&2
+            exit 70
+          fi
+          sha256sum "$apk" > dist/SHA256SUMS.txt
+
+      - name: Upload real engine experimental APK (no original game files)
+        uses: actions/upload-artifact@v4
+        with:
+          name: FITD-ANDROID-ARMV7-API19-REAL-FITDMAIN-EXPERIMENTAL-NO-ASSETS
+          path: dist/*
+          if-no-files-found: error
