@@ -63,6 +63,7 @@ jobs:
           python3 v2/patch_throw_null_body.py /tmp/fitd-upstream
           python3 v2/patch_hit_object_rehaunted.py /tmp/fitd-upstream
           python3 v2/patch_cellar_evalvar.py /tmp/fitd-upstream
+          python3 v2/patch_cellar_barrel_stuck.py /tmp/fitd-upstream
           python3 v2/patch_cellar_wall_recovery.py /tmp/fitd-upstream
           python3 v2/patch_readable_font.py /tmp/fitd-upstream
           echo 'FITD-ANDROID: R36S gameplay, save, readability and collision fixes verified'
