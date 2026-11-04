@@ -90,7 +90,7 @@ static void openRuntimeLog() {
     const char* root=SDL_AndroidGetExternalStoragePath();
     if(root && strlen(root)<440) {
         char path[512]={};
-        snprintf(path,sizeof(path),"%s/fitd-test11-runtime.txt",root);
+        snprintf(path,sizeof(path),"%s/fitd-test12-runtime.txt",root);
         externalRuntimeLog=fopen(path,"w");
         if(externalRuntimeLog){
             // Preserve upstream printf()/fprintf(stderr) checkpoints in TXT
@@ -214,13 +214,25 @@ int FitdInit(int argc,char* argv[]) {
         SDL_GL_DeleteContext(engineContext);
         SDL_DestroyWindow(engineWindow);SDL_Quit();return 17;
     }
-    engineTickTimestamp=SDL_GetTicks();
-    // Main/UI thread receives input; engine worker waits for render ticks.
+    // IMPORTANT: the previous implementation posted the NEXT simulation
+    // semaphore BEFORE its 40ms sleep. The engine consumed it instantly, so
+    // there was never any interval in which it could present cached frames.
+    // Wait BEFORE posting each tick: the worker now owns GLES and presents
+    // completed frames at up to 60 Hz while waiting for the next game tick.
+    constexpr Uint32 logicMs=40;
+    Uint32 nextLogic=SDL_GetTicks();
+    SDL_Log("FITD-PERF: independent 25Hz simulation and 60Hz presentation active");
     while(!engineExitRequested.load()) {
         readKeyboard();
         if(engineExitRequested.load())break;
+        const Uint32 now=SDL_GetTicks();
+        if(static_cast<Sint32>(now-nextLogic)<0) {
+            SDL_Delay(std::min<Uint32>(2, nextLogic-now));
+            continue;
+        }
+        // At most one pending game tick; never enqueue catch-up bursts.
         SDL_SemPost(startOfRender);
-        int code=SDL_SemWaitTimeout(endOfRender,30000);
+        const int code=SDL_SemWaitTimeout(endOfRender,30000);
         if(code==SDL_MUTEX_TIMEDOUT) {
             SDL_Log("FITD-RUNTIME: E_GAME_THREAD_TIMEOUT");
             engineExitRequested.store(true);
@@ -231,14 +243,12 @@ int FitdInit(int argc,char* argv[]) {
             engineExitRequested.store(true);
             break;
         }
-        Uint32 elapsed=SDL_GetTicks()-engineTickTimestamp;
-        // Original FITD works with 40ms fixed simulation steps.
-        // Never advance simulation multiple steps just because one frame is late.
-        // Output frame pacing can later be interpolated separately to 60 Hz.
-        if(elapsed<40u)SDL_Delay(40u-elapsed);
-        // Preserve the original game clock: one logic/AI update per 40 ms.
-        // Missed ticks are not queued in bursts after a GPU stall.
-        engineTickTimestamp=SDL_GetTicks();
+        nextLogic+=logicMs;
+        // If frame work overran a tick, do not try to catch up by running
+        // several gameplay loops at once. Recover the stable fixed cadence.
+        const Uint32 after=SDL_GetTicks();
+        if(static_cast<Sint32>(after-nextLogic)>=0)
+            nextLogic=after+logicMs;
     }
     if(!engineWorkerExited.load()) {
         // The original engine has no cooperative cancellation yet.
@@ -278,25 +288,16 @@ u32 osystem_startOfFrame() {
     StartFrame();
     osystem_startFrame();
     bFirst=false;
-    // The original DOS engine uses a 40 ms logic clock (25 Hz). If one
-    // rendered frame takes longer than 40 ms, return enough logical ticks
-    // to maintain real-time animation speed, instead of slowing the game.
-    // Do not artificially accelerate when rendering faster than 25 Hz:
-    // FitdInit's UI-thread pacing retains the 40 ms clock minimum.
-    static Uint32 lastClock=0, remainder=0, sampled=0;
+    // One 40ms simulation step, regardless of 60Hz presentation frequency.
+    // This prevents physics, actor animation and sound events from running at
+    // 2.4x speed when interpolation is enabled.
+    static Uint32 lastClock=0,sampled=0;
     const Uint32 now=SDL_GetTicks();
-    if(lastClock==0)lastClock=now;
-    const Uint32 elapsed=now-lastClock;
+    const Uint32 elapsed=lastClock?now-lastClock:40;
     lastClock=now;
-    remainder+=std::min(200u,elapsed);
-    u32 timeSteps=remainder/40u;
-    remainder%=40u;
-    if(timeSteps==0)timeSteps=1;
-    if(timeSteps>5)timeSteps=5;
     if(++sampled%100u==0u)
-        SDL_Log("FITD-PERF: gameFrames=%u recentFrameMs=%u logicalTicks=%u",
-            sampled,elapsed,timeSteps);
-    return timeSteps;
+        SDL_Log("FITD-PERF: logic_frames=%u recent_step_ms=%u tick=40",sampled,elapsed);
+    return 1u;
 }
 void osystem_endOfFrame() {
     osystem_flushPendingPrimitives();
