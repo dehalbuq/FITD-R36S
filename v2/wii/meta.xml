@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<app version="1">
+  <name>FITD Wii GX Prototype</name>
+  <coder>dehalbuq / FITD-R36S contributors</coder>
+  <version>0.1.0</version>
+  <release_date>20261104</release_date>
+  <short_description>Native Wii GX 3D and hardware diagnostic</short_description>
+  <long_description>Preliminary PowerPC/GX homebrew technical prototype for the classic Alone in the Dark engine. Exercises 3D geometry, depth, SD/FAT, little-endian data parsing and controllers. NOT a playable game. Original game files are not included.</long_description>
+  <ahb_access/>
+</app>
