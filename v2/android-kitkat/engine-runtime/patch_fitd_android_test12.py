@@ -151,7 +151,7 @@ start=s.index('#ifdef FITD_R36S\n#include <cstdio>')
 stop=s.index('#endif\n',start)+len('#endif\n')
 helper=s[start:stop]
 s=s[:start]+s[stop:]
-anchor='#define\tNB_OPTIONS\t7'
+anchor='#define\tSIZE_FONT 16'
 assert anchor in s
 s=s.replace(anchor,anchor+'\n'+helper,1)
 
