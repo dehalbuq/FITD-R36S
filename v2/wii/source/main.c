@@ -55,6 +55,7 @@ static bool animationPlaying=true;
 static double animationTicks=0.0;
 static u64 previousAnimTime=0;
 static bool poseReady=false;
+static FILE *diag=NULL;
 static FitdStage originalStage={0};
 static FitdStageRoom currentStageRoom={0};
 static FitdStageMask stageMasks={0};
@@ -141,7 +142,7 @@ static void stage_change_room(int direction){
 }
 static unsigned long frameCount=0;
 static int storedFrame=0;
-static FILE *diag=NULL;
+
 static const char *activeLogPath=NULL;
 static int firstLogError=0;
 
