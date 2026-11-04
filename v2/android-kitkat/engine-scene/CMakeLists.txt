@@ -26,6 +26,7 @@ target_include_directories(main PRIVATE
     "${FITD_UPSTREAM_DIR}/FitdLib"
     "${SDL2_INCLUDE_DIR}"
     "${CMAKE_CURRENT_LIST_DIR}/.."
+    "${CMAKE_CURRENT_LIST_DIR}/../engine-gameplay"
 )
 target_compile_features(main PRIVATE cxx_std_17)
 target_compile_options(main PRIVATE -O2 -DNDEBUG -fno-strict-aliasing)
