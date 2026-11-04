@@ -25,6 +25,13 @@ def once(path, old, new, label):
     f.write_text(value.replace(old,new,1))
     print("FITD-TEST19:",label)
 
+# Explicit SDL2 headers: Android's original anim.cpp and life.cpp do not
+# import the SDL3 instrumentation headers used by the Linux ARM64 build.
+for file in ("FitdLib/anim.cpp","FitdLib/main.cpp","FitdLib/life.cpp"):
+    once(file,'#include "common.h"',
+         '#include "common.h"\n#ifdef FITD_R36S\n#include <SDL.h>\n#endif',
+         "SDL2 native diagnostics include")
+
 # Re-Haunted: reset stale speed transition when AI changes between follow and
 # patrol track modes. Without this the actor may remain in a low/zero speed
 # interpolation from the previous life script state.
