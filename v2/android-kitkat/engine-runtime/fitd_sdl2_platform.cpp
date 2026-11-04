@@ -20,6 +20,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <unistd.h>
+#include <android/log.h>
 
 extern void detectGame(void);
 extern void renderGameWindow(void);
@@ -42,6 +43,28 @@ extern "C" void fitdAndroidRequestExit(void) {
 }
 bool bFirst = true;
 static uint32_t engineTickTimestamp = 0;
+static FILE* externalRuntimeLog=nullptr;
+static void fitdRuntimeLogCallback(void*,int category,
+                                   SDL_LogPriority priority,
+                                   const char* message) {
+    if(externalRuntimeLog) {
+        fprintf(externalRuntimeLog,"%u [%d:%d] %s\n",
+                SDL_GetTicks(),category,(int)priority,message?message:"");
+        fflush(externalRuntimeLog);
+    }
+    __android_log_write(ANDROID_LOG_INFO,"FITD-REAL",message?message:"");
+}
+static void openRuntimeLog() {
+    const char* root=SDL_AndroidGetExternalStoragePath();
+    if(root && strlen(root)<440) {
+        char path[512]={};
+        snprintf(path,sizeof(path),"%s/fitd-test08-runtime.txt",root);
+        externalRuntimeLog=fopen(path,"w");
+        SDL_LogSetOutputFunction(fitdRuntimeLogCallback,nullptr);
+        SDL_SetLogPriorities(SDL_LOG_PRIORITY_INFO);
+        SDL_Log("FITD-RUNTIME: log_file=%s",path);
+    }
+}
 
 void osystem_delay(int time) {
     SDL_Delay(time>0 ? static_cast<Uint32>(time) : 0);
@@ -91,6 +114,7 @@ int FitdInit(int argc,char* argv[]) {
                      "FITD-RUNTIME: E_SDL_INIT %s",SDL_GetError());
         return 10;
     }
+    openRuntimeLog();
     const char* storage=SDL_AndroidGetInternalStoragePath();
     if(!storage || strlen(storage)+2>=sizeof(homePath)) {
         SDL_Log("FITD-RUNTIME: E_PRIVATE_STORAGE");
@@ -178,8 +202,9 @@ int FitdInit(int argc,char* argv[]) {
     SDL_DestroyWindow(engineWindow);
     SDL_DestroySemaphore(startOfRender);
     SDL_DestroySemaphore(endOfRender);
-    SDL_Quit();
     SDL_Log("FITD-RUNTIME: real engine exited rc=%d",result);
+    if(externalRuntimeLog){fclose(externalRuntimeLog);externalRuntimeLog=nullptr;}
+    SDL_Quit();
     return result;
 }
 
