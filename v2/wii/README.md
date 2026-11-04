@@ -1,123 +1,149 @@
-# FITD Wii — Teste 04: animações LISTANIM e geometria BODY no GX
+# FITD Wii — Teste 05: ETAGE, salas, câmeras e máscaras originais GX
 
-Esta versão é um **teste técnico nativo para Nintendo Wii / PowerPC**.
-**Ainda NÃO é a versão jogável de Alone in the Dark.**
+Esta versão é um **teste técnico nativo PowerPC para Nintendo Wii**.
+Ela integra as estruturas de cenário do Alone in the Dark original ao
+visualizador 3D e de animações. **Ainda NÃO é o motor completo jogável.**
 
-A versão Wii Teste 03.1 está preservada em sua própria branch.
-O Android Teste 19 e o R36S ARM64 não foram modificados, e seus patches
-originais continuam na ancestralidade desta branch. O checklist das
-correções está em COMPAT_TEST19.md.
+### Preservação dos testes aprovados
 
-## Novidades reais
+- Wii Teste 03.1: diagnóstico SD estável e modelos BODY, preservado.
+- Wii Teste 04: animações LISTANIM originais com amostragem interpolada,
+  compilado e validado no Wii, preservado.
+- Android Teste 19 e R36S ARM64: não modificados. Os patches de IA,
+  colisão, save, áudio e demais correções permanecem no repositório.
+  Consulte COMPAT_TEST19.md: as correções de gameplay ainda **não foram
+  conectadas ao executável Wii**.
 
-- Decodificação dos quadros e grupos de LISTANIM.PAK a partir do formato
-  original do motor FITD: quadro, duração em ticks, deslocamento da raiz,
-  tipos de transformação, rotação e translação dos grupos.
-- Suporte a duas variantes binárias (8 e 16 bytes por grupo), com leitura
-  little-endian segura em CPU Wii PowerPC big-endian.
-- Amostragem e interpolação de poses em frequência de **50 ticks de jogo
-  por segundo**, independentemente do VSync de ~60 quadros por segundo.
-  Não acelera o jogo para atingir 60 FPS.
-- Prévia geométrica de grupos de modelos animáveis com rotação e
-  translação interpoladas, sobre os fundos originais do Teste 02.
-- Controles para escolher BODY, escolher animação e pausar/retomar.
-- Verificação de compatibilidade entre clip e modelo. Um BODY estático
-  continua estático e nunca recebe uma animação incompatível.
-- Testes de leitura para clips sintéticos normais e otimizados,
-  interpolação de poses, dados truncados e índices inválidos.
-- Diagnóstico salvo na raiz do SD, conforme validado no Teste 03.1.
+## O que implementamos no Teste 05
 
-**Limitação importante:** a aplicação das transformações em grupos é uma
-prévia de animação. A interpretação total das hierarquias, a câmera do
-jogo, a posição original dos atores, a movimentação real no cenário,
-as máscaras de oclusão e o controle de IA ainda dependem da integração
-do motor FITD C++. Os modelos podem parecer deslocados ou deformados
-neste teste. Não há gameplay, combate, áudio ou saves operacionais.
+- Leitor real de ETAGE00.PAK, entrada 0 (salas) e entrada 1 (câmeras).
+- Tabelas de salas, posição relativa, índices das câmeras associadas,
+  caixas de colisão do cenário e zonas de scripts.
+- Dados reais das câmeras: ângulos originais A/B/G, posição, perspectiva
+  e referências de salas visíveis.
+- Decodificação dos polígonos de máscaras do AITD1 com leitura
+  PowerPC little-endian, limites contra memória inválida e rasterização
+  de 320x200 pixels.
+- Conversão das áreas cobertas por máscaras em textura GX RGB5A3
+  com pixels transparentes e cores tiradas do CAMERA00.PAK original;
+  redesenha a parte frontal do cenário *sobre* o modelo BODY.
+- Alternância manual do efeito de oclusão e navegação entre salas.
+  Quando o usuário troca a câmera, a máscara correspondente é
+  reconstruída sem alterar os arquivos originais.
+- A animação real do BODY e o log persistente continuam funcionando.
+- Testes automáticos com dados sintéticos, sem redistribuir assets
+  comerciais (PAK, BODY, ANIM, ETAGE, máscaras).
 
-## Instalação
+**Limitação fundamental:** atualmente a prévia sobrepõe a união das
+máscaras do cômodo em modo de inspeção. Ainda não faz a escolha de máscara
+por profundidade/posição real do ator, não usa a projeção cinematográfica
+definitiva da câmera, não percorre scripts de ETAGE ou collision response,
+e não carrega a lógica completa do jogo. Ative o efeito apenas para
+verificar a decodificação: pode cobrir indevidamente a personagem.
+As caixas de colisão são lidas e testadas, **não estão aplicadas** ao
+movimento. A estrutura pronta permite a integração dessas regras depois.
 
-Extraia o ZIP na raiz do cartão SD preservando a pasta apps/fitd-wii.
-Conserve os arquivos da **sua cópia original do jogo**:
+## Instalação no SD
 
-    SD:/apps/fitd-wii/
-        boot.dol
-        meta.xml
-        icon.png
-        README.md
-        COMPAT_TEST19.md
-        data/
-            CAMERA00.PAK
-            ITD_RESS.PAK
-            LISTBODY.PAK
-            LISTANIM.PAK
+Extraia o ZIP na raiz do cartão SD, substituindo somente os arquivos
+do aplicativo. Mantenha na pasta data/ os arquivos da sua cópia
+original do jogo. Para este teste são usados:
 
-Nenhum arquivo do jogo comercial acompanha o ZIP.
+    SD:/
+    └── apps/
+        └── fitd-wii/
+            ├── boot.dol
+            ├── meta.xml
+            ├── icon.png
+            ├── README.md
+            ├── COMPAT_TEST19.md
+            └── data/
+                ├── ETAGE00.PAK
+                ├── CAMERA00.PAK
+                ├── ITD_RESS.PAK
+                ├── LISTBODY.PAK
+                └── LISTANIM.PAK
 
-Abra Homebrew Channel > FITD Wii Teste 04 > A.
+O pacote NÃO contém arquivos comerciais do jogo.
+Execute pelo Homebrew Channel e pressione A para iniciar.
 
-**Importante para ver animação:** o BODY índice 0 é estático
-(flags=0001), portanto não se movimenta com LISTANIM. Aperte
-direcional DIREITA uma vez para BODY índice 1, que contém 2 grupos
-(flags=0003). A primeira LISTANIM também contém 2 grupos e 2 quadros.
-Aperte A para pausar/retomar e observe se o modelo se deforma ou
-altera a pose. Não espere um personagem caminhando pelo cenário ainda.
+## Controles
 
-## Controles Wii Remote
-
-| Botão | Função |
+| Wii Remote | Ação |
 |---|---|
-| A | Na tela inicial: começar. Durante a prévia: pausar/retomar animação |
-| D-pad esquerda/direita | Modelo BODY anterior/próximo |
-| D-pad cima/baixo | Entrada LISTANIM próxima/anterior |
-| + / - | Câmera anterior/próxima em CAMERA00.PAK |
-| B | Girar o modelo para inspeção |
-| 2 | Mostrar/ocultar BODY |
-| 1 | Alternar fundo real e antiga cena de demonstração GX |
-| HOME | Sair e terminar diagnóstico |
+| D-pad esquerda/direita | Trocar BODY |
+| D-pad cima/baixo | Trocar animação LISTANIM |
+| A | Pausar / continuar animação |
+| B | Girar modelo |
+| + / − | Avançar / voltar câmera de CAMERA00.PAK |
+| 1 | Alternar cenário original / demonstração GX |
+| 2 | Mostrar / ocultar modelo |
+| **Segurar B e apertar 1** | **Ativar / desativar sobreposição das máscaras originais** |
+| **Segurar B e apertar + ou −** | **Avançar / voltar entre salas de ETAGE00.PAK** |
+| HOME | Sair e gravar diagnóstico |
 
-GameCube: START sai; X alterna BODY; Y alterna fundo; R/L
-alterna câmera; direcional escolhe modelos/clips; A pausa.
+GameCube: B+Y alterna máscara, B+R/L troca sala, R/L sozinho
+troca câmera, direcional muda BODY/ANIM, A pausa, START sai.
 
-## Diagnóstico e envio
+### Como confirmar a etapa
 
-Arquivo principal:
+1. Inicie e observe se os cenários do Teste 02 e o personagem animado
+   continuam aparecendo.
+2. Segure B e aperte 1; observe se alguma parte do cenário original
+   passa a aparecer *por cima* do modelo. Isso valida a máscara mas
+   NÃO deve ser confundido com o efeito de oclusão final do jogo.
+3. Troque as câmeras com +/- e observe se as máscaras se atualizam.
+4. Teste B + ou B − para navegar entre os cômodos do ETAGE00.
+   Atenção: uma sala pode não ter câmera associada ao CAMERA00;
+   a prévia pode manter a câmera anterior nesses casos.
+5. Saia com HOME. O log contém os metadados de sala, câmera e máscara.
 
-    SD:/fitd-wii-test04-diagnostic.txt
+### Diagnóstico
 
-Cópia de segurança, quando possível:
+Principal:
+
+    SD:/fitd-wii-test05-diagnostic.txt
+
+Cópia alternativa:
 
     SD:/apps/fitd-wii/wii-diagnostic.txt
 
-O aplicativo confirma na tela inicial o caminho escolhido e gera
-checkpoints a cada ~300 quadros. No log procure:
+Procure as linhas:
+- FITD-WII-STAGE OK floor=0 rooms=... cameras=...
+- FITD-WII-ROOM05 index=... cams=... hard=... sce=...
+- FITD-WII-CAMERA05 index=... angle=... position=... focal=...
+- FITD-WII-MASK05 OK camera=... room=... masks=... polygons=... covered_pixels=...
+- FITD-WII-MASK05 toggled=1 available=1 pixels=...
+- FITD-WII-ANIM04 status=DECODED compatible=1 pose=1 ...
+- GX frames=... fps=...
+- finish ... endianness_check=PASS
 
-- FITD-WII-BODY OK: modelo original e seus grupos.
-- FITD-WII-ANIM04 OK: clip original decodificado.
-- FITD-WII-ANIM04 status=DECODED compatible=1 pose=1:
-  uma pose original está sendo aplicada a um modelo animável.
-- FITD-WII-ANIM04 status=DECODED compatible=0 pose=0:
-  modelo estático, clips de tamanho incompatível ou variantes diferentes.
-- FITD-WII-MASK status=not-integrated: máscaras ainda não prontas.
-- GX frames, fps: tempo da demonstração, não desempenho do jogo completo.
+Se alguma máscara mostrar status negativo ou pixels=0, anexe
+o arquivo: pode ser variante do formato ou ausência de máscaras
+para aquela câmera, sem necessariamente indicar falha na renderização.
 
-## O que resta
+## O que ainda falta para o jogo completo
 
-1. Validar no Wii o clip de animação 0 com BODY 1 e ajustar a
-   hierarquia de ossos e a pose.
-2. Ligar interpretação de câmeras/salas, máscara de oclusão, objetos
-   de ETAGE e vida/scripts.
-3. Integrar motor C++ e todas as correções do Android Teste 19 e
-   R36S ARM64 (IA, colisões, monstros presos, saves, áudio, controles).
-4. Testar uma sessão real do jogo no hardware e medir estabilidade/FPS.
+1. Posicionamento real do ator e projeção exata dos modelos usando
+   ângulos, posição e perspectiva de cada câmera ETAGE.
+2. Escolha automática da máscara por zona/profundidade e
+   oclusão correta de personagens e objetos do cenário.
+3. Execução real dos scripts, máquinas de estado e interações;
+   controle de personagem, inventário e combate.
+4. Colisões de salas e objetos com todas as correções das versões
+   Android Teste 19 e R36S ARM64.
+5. Áudio, efeitos, save/load, transições de cena e testes funcionais
+   de gameplay. 60 FPS deste visualizador não garante 60 FPS do jogo.
 
-## Origem, licenças e avisos legais
+## Licenças, créditos e responsabilidade
 
-Baseado em Free in the Dark (https://github.com/yaz0r/FITD),
-com contribuições e correções do projeto FITD-R36S. Decodificação e
-amostragem estudadas em FitdLib/hqr.cpp e anim.cpp do motor original.
-Rotina UnPAK de Cyril VOILA / Mark Adler.
-Código GPL-2.0 (e requisitos aplicáveis dos contribuintes).
+Baseado em Free in the Dark (yaz0r/FITD, código GPL-2.0).
+Correções e contribuições: dehalbuq/FITD-R36S, com referências
+comparativas ao Re-Haunted e demais colaboradores. Parser de PAK:
+Cyril VOILA e Mark Adler. ETAGE e máscara: port com verificação
+de bounds a partir de floor.cpp, room.cpp e main.cpp do upstream.
 
-Nenhum conteúdo proprietário de Alone in the Dark é distribuído.
-O usuário deve fornecer arquivos de sua cópia legitimamente adquirida.
-Nintendo não é afiliada ao port homebrew.
+Nenhum jogo comercial, sprites, personagens, modelos, música, sons ou
+texto proprietário acompanha o executável. É necessária a cópia
+legitimamente adquirida de Alone in the Dark. Nintendo não participa
+nem aprova o projeto.
