@@ -1,5 +1,5 @@
 /*
- * FITD Wii GX bootstrap v0.1 -- Wii homebrew hardware/renderer validation.
+ * FITD Wii GX archive/camera prototype v0.2 -- Wii homebrew hardware/renderer validation.
  *
  * This is NOT the FITD game engine yet. It exercises native PowerPC,
  * Hollywood GX 3D + Z-buffer, 480p/480i VI, Wii Remote/GameCube inputs,
@@ -24,6 +24,8 @@
 #include <sys/stat.h>
 #include <strings.h>
 #include "fitd_endian.h"
+#include "fitd_pak.h"
+#include "fitd_camera.h"
 
 #define GX_FIFO_BYTES (256u*1024u)
 #define DATA_DIR "sd:/apps/fitd-wii/data"
@@ -35,6 +37,8 @@ static void *gxFifo=NULL;
 static Mtx cameraMatrix;
 static Mtx44 projection;
 static int sdReady=0, pakCount=0;
+static FitdCamera originalCamera={0};
+static bool showOriginalCamera=false;
 static unsigned long frameCount=0;
 static int storedFrame=0;
 static FILE *diag=NULL;
@@ -73,7 +77,7 @@ static void inspect_game_data(void){
     }
 }
 static void scan_hardware(void){
-    puts("FITD Wii / GX prototype v0.1");
+    puts("FITD Wii / GX Teste 02 v0.2");
     puts("----------------------------------------");
     puts("Native Wii Broadway PowerPC / libogc");
     printf("Framebuffer: %ux%u, EFB height: %u\n",
@@ -85,15 +89,16 @@ static void scan_hardware(void){
     printf("FAT/SD mount: %s\n",sdReady?"OK":"NOT AVAILABLE");
     inspect_game_data();
     puts("");
-    puts("This boot.dol is NOT the playable game yet.");
-    puts("GX geometry, controllers and SD are being tested.");
+    puts("Native Wii GX + real AITD1 archive preview.");
+    puts("NOT yet playable. Source game assets stay on SD.");
     puts("");
-    puts("Wii Remote: A = GX test, HOME = exit");
-    puts("GameCube pad: A = GX test, START = exit");
-    puts("GX test: D-pad move; B rotate; HOME exit");
+    puts("Wii A / GC A: enter camera and GX tests");
+    puts("Wii +/- / GC L/R: change CAMERA00.PAK frame");
+    puts("Wii 1 / GC Y: toggle real image and 3D demo");
+    puts("GX demo: D-pad move, B rotate, HOME exit");
     puts("");
-    puts("Press A to enter the 3D graphics test.");
-    record("build","wii-gx-prototype-0.1");
+    puts("Press A to start. Without data: original GX demo.");
+    record("build","wii-pak-camera-test02-0.2");
     record("gx_stage","waiting-input");
 }
 static void present_console(void){
@@ -180,6 +185,17 @@ static void init_gx(void){
 static void render_gx(float x,float z,float rotation,float walk){
     GX_SetViewport(0,0,videoMode->fbWidth,videoMode->efbHeight,0,1);
     GX_SetZMode(GX_TRUE,GX_LEQUAL,GX_TRUE);
+    if(showOriginalCamera && originalCamera.valid){
+        fitd_camera_draw(&originalCamera,videoMode->fbWidth,videoMode->efbHeight);
+        GX_DrawDone();
+        storedFrame^=1;
+        GX_CopyDisp(xfb[storedFrame],GX_TRUE);
+        VIDEO_SetNextFramebuffer(xfb[storedFrame]);
+        VIDEO_Flush();
+        VIDEO_WaitVSync();
+        return;
+    }
+    GX_LoadProjectionMtx(projection,GX_PERSPECTIVE);
     // A minimal fixed-function GX scene: floor, walls, foreground obstruction
     // and a low-poly animated actor. Tests Z-order and native 3D transforms.
     draw_cube(0.f,-1.75f,-7.f,5.9f,0.11f,5.7f,0.f,0.22f,0.25f,0.36f);
@@ -250,11 +266,38 @@ int main(int argc,char **argv){
                 if(!gxFifo)break;
                 puts("GX initialized.");
                 record("stage","gx-active");
+                if(sdReady && fitd_camera_open(&originalCamera,DATA_DIR,diag)){
+                    showOriginalCamera=true;
+                    if(diag)fprintf(diag,
+                        "FITD-WII-PREVIEW active camera=0 frames=%u palette=%s\n",
+                        originalCamera.frames,
+                        originalCamera.correct_palette?"original":"grayscale");
+                } else {
+                    record("FITD-WII-PREVIEW","unavailable - showing 3D demo");
+                }
                 startTicks=gettime();
             }else VIDEO_WaitVSync();
             continue;
         }
         const u32 wpHeld=WPAD_ButtonsHeld(0), gcHeld=PAD_ButtonsHeld(0);
+        if(originalCamera.valid){
+            if((wpDown & WPAD_BUTTON_1)||(gcDown & PAD_BUTTON_Y)){
+                showOriginalCamera=!showOriginalCamera;
+                if(diag)fprintf(diag,"FITD-WII-PREVIEW toggled=%d\n",
+                                showOriginalCamera?1:0);
+            }
+            unsigned next=originalCamera.current;
+            if((wpDown & WPAD_BUTTON_PLUS)||(gcDown & PAD_TRIGGER_R))
+                next=(next+1u)%originalCamera.frames;
+            if((wpDown & WPAD_BUTTON_MINUS)||(gcDown & PAD_TRIGGER_L))
+                next=(next+originalCamera.frames-1u)%originalCamera.frames;
+            if(next!=originalCamera.current){
+                if(fitd_camera_set(&originalCamera,DATA_DIR,next,diag))
+                    showOriginalCamera=true;
+                else if(diag)fprintf(diag,
+                    "FITD-WII-CAMERA frame=%u failed; previous preserved\n",next);
+            }
+        }
         bool walking=false;
         if((wpHeld&WPAD_BUTTON_LEFT)||(gcHeld&PAD_BUTTON_LEFT)){x-=0.045f;walking=true;}
         if((wpHeld&WPAD_BUTTON_RIGHT)||(gcHeld&PAD_BUTTON_RIGHT)){x+=0.045f;walking=true;}
@@ -282,6 +325,7 @@ int main(int argc,char **argv){
             fitd_endian_selftest()?"PASS":"FAIL");
         fclose(diag);
     }
+    fitd_camera_release(&originalCamera);
     if(gxFifo)free(gxFifo);
     return 0;
 }
