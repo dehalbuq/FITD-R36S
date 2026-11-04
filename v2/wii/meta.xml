@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <app version="1">
-  <name>FITD Wii Teste 05.2</name>
+  <name>FITD Wii Teste 05.3</name>
   <coder>dehalbuq / FITD-R36S contributors</coder>
-  <version>0.5.2</version>
+  <version>0.5.3</version>
   <release_date>20261104</release_date>
-  <short_description>Wii GX ETAGE inner room/camera table correction and masks preview</short_description>
+  <short_description>Wii GX original ETAGE per-mask occlusion inspector and easy preview toggle</short_description>
   <long_description>Preliminary PowerPC/GX homebrew technical prototype for the classic Alone in the Dark engine. Experimental AITD1 ETAGE00.PAK room/camera metadata, polygon masks composited over original animated BODY previews in GX. SD logs. NOT the complete game engine. NOT a playable game. Original game files are not included.</long_description>
   <ahb_access/>
 </app>
