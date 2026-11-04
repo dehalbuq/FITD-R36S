@@ -21,5 +21,7 @@ bool fitd_camera_open(FitdCamera *c,const char *directory,FILE *log);
 bool fitd_camera_set(FitdCamera *c,const char *directory,
                      unsigned frame,FILE *log);
 void fitd_camera_draw(const FitdCamera *c,unsigned width,unsigned height);
+/* Original VGA/RGB palette exposed to the GX BODY renderer. */
+void fitd_camera_palette_rgb(uint8_t index,uint8_t rgb[3]);
 void fitd_camera_release(FitdCamera *c);
 #endif
