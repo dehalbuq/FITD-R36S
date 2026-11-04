@@ -34,3 +34,12 @@ one("FitdLib/animAction.cpp",
             }
 #endif''',
     "exclude debugger-only action collision volume overlay")
+
+# Original hqr.cpp instantiates HQR_Reset<char> and HQR_Reset<sAnimation>,
+# but forgets HQR_Reset<sBody>. The release game references that symbol;
+# explicit instantiation is required by the C++ linker on Android ARMv7.
+one("FitdLib/hqr.cpp",
+    'template void HQR_Free(hqrEntryStruct<sBody>* hqrPtr);',
+    'template void HQR_Free(hqrEntryStruct<sBody>* hqrPtr);\n'
+    'template void HQR_Reset(hqrEntryStruct<sBody>* hqrPtr);',
+    "instantiate original body resource cache reset for final link")
