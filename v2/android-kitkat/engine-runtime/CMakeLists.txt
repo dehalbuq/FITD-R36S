@@ -94,14 +94,15 @@ if(FITD_LINK_REAL_ANDROID_GAME)
     endif()
     set(FITD_BOOT_SOURCES ${FITD_RUNTIME_ALL_SOURCES})
     list(REMOVE_ITEM FITD_BOOT_SOURCES
-        "${FITD_UPSTREAM_DIR}/FitdLib/osystemAL.cpp")
+        "${FITD_UPSTREAM_DIR}/FitdLib/osystemAL.cpp"
+        "${FITD_UPSTREAM_DIR}/FitdLib/osystemAL_adlib.cpp")
     add_library(main SHARED
         ${FITD_BOOT_SOURCES}
         fitd_sdl2_platform.cpp
         fitd_sdl2_input.cpp
         fitd_android_entry.cpp
         fitd_gles2_renderer.cpp
-        fitd_audio_silent.cpp
+        fitd_sdl2_audio.cpp
     )
     target_compile_features(main PRIVATE cxx_std_17)
     target_include_directories(main PRIVATE
@@ -117,7 +118,7 @@ if(FITD_LINK_REAL_ANDROID_GAME)
     target_compile_options(main PRIVATE
         -O2 -DNDEBUG -fno-strict-aliasing -fvisibility=hidden)
     target_compile_definitions(main PRIVATE
-        FMT_HEADER_ONLY=1 BGFX_CONFIG_MULTITHREADED=0)
+        FMT_HEADER_ONLY=1 BGFX_CONFIG_MULTITHREADED=0 FITD_R36S=1)
     target_link_libraries(main PRIVATE
         "${SDL2_ROOT}/libSDL2.so"
         GLESv2 EGL android log z)
