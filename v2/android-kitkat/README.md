@@ -236,3 +236,27 @@ O teste 07 usa imagem de CAMERAxx.PAK como cenario e geometria original de LISTB
 Limites: NAO executa FitdMain, animacoes completas, scripts, colisoes, mascaras de sala ou saves. A previa 3D nao representa necessariamente o personagem ou posicionamento real da partida. Execucao fisica ainda pendente de feedback.
 
 O APK com dados originais foi montado e assinado somente em ambiente privado, para uso pessoal do usuario, e entregue em ZIP. Nenhum arquivo comercial esta presente no GitHub ou CI. Port R36S Linux nao alterado.
+
+
+## Teste 07: resultado no Chanuo A1 (03/11/2026)
+
+**Teste físico aprovado quanto à renderização e aos comandos da prévia 3D.**
+O usuário relatou que apareceu um **baú em 3D** sobre a cena; o baú
+movimentava-se quando pressionava o direcional do iPega e, ao pressionar
+**A**, mudava de orientação/posição aparente. O código do Teste 07 mapeia
+A para `actor.turn(35.f)`, ou seja, **giro do modelo**: a mudança visual
+relatada é compatível com o comportamento programado e não indica,
+por si só, falha de posicionamento.
+
+Conseguimos verificar no dispositivo: leitura de geometria real de
+`LISTBODY.PAK`/`LISTBOD2.PAK`, conversão em polígonos GLES2 e resposta
+ao controle físico. **Não** foi testado o personagem jogável nem a
+lógica original `FitdMain`, assim como animações, script, colisões,
+interação com objetos, áudio do jogo e saves.
+
+**Próximo marco:** usar o estado do `FitdMain` e o renderizador de
+atores, em vez de deslocar um modelo 3D arbitrário. Priorizar seleção
+do corpo correto do protagonista e integração de animações e câmeras;
+manter Teste 07 intacto como referência de prévia 3D aprovada. Todos
+os APKs privados continuam distribuídos em ZIP; dados comerciais ficam
+fora do repositório e do GitHub Actions.
