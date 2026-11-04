@@ -17,6 +17,18 @@
 #define CAMERA_PIXELS (CAMERA_W*CAMERA_H)
 static uint8_t paletteRGB[256*3];
 static bool paletteReady=false;
+void fitd_camera_palette_rgb(uint8_t index,uint8_t rgb[3]){
+    if(!rgb)return;
+    if(!paletteReady){
+        /* Fallback if no original palette was found on SD. */
+        rgb[0]=index;rgb[1]=index;rgb[2]=index;
+        return;
+    }
+    rgb[0]=paletteRGB[(unsigned)index*3];
+    rgb[1]=paletteRGB[(unsigned)index*3+1];
+    rgb[2]=paletteRGB[(unsigned)index*3+2];
+}
+
 
 static void log_info(FILE *log,const char *label,int frame,int status,
                      const FitdPakEntry *e){
