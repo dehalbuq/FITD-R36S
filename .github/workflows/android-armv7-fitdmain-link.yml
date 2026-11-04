@@ -1,8 +1,8 @@
-name: FITD Android ARMv7 TEST10 60Hz GLES2 experimental
+name: FITD Android ARMv7 TEST11 FPS, font and save
 
 on:
   push:
-    branches: ["port/android-kitkat-api19", "fix/android-armv7-test10-60fps-gles2"]
+    branches: ["port/android-kitkat-api19", "fix/android-armv7-test11-60fps-gles2", "fix/android-armv7-test11-fps-font-save-3d"]
     paths:
       - "v2/android-kitkat/engine-runtime/**"
       - "v2/android-kitkat/embedded/**"
@@ -63,7 +63,15 @@ jobs:
           python3 v2/patch_throw_null_body.py /tmp/fitd-upstream
           python3 v2/patch_hit_object_rehaunted.py /tmp/fitd-upstream
           python3 v2/patch_cellar_evalvar.py /tmp/fitd-upstream
-          echo 'FITD-ANDROID: R36S gameplay, collision, throw and script safety patches verified'
+          python3 v2/patch_cellar_wall_recovery.py /tmp/fitd-upstream
+          python3 v2/patch_readable_font.py /tmp/fitd-upstream
+          echo 'FITD-ANDROID: R36S gameplay, save, readability and collision fixes verified'
+
+      - name: Generate readable CP850 font without shipping TTF
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y python3-pil fonts-dejavu-core
+          /usr/bin/python3 v2/gen_readable_font.py /tmp/fitd-upstream
 
       - name: Build SDL2 ARMv7 Android 4.4 shared library
         run: |
@@ -118,7 +126,7 @@ jobs:
           old="io.github.dehalbuq.fitdkitkatprobe"
           assert s.count(old)==1
           s=s.replace(old,"io.github.dehalbuq.fitdandroidembedded")
-          s=s.replace("versionName '0.1'","versionName '0.10.0-test10-60hz-gles2'")
+          s=s.replace("versionName '0.1'","versionName '0.11.0-font-save-gles2'")
           gradle.write_text(s)
           m=app/"src/main/AndroidManifest.xml"
           v=m.read_text()
@@ -135,18 +143,18 @@ jobs:
             '    </application>')
           m.write_text(v)
           label=app/"src/main/res/values/strings.xml"
-          label.write_text(label.read_text().replace("FITD GLES2 Test","FITD Android TEST10"))
+          label.write_text(label.read_text().replace("FITD GLES2 Test","FITD Android TEST11"))
           PY
           curl -fsSL https://services.gradle.org/distributions/gradle-8.1.1-bin.zip -o /tmp/gradle.zip
           unzip -q /tmp/gradle.zip -d /tmp
           (cd work/fitd-realgame && /tmp/gradle-8.1.1/bin/gradle --no-daemon :app:assembleDebug)
           mkdir -p dist
-          cp work/fitd-realgame/app/build/outputs/apk/debug/app-debug.apk dist/FITD-Android-ARMv7-TEST10-60FPS-GLES2-API19.apk
+          cp work/fitd-realgame/app/build/outputs/apk/debug/app-debug.apk dist/FITD-Android-ARMv7-TEST11-60FPS-GLES2-API19.apk
 
       - name: Validate native executable and no proprietary data
         run: |
           set -euo pipefail
-          apk=dist/FITD-Android-ARMv7-TEST10-60FPS-GLES2-API19.apk
+          apk=dist/FITD-Android-ARMv7-TEST11-60FPS-GLES2-API19.apk
           "$ANDROID_HOME/build-tools/34.0.0/aapt" dump badging "$apk" | tee /tmp/fitd-realgame-badging.txt
           grep -Fq "sdkVersion:'19'" /tmp/fitd-realgame-badging.txt
           grep -Fq "native-code: 'armeabi-v7a'" /tmp/fitd-realgame-badging.txt
@@ -161,6 +169,6 @@ jobs:
       - name: Upload real engine experimental APK (no original game files)
         uses: actions/upload-artifact@v4
         with:
-          name: FITD-ANDROID-ARMV7-TEST10-GLES2-NO-ASSETS
+          name: FITD-ANDROID-ARMV7-TEST11-GLES2-NO-ASSETS
           path: dist/*
           if-no-files-found: error
