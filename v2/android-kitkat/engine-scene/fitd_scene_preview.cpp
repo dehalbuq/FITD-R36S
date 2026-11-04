@@ -19,6 +19,7 @@
 #include <SDL_system.h>
 #include "pak.h"
 #include "fitd_gamepad_select_sdl2.h"
+#include "fitd_gameplay_input_sdl2.h"
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -299,6 +300,20 @@ int main(int argc,char** argv) {
         if(!pad && SDL_GetTicks()-lastPadScan>1250) {
             lastPadScan=SDL_GetTicks();
             openPhysicalPad();
+        }
+        // Exercise the future *real game* JoyD/Click/key adapter without
+        // changing the working Test 06 camera-preview control behavior.
+        const fitd_android::FitdInputState liveInput =
+            fitd_android::readGameplayInput(pad);
+        static unsigned char lastJoyD=255, lastClick=255, lastKey=255;
+        if(liveInput.joyD!=lastJoyD || liveInput.click!=lastClick ||
+           liveInput.key!=lastKey){
+            SDL_Log("FITD-GAMEPLAY-INPUT: JoyD=%u Click=%u key=0x%02x",
+                (unsigned)liveInput.joyD,(unsigned)liveInput.click,
+                (unsigned)liveInput.key);
+            lastJoyD=liveInput.joyD;
+            lastClick=liveInput.click;
+            lastKey=liveInput.key;
         }
         if(pad){
             Sint16 x=SDL_GameControllerGetAxis(pad,SDL_CONTROLLER_AXIS_LEFTX);
