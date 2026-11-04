@@ -56,6 +56,13 @@ jobs:
           PY
           python3 -m py_compile v2/android-kitkat/engine-runtime/patch_fitd_gameplay_api19.py
           python3 v2/android-kitkat/engine-runtime/patch_fitd_gameplay_api19.py /tmp/fitd-upstream
+          # Reuse the proven gameplay-only R36S source-pinned fixes. No
+          # PortMaster KMSDRM, BGFX or SDL3 patch is applied to Android.
+          python3 v2/patch_library_room_crash.py /tmp/fitd-upstream
+          python3 v2/patch_throw_null_body.py /tmp/fitd-upstream
+          python3 v2/patch_hit_object_rehaunted.py /tmp/fitd-upstream
+          python3 v2/patch_cellar_evalvar.py /tmp/fitd-upstream
+          echo 'FITD-ANDROID: R36S gameplay, collision, throw and script safety patches verified'
 
       - name: Build SDL2 ARMv7 Android 4.4 shared library
         run: |
@@ -78,7 +85,8 @@ jobs:
             -DSDL2_INCLUDE_DIR=/tmp/SDL2/include \
             -DFMT_INCLUDE_DIR=/tmp/fmt/include \
             -DSDL2_ROOT=/tmp/sdl2-build \
-            -DFITD_LINK_REAL_ANDROID_GAME=ON
+            -DFITD_LINK_REAL_ANDROID_GAME=ON \
+            -DCMAKE_CXX_FLAGS="-DFITD_R36S=1"
           cmake --build /tmp/fitd-runtime-link --target main --parallel 2
           test -s /tmp/fitd-runtime-link/libmain.so
           "$ANDROID_HOME/ndk/23.2.8568313/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" \
