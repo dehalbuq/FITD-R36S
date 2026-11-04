@@ -218,3 +218,21 @@ quando o loop `FitdMain` estiver integrado.
 que usa SDL3, bgfx, shaders e ImGui, para SDL2 e GLES2 com timing e áudio
 consistentes. Não publicar um APK de jogo real antes de compilar e testar
 a lógica de gameplay.
+
+
+## Teste 07 — previa de modelos 3D originais com GLES2
+
+CI ARMv7/API19 SDL2/GLES2 concluido com sucesso:
+https://github.com/dehalbuq/FITD-R36S/actions/runs/41748216154
+
+Implementacao em v2/android-kitkat/engine-character/:
+- fitd_body_mesh.h: parser com limites de tamanho e indices baseado no upstream hqr.cpp/createBodyFromPtr
+- fitd_character_preview.cpp: leitura de LISTBODY/LISTBOD2 com loadPak() original e render de poligonos 3D GLES2
+- patch_scene07.py: gera a variante a partir do teste 06 sem alterar o codigo aprovado
+- CMakeLists.txt + workflow android-armv7-engine-character.yml: build sem arquivos comerciais
+
+O teste 07 usa imagem de CAMERAxx.PAK como cenario e geometria original de LISTBODY.PAK para um modelo 3D experimental. Ipega: direcional/analogico move a previa, A gira, X troca o modelo, L1/R1 alterna andar, B/START fecha. Atualizacao de posicao ~25 vezes/s, apresentacao no refresh da GPU.
+
+Limites: NAO executa FitdMain, animacoes completas, scripts, colisoes, mascaras de sala ou saves. A previa 3D nao representa necessariamente o personagem ou posicionamento real da partida. Execucao fisica ainda pendente de feedback.
+
+O APK com dados originais foi montado e assinado somente em ambiente privado, para uso pessoal do usuario, e entregue em ZIP. Nenhum arquivo comercial esta presente no GitHub ou CI. Port R36S Linux nao alterado.
