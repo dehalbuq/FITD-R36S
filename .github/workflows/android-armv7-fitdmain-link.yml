@@ -128,6 +128,7 @@ jobs:
           old="io.github.dehalbuq.fitdkitkatprobe"
           assert s.count(old)==1
           s=s.replace(old,"io.github.dehalbuq.fitdandroidembedded")
+          s=s.replace("versionCode 1","versionCode 12")
           s=s.replace("versionName '0.1'","versionName '0.12.0-60hz-options-slots'")
           gradle.write_text(s)
           m=app/"src/main/AndroidManifest.xml"
