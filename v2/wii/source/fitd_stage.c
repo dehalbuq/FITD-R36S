@@ -25,19 +25,33 @@ static int16_t s16(const uint8_t *data,size_t off){
 static uint32_t u32(const uint8_t *data,size_t off){
     return fitd_read_le32(data+off);
 }
+/*
+ * ETAGE inner records have an offset directory WITHOUT an explicit count.
+ * first/4 is only an UPPER BOUND, not the actual number of entries.
+ * The first record starts immediately after the offset table: reading its
+ * first four bytes as another offset yields a huge "phantom" entry.
+ * For real AITD1 ETAGE00, rooms have first=8 but only ONE real entry;
+ * cameras have first=24 but only FIVE valid entries. Upstream
+ * getNumberOfRoom() / LoadEtage() likewise stop on an invalid offset.
+ * Reject an invalid FIRST record; stop after the last valid one.
+ */
 int fitd_stage_blob_count(const uint8_t *data,size_t len,unsigned *count){
     if(!data || !count || len<8)return -1;
     const uint32_t first=u32(data,0);
-    if(first<4 || (first&3u)!=0 || first>len ||
+    if(first<4 || (first&3u)!=0 || first>=len ||
        first/4u>FITD_STAGE_MAX_ROOMS)return -2;
-    const unsigned n=first/4u;
-    uint32_t previous=first;
-    for(unsigned i=0;i<n;i++){
+    const unsigned candidate_max=first/4u;
+    unsigned valid=0;
+    uint32_t previous=0;
+    for(unsigned i=0;i<candidate_max;i++){
         const uint32_t off=u32(data,i*4u);
-        if(off<previous || off>len)return -3;
+        if(off<first || off>=len || (valid && off<=previous))
+            break;
         previous=off;
+        valid++;
     }
-    *count=n;
+    if(valid==0)return -3;
+    *count=valid;
     return 0;
 }
 static int blob_span(const uint8_t *data,size_t size,
