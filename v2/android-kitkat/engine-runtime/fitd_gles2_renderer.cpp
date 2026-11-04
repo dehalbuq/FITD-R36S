@@ -42,6 +42,11 @@ static GLuint texProg=0,polyProg=0,maskProg=0,temporalProg=0,backgroundTexture=0
 static std::map<std::pair<int,int>,GLuint> maskTextures;
 static unsigned maskRendered=0;
 static GLuint quadVbo=0,triVbo=0,cachedQuadVbo=0,cachedFrameTexture=0,historyFrameTexture=0;
+static GLuint cachedFrameFbo=0,historyFrameFbo=0;
+static GLuint cachedDepthRb=0,historyDepthRb=0;
+static bool offscreenReady=false;
+static constexpr int GAME_FBO_WIDTH=640;
+static constexpr int GAME_FBO_HEIGHT=480;
 static Uint32 lastCaptureTicks=0;
 static int lastCamera=-32768,lastRoom=-32768,lastFloor=-32768;
 static bool sameCameraFrame=false;
@@ -99,16 +104,22 @@ static GLuint makeProgram(const char*vs,const char*fs,
     return prog;
 }
 static void updateViewport(){
+    // Render to a compact 4:3 GPU framebuffer, irrespective of the phone's
+    // physical resolution. Present/scale in a separate GPU pass.
     int dw=640,dh=480;
     if(gWindowBGFX)SDL_GL_GetDrawableSize(gWindowBGFX,&dw,&dh);
     if(dw<1||dh<1)return;
-    targetWidth=dw;targetHeight=dh;
-    viewportW=dw;
-    viewportH=(dw*3)/4;
-    if(viewportH>dh){viewportH=dh;viewportW=(dh*4)/3;}
-    viewportX=(dw-viewportW)/2;
-    viewportY=(dh-viewportH)/2;
     outputResolution[0]=dw;outputResolution[1]=dh;
+    if(offscreenReady) {
+        targetWidth=GAME_FBO_WIDTH;targetHeight=GAME_FBO_HEIGHT;
+        viewportX=viewportY=0;
+        viewportW=GAME_FBO_WIDTH;viewportH=GAME_FBO_HEIGHT;
+    } else {
+        targetWidth=dw;targetHeight=dh;
+        viewportW=dw;viewportH=dw*3/4;
+        if(viewportH>dh){viewportH=dh;viewportW=dh*4/3;}
+        viewportX=(dw-viewportW)/2;viewportY=(dh-viewportH)/2;
+    }
     glViewport(viewportX,viewportY,viewportW,viewportH);
 }
 static void drawTexture(GLuint tex,const unsigned char* data,bool useAlpha) {
@@ -212,15 +223,46 @@ static bool initGL(){
     glGenBuffers(1,&cachedQuadVbo);
     glBindBuffer(GL_ARRAY_BUFFER,cachedQuadVbo);
     glBufferData(GL_ARRAY_BUFFER,sizeof(screenQuad),screenQuad,GL_STATIC_DRAW);
+    // The previous glCopyTexSubImage2D from ANGLE's default framebuffer
+    // failed with GL_INVALID_OPERATION (0x502) on Samsung Xclipse. Replace
+    // that fragile read-back path with an actual GPU render-to-texture chain.
+    // The game renders into "history" (write) FBO and swaps FBO handles at
+    // the end of each logic frame. "cached" is read-only for 60Hz display.
     glGenTextures(1,&cachedFrameTexture);
     glGenTextures(1,&historyFrameTexture);
-    for(GLuint tex:{cachedFrameTexture,historyFrameTexture}) {
-        glBindTexture(GL_TEXTURE_2D,tex);
+    glGenFramebuffers(1,&cachedFrameFbo);
+    glGenFramebuffers(1,&historyFrameFbo);
+    glGenRenderbuffers(1,&cachedDepthRb);
+    glGenRenderbuffers(1,&historyDepthRb);
+    const GLuint colors[2]={cachedFrameTexture,historyFrameTexture};
+    const GLuint buffers[2]={cachedFrameFbo,historyFrameFbo};
+    const GLuint depths[2]={cachedDepthRb,historyDepthRb};
+    offscreenReady=true;
+    for(int i=0;i<2;++i) {
+        glBindTexture(GL_TEXTURE_2D,colors[i]);
         glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+        glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,GAME_FBO_WIDTH,
+                     GAME_FBO_HEIGHT,0,GL_RGBA,GL_UNSIGNED_BYTE,nullptr);
+        glBindFramebuffer(GL_FRAMEBUFFER,buffers[i]);
+        glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,
+                               GL_TEXTURE_2D,colors[i],0);
+        glBindRenderbuffer(GL_RENDERBUFFER,depths[i]);
+        glRenderbufferStorage(GL_RENDERBUFFER,GL_DEPTH_COMPONENT16,
+                              GAME_FBO_WIDTH,GAME_FBO_HEIGHT);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER,GL_DEPTH_ATTACHMENT,
+                                  GL_RENDERBUFFER,depths[i]);
+        const GLenum status=glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        if(status!=GL_FRAMEBUFFER_COMPLETE) {
+            SDL_Log("FITD-FBO: NOT COMPLETE index=%d status=0x%x",i,status);
+            offscreenReady=false;
+        }
     }
+    glBindFramebuffer(GL_FRAMEBUFFER,0);
+    SDL_Log("FITD-FBO: GPU render-to-texture %dx%d available=%d; no glCopyTex*",
+            GAME_FBO_WIDTH,GAME_FBO_HEIGHT,offscreenReady?1:0);
     glGenTextures(1,&backgroundTexture);
     glGenTextures(1,&uiTexture);
     for(GLuint tex:{backgroundTexture,uiTexture}){
@@ -256,6 +298,11 @@ void deleteBgfxGlue() {
     if(cachedQuadVbo)glDeleteBuffers(1,&cachedQuadVbo);
     if(cachedFrameTexture)glDeleteTextures(1,&cachedFrameTexture);
     if(historyFrameTexture)glDeleteTextures(1,&historyFrameTexture);
+    if(cachedFrameFbo)glDeleteFramebuffers(1,&cachedFrameFbo);
+    if(historyFrameFbo)glDeleteFramebuffers(1,&historyFrameFbo);
+    if(cachedDepthRb)glDeleteRenderbuffers(1,&cachedDepthRb);
+    if(historyDepthRb)glDeleteRenderbuffers(1,&historyDepthRb);
+    offscreenReady=false;
     cachedFrameReady=false; cachedWidth=0; cachedHeight=0;
     if(backgroundTexture)glDeleteTextures(1,&backgroundTexture);
     if(uiTexture)glDeleteTextures(1,&uiTexture);
@@ -273,6 +320,8 @@ void deleteBgfxGlue() {
 }
 void StartFrame() {
     if(!graphicsReady)return;
+    // The writer FBO is never the texture being displayed or sampled.
+    glBindFramebuffer(GL_FRAMEBUFFER,offscreenReady?historyFrameFbo:0);
     updateViewport();
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_TRUE);
@@ -298,88 +347,60 @@ void EndFrame() {
 }
 // The GLES context belongs exclusively to the engine worker. The UI
 // thread never touches these functions, avoiding EGL ownership races.
+// One producer (game renderer) + one consumer (display interpolation), both
+// running on the SAME EGL-context-owning engine worker thread.
 extern "C" void fitdAndroidCaptureFrame() {
-    if(!graphicsReady || !cachedFrameTexture || !historyFrameTexture ||
-       targetWidth<1 || targetHeight<1)return;
-    const bool resized=(cachedWidth!=targetWidth || cachedHeight!=targetHeight);
-    if(resized) {
-        cachedFrameReady=false;priorFrameReady=false;
-        cachedWidth=targetWidth;cachedHeight=targetHeight;
-        for(GLuint tex:{cachedFrameTexture,historyFrameTexture}){
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D,tex);
-            glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,cachedWidth,cachedHeight,0,
-                         GL_RGBA,GL_UNSIGNED_BYTE,nullptr);
-        }
-    }
-    // Preserve previous completed frame entirely on GPU; no CPU readback.
-    if(cachedFrameReady)std::swap(cachedFrameTexture,historyFrameTexture);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D,cachedFrameTexture);
-    // A previous mask/shader error must NOT invalidate a successful GPU
-    // copy. Test12 queried GL error only after the copy and misclassified
-    // errors from other GLES calls as failed framebuffer captures.
-    GLenum previousError=GL_NO_ERROR;
-    for(int i=0;i<8;++i) {
-        const GLenum e=glGetError();
-        if(e==GL_NO_ERROR)break;
-        if(previousError==GL_NO_ERROR)previousError=e;
-    }
-    static unsigned priorErrors=0,copyErrors=0,goodCaptures=0;
-    if(previousError!=GL_NO_ERROR && ++priorErrors<=5)
-        SDL_Log("FITD-GPU: pre_capture_gl_error=0x%x (not a copy failure)",previousError);
-    glCopyTexSubImage2D(GL_TEXTURE_2D,0,0,0,0,0,cachedWidth,cachedHeight);
-    const GLenum copyError=glGetError();
-    bool ok=(copyError==GL_NO_ERROR);
-    if(!ok) {
-        ++copyErrors;
-        if(copyErrors<=8 || copyErrors%250==0)
-            SDL_Log("FITD-GPU: copy_frame_failed error=0x%x size=%dx%d failures=%u",
-                    copyError,cachedWidth,cachedHeight,copyErrors);
-        // Some EGL implementations reject glCopyTexSubImage2D from their
-        // window backbuffer. Try GLES2 glCopyTexImage2D before giving up.
-        glCopyTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,0,0,cachedWidth,cachedHeight,0);
-        const GLenum fallbackError=glGetError();
-        ok=(fallbackError==GL_NO_ERROR);
-        if(ok && copyErrors<=8)
-            SDL_Log("FITD-GPU: GLES2 copy_frame_fallback=glCopyTexImage2D SUCCESS");
-        if(!ok && copyErrors<=8)
-            SDL_Log("FITD-GPU: GLES2 copy_frame_fallback FAILED error=0x%x",fallbackError);
-    } else if(++goodCaptures==1)
-        SDL_Log("FITD-GPU: GPU frame cache initialized successfully %dx%d",
-                cachedWidth,cachedHeight);
-    priorFrameReady=cachedFrameReady && ok;
-    cachedFrameReady=ok;
-    // Camera changes are hard cuts. Comparing the indexed framebuffer bytes
-    // is incorrect: UI redraws and palette effects can legitimately change
-    // individual pixels every game tick without changing the camera.
-    sameCameraFrame=priorFrameReady && lastCamera==NumCamera &&
+    if(!graphicsReady || !offscreenReady) return;
+    // FBO storage already contains the complete current frame. Swap roles;
+    // never glReadPixels, glCopyTexSubImage2D, or copy full-screen data.
+    const bool hadPrior=cachedFrameReady;
+    std::swap(cachedFrameTexture,historyFrameTexture);
+    std::swap(cachedFrameFbo,historyFrameFbo);
+    std::swap(cachedDepthRb,historyDepthRb);
+    cachedWidth=GAME_FBO_WIDTH;cachedHeight=GAME_FBO_HEIGHT;
+    cachedFrameReady=true;
+    priorFrameReady=hadPrior;
+    sameCameraFrame=hadPrior && lastCamera==NumCamera &&
                     lastRoom==currentRoom && lastFloor==g_currentFloor;
     lastCamera=NumCamera;lastRoom=currentRoom;lastFloor=g_currentFloor;
     lastCaptureTicks=SDL_GetTicks();
+    static unsigned captured=0;
+    if(++captured==1 || captured%250==0)
+        SDL_Log("FITD-FBO: captured=%u ready=1 prior=%d render_texture=%u",
+                captured,hadPrior?1:0,(unsigned)cachedFrameTexture);
 }
 extern "C" bool fitdAndroidPresentCachedFrame() {
-    if(!graphicsReady || !cachedFrameReady || !gWindowBGFX)return false;
+    if(!graphicsReady || !offscreenReady || !cachedFrameReady ||
+       !gWindowBGFX)return false;
+    // Display from the completed color attachment without copying pixels.
+    // Offscreen gameplay always remains 640x480, even on 2258x1080 phones.
+    glBindFramebuffer(GL_FRAMEBUFFER,0);
+    int dw=640,dh=480;
+    SDL_GL_GetDrawableSize(gWindowBGFX,&dw,&dh);
+    if(dw<1||dh<1)return false;
     glDisable(GL_SCISSOR_TEST);
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
     glDisable(GL_BLEND);
-    glViewport(0,0,cachedWidth,cachedHeight);
+    glViewport(0,0,dw,dh);
+    glClearColor(0.f,0.f,0.f,1.f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    int w=dw,h=dw*3/4;
+    if(h>dh){h=dh;w=dh*4/3;}
+    glViewport((dw-w)/2,(dh-h)/2,w,h);
     const bool tween=sameCameraFrame && priorFrameReady;
-    glUseProgram(tween?temporalProg:texProg);
+    const GLuint program=tween?temporalProg:texProg;
+    glUseProgram(program);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D,tween?historyFrameTexture:cachedFrameTexture);
-    glUniform1i(glGetUniformLocation(tween?temporalProg:texProg,
-                                    tween?"oldFrame":"pic"),0);
-    if(tween){
-        // Between genuine 25Hz render samples, output up to 60Hz unique
-        // blended images; this is VISUAL interpolation, not gameplay ticks.
+    glUniform1i(glGetUniformLocation(program,tween?"oldFrame":"pic"),0);
+    if(tween) {
         const float phase=std::max(0.f,std::min(1.f,
-                             (SDL_GetTicks()-lastCaptureTicks)/40.f));
+                         (SDL_GetTicks()-lastCaptureTicks)/40.f));
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D,cachedFrameTexture);
-        glUniform1i(glGetUniformLocation(temporalProg,"newFrame"),1);
-        glUniform1f(glGetUniformLocation(temporalProg,"blendAmount"),phase);
+        glUniform1i(glGetUniformLocation(program,"newFrame"),1);
+        glUniform1f(glGetUniformLocation(program,"blendAmount"),phase);
     }
     glBindBuffer(GL_ARRAY_BUFFER,cachedQuadVbo);
     glEnableVertexAttribArray(0);
@@ -395,10 +416,14 @@ extern "C" bool fitdAndroidPresentCachedFrame() {
     SDL_GL_SwapWindow(gWindowBGFX);
     const Uint64 after=SDL_GetPerformanceCounter();
     const Uint64 frequency=SDL_GetPerformanceFrequency();
-    static unsigned slowPresent=0;
     const unsigned swapMs=frequency?unsigned((after-before)*1000u/frequency):0u;
-    if(swapMs>12 && ++slowPresent<=6)
-        SDL_Log("FITD-GPU: cached_swap_wait_ms=%u; display compositor may throttle",swapMs);
+    static unsigned slowSwaps=0;
+    if(swapMs>12 && ++slowSwaps<=8)
+        SDL_Log("FITD-FBO: swap_wait_ms=%u (driver/compositor)",swapMs);
+    // Restore the writer FBO as the default engine target. In-engine menu
+    // routines can issue draw calls between StartFrame and EndFrame.
+    glBindFramebuffer(GL_FRAMEBUFFER,historyFrameFbo);
+    updateViewport();
     return true;
 }
 void renderGameWindow(){}
