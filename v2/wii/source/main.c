@@ -1,5 +1,5 @@
 /*
- * FITD Wii GX original ETAGE inner room/camera table fix + mask preview v0.5.2 -- Wii homebrew hardware/renderer validation.
+ * FITD Wii GX original ETAGE camera occlusion mask inspector v0.5.3 -- Wii homebrew hardware/renderer validation.
  *
  * This is NOT the FITD game engine yet. It exercises native PowerPC,
  * Hollywood GX 3D + Z-buffer, 480p/480i VI, Wii Remote/GameCube inputs,
@@ -35,7 +35,7 @@
 #define GX_FIFO_BYTES (256u*1024u)
 #define DATA_DIR "sd:/apps/fitd-wii/data"
 #define LOG_FILE "sd:/apps/fitd-wii/wii-diagnostic.txt"
-#define ROOT_LOG_FILE "sd:/fitd-wii-test05-2-diagnostic.txt"
+#define ROOT_LOG_FILE "sd:/fitd-wii-test05-3-diagnostic.txt"
 
 static GXRModeObj *videoMode;
 static void *xfb[2]={NULL,NULL};
@@ -61,6 +61,7 @@ static FitdStageRoom currentStageRoom={0};
 static FitdStageMask stageMasks={0};
 static FitdMaskOverlay stageOverlay={0};
 static bool showStageMask=false;
+static int selectedMaskIndex=-1; /* -1 means union for legacy inspection */
 static unsigned stageMaskRefreshes=0;
 static int stageMaskStatus=-1;
 
@@ -85,11 +86,21 @@ static void stage_refresh_camera(void){
     }
     const int chosenRoom=currentStageRoom.valid?
                          (int)currentStageRoom.index:-1;
-    stageMaskStatus=fitd_stage_masks(&originalStage,cam.index,
-                                    chosenRoom,&stageMasks,diag);
+    stageMaskStatus=fitd_stage_masks_selected(&originalStage,cam.index,
+                           chosenRoom,selectedMaskIndex,&stageMasks,diag);
     if(stageMaskStatus==-4)
-        stageMaskStatus=fitd_stage_masks(&originalStage,cam.index,
-                                       -1,&stageMasks,diag);
+        stageMaskStatus=fitd_stage_masks_selected(&originalStage,cam.index,
+                           -1,selectedMaskIndex,&stageMasks,diag);
+    if(stageMaskStatus==-15 && selectedMaskIndex>=0){
+        /* Another camera can have fewer masks. Fall back to the safe
+           union view instead of keeping an invalid mask index. */
+        selectedMaskIndex=-1;
+        stageMaskStatus=fitd_stage_masks_selected(&originalStage,cam.index,
+                           chosenRoom,selectedMaskIndex,&stageMasks,diag);
+        if(stageMaskStatus==-4)
+            stageMaskStatus=fitd_stage_masks_selected(&originalStage,cam.index,
+                           -1,selectedMaskIndex,&stageMasks,diag);
+    }
     if(stageMaskStatus==0){
         if(!fitd_mask_gx_update(&stageOverlay,&stageMasks,
                                 originalCamera.raw_pixels)){
@@ -101,10 +112,11 @@ static void stage_refresh_camera(void){
     if(diag){
         fprintf(diag,
           "FITD-WII-MASK05 camera=%u room=%d status=%d "
-          "ready=%d masks=%u polys=%u pixels=%u\n",
+          "ready=%d masks=%u polys=%u pixels=%u selected=%d\n",
           originalCamera.current,stageMasks.viewed_room,
           stageMaskStatus,stageOverlay.ready?1:0,
-          stageMasks.masks,stageMasks.polygons,stageMasks.covered_pixels);
+          stageMasks.masks,stageMasks.polygons,stageMasks.covered_pixels,
+          selectedMaskIndex);
         fflush(diag);
     }
 }
@@ -160,7 +172,7 @@ static void diagnostic_open(void){
         const char *path=candidates[i];
         FILE *f=fopen(path,"wb");
         if(!f){firstLogError=errno;continue;}
-        const int bad=fputs("FITD Wii Test05.2 - log created at boot\n",f)==EOF
+        const int bad=fputs("FITD Wii Test05.3 - log created at boot\n",f)==EOF
                     || fflush(f)!=0 || ferror(f);
         const int closed=fclose(f);
         if(bad || closed!=0){firstLogError=errno;continue;}
@@ -232,7 +244,7 @@ static void inspect_game_data(void){
     }
 }
 static void scan_hardware(void){
-    puts("FITD Wii / GX Teste 05.2 (ETAGE rooms/masks)");
+    puts("FITD Wii / GX Teste 05.3 (mask inspector)");
     puts("----------------------------------------");
     puts("Native Wii Broadway PowerPC / libogc");
     printf("Framebuffer: %ux%u, EFB height: %u\n",
@@ -264,12 +276,14 @@ static void scan_hardware(void){
     puts("A: pause/resume keyframe animation (in GX)");
     puts("2 / GC X: toggle BODY; 1 / GC Y: GX demo");
     puts("+/- / GC R/L: switch camera; B: rotate model");
-    puts("Hold B + 1 / GC B+Y: toggle foreground mask");
+    puts("Wii 1 / GC Y: cycle scene > mask > GX demo");
+    puts("Hold B + 1 / GC B+Y: direct mask on/off");
+    puts("Hold B + 2 / GC B+X: cycle individual masks");
     puts("Hold B + +/- / GC B+R/L: browse ETAGE rooms");
     puts("HOME / GC START: exit");
     puts("");
     puts("Press A. Without data: original GX demo.");
-    record("build","wii-etage-room-mask-test05-2-inner-stage-table");
+    record("build","wii-etage-room-mask-test05-3-individual-mask-inspector");
     record("gx_stage","waiting-input");
 }
 static void present_console(void){
@@ -424,7 +438,7 @@ int main(int argc,char **argv){
     sdReady=fatInitDefault()?1:0;
     diagnostic_open();
     if(diag){
-        fprintf(diag,"FITD WII GX ETAGE inner table fix v0.5.2\n");
+        fprintf(diag,"FITD WII GX ETAGE per-mask inspector v0.5.3\n");
         fprintf(diag,"log_path=%s\n",activeLogPath);
         fprintf(diag,"native_ppc_endian=%s\n",fitd_is_big_endian()?"BE":"LE");
         fprintf(diag,"framebuffer=%ux%u efb=%u\n",
@@ -557,9 +571,27 @@ int main(int argc,char **argv){
                         fflush(diag);
                     }
                 }else{
-                    showOriginalCamera=!showOriginalCamera;
-                    if(diag)fprintf(diag,"FITD-WII-PREVIEW toggled=%d\n",
-                                    showOriginalCamera?1:0);
+                    /* One-key visibility for the new GPU layer:
+                       original camera unmasked -> masked -> GX demo ->
+                       original camera unmasked. No hard-to-press chord
+                       is required to verify actual mask rendering. */
+                    if(!showOriginalCamera){
+                        showOriginalCamera=true;
+                        showStageMask=false;
+                    }else if(!showStageMask){
+                        showStageMask=true;
+                    }else{
+                        showOriginalCamera=false;
+                        showStageMask=false;
+                    }
+                    if(diag){
+                        fprintf(diag,
+                          "FITD-WII-PREVIEW camera=%d mask_preview=%d "
+                          "selected=%d ready=%d\n",
+                          showOriginalCamera?1:0,showStageMask?1:0,
+                          selectedMaskIndex,stageOverlay.ready?1:0);
+                        fflush(diag);
+                    }
                 }
             }
             int camDirection=0;
@@ -585,12 +617,35 @@ int main(int argc,char **argv){
                 }
             }
         }
-        if(originalBody.valid){
-            if((wpDown&WPAD_BUTTON_2)||(gcDown&PAD_BUTTON_X)){
+        if((wpDown&WPAD_BUTTON_2)||(gcDown&PAD_BUTTON_X)){
+            const bool maskCombo=((wpHeld&WPAD_BUTTON_B)!=0) ||
+                                 ((gcHeld&PAD_BUTTON_B)!=0);
+            if(maskCombo && originalStage.valid && stageMasks.masks){
+                if(selectedMaskIndex<0)
+                    selectedMaskIndex=0;
+                else if((unsigned)(selectedMaskIndex+1)>=stageMasks.masks)
+                    selectedMaskIndex=-1;
+                else
+                    selectedMaskIndex++;
+                showOriginalCamera=true;
+                showStageMask=true;
+                stage_refresh_camera();
+                if(diag){
+                    fprintf(diag,
+                      "FITD-WII-MASK05 select=%d total=%u "
+                      "pixels=%u status=%d ready=%d\n",
+                      selectedMaskIndex,stageMasks.masks,
+                      stageMasks.covered_pixels,stageMaskStatus,
+                      stageOverlay.ready?1:0);
+                    fflush(diag);
+                }
+            }else if(originalBody.valid){
                 showOriginalBody=!showOriginalBody;
                 if(diag)fprintf(diag,"FITD-WII-BODY overlay=%d\n",
                                 showOriginalBody?1:0);
             }
+        }
+        if(originalBody.valid){
             if(showOriginalCamera && ((wpDown&(WPAD_BUTTON_LEFT|WPAD_BUTTON_RIGHT)) ||
                                       (gcDown&(PAD_BUTTON_LEFT|PAD_BUTTON_RIGHT)))){
                 const bool forward=((wpDown&WPAD_BUTTON_RIGHT) ||
@@ -624,11 +679,12 @@ int main(int argc,char **argv){
             fprintf(diag,
               "FITD-WII-STAGE05 available=%d floor=%u room=%u "
               "camera=%u mask_preview=%d mask_ready=%d "
-              "mask_pixels=%u refreshes=%u\n",
+              "mask_pixels=%u refreshes=%u selected=%d total_masks=%u\n",
               originalStage.valid?1:0,originalStage.floor_number,
               currentStageRoom.index,originalCamera.current,
               showStageMask?1:0,stageOverlay.ready?1:0,
-              stageMasks.covered_pixels,stageMaskRefreshes);
+              stageMasks.covered_pixels,stageMaskRefreshes,
+              selectedMaskIndex,stageMasks.masks);
             fprintf(diag,
               "FITD-WII-ANIM04 status=%s compatible=%d playing=%d "
               "entry=%u tick=%.2f pose=%d frame=%u->%u alpha=%.3f\n",
