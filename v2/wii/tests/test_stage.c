@@ -82,18 +82,54 @@ static int test_valid(void){
     if(!pass)printf("STAGE test failed: room=%d camera=%d mask=%d wrong=%d\n",a,b,c,wrong);
     return pass?0:4;
 }
+/*
+ * Real AITD1 ETAGE inner offset directories are not self-counted.
+ * The first room record follows an 8-byte offset area: its header
+ * overlaps the would-be second directory slot. A camera table with five
+ * entries similarly has a sixth slot occupied by the camera header.
+ * These bytes are synthesized; no original game bytes are included.
+ */
+static int test_real_shape(void){
+    uint8_t rooms[96]={0};
+    uint8_t cameras[240]={0};
+    w32(rooms+0,8);        /* valid room offset 0 */
+    w32(rooms+4,0x000F0017u); /* first room offset table terminator */
+    w32(cameras+0,24);    /* first camera begins at 24 */
+    w32(cameras+4,60);
+    w32(cameras+8,100);
+    w32(cameras+12,140);
+    w32(cameras+16,180);
+    w32(cameras+20,0xF1230011u); /* camera 0 header, not entry 5 */
+    unsigned nr=0,nc=0;
+    if(fitd_stage_blob_count(rooms,sizeof(rooms),&nr)!=0 || nr!=1)
+        return 1;
+    if(fitd_stage_blob_count(cameras,sizeof(cameras),&nc)!=0 || nc!=5)
+        return 2;
+    uint8_t *r=(uint8_t*)malloc(sizeof(rooms));
+    uint8_t *c=(uint8_t*)malloc(sizeof(cameras));
+    if(!r || !c){free(r);free(c);return 3;}
+    memcpy(r,rooms,sizeof(rooms));memcpy(c,cameras,sizeof(cameras));
+    FitdStage stage={0};
+    const int status=fitd_stage_set_blobs(&stage,r,sizeof(rooms),c,sizeof(cameras));
+    if(status!=0){free(r);free(c);return 4;}
+    const int ok=stage.room_count==1 && stage.camera_count==5;
+    fitd_stage_release(&stage);
+    return ok?0:5;
+}
 static int test_bad(void){
     uint8_t bytes[12]={0};
     unsigned count=0;
-    w32(bytes,14); /* unaligned offset */
+    w32(bytes,14); /* unaligned first offset */
     if(fitd_stage_blob_count(bytes,sizeof(bytes),&count)>=0)return 1;
-    w32(bytes,8);w32(bytes+4,4); /* first=8, second=4 backwards */
+    w32(bytes,12); /* offset points to exact EOF */
     if(fitd_stage_blob_count(bytes,sizeof(bytes),&count)>=0)return 2;
+    w32(bytes,8);w32(bytes+4,4); /* candidate after entry0 is invalid */
+    if(fitd_stage_blob_count(bytes,sizeof(bytes),&count)!=0 || count!=1)return 3;
     return 0;
 }
 int main(void){
-    int a=test_valid(),b=test_bad();
-    if(a||b){printf("FITD Wii Test05 stage tests FAIL valid=%d bad=%d\n",a,b);return 1;}
-    puts("FITD Wii Test05 ETAGE camera/room/mask polygon and hard collision parser: PASS");
+    int a=test_valid(),b=test_bad(),c=test_real_shape();
+    if(a||b||c){printf("FITD Wii Test05.2 ETAGE tests FAILED: valid=%d bad=%d real_shape=%d\n",a,b,c);return 1;}
+    puts("FITD Wii Test05.2 ETAGE offsets: PASS (1 room, 5 cameras, table terminator, mask, collision)");
     return 0;
 }
