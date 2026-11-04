@@ -1,73 +1,114 @@
-# FITD Wii — Teste 02: arquivos reais e cenário GX (v0.2)
+# FITD Wii — Teste 03: modelos BODY originais em GX (v0.3)
 
-## Situação
+## Status e escopo
 
-**Prévia gráfica experimental, NÃO é o jogo jogável.** Teste 01 já funcionou
-no Wii original a 59,95 FPS na cena experimental. O Teste 02 começa a ler
-os arquivos originais, suas paletas e fundos indexados.
+**Prévia técnica 3D, NÃO é o jogo completo ainda.** Os testes anteriores
+confirmaram no Nintendo Wii original a renderização dos cenários
+CAMERA00.PAK e a descompactação PAK original a ~60 FPS.
 
-**Android Teste 19 e R36S ARM64 permanecem inalterados.** Esta branch Wii é
-descendente do Android Teste 19 e preserva todos os patches originais.
-Veja COMPAT_TEST19.md: essas correções ainda precisarão ser adaptadas ao
-PowerPC quando integrarmos o motor.
+Agora carregamos e desenhamos **vértices e polígonos reais do
+LISTBODY.PAK**, sobre imagens do CAMERA00.PAK. A animação esquelética,
+os personagens na posição/câmera correta do jogo, máscaras de
+oclusão, scripts, combate, áudio e save state **ainda não foram
+integrados**: não confundir a rotação demonstrativa com animação
+original do personagem.
 
-### Novidades
+**Android Teste 19 e R36S ARM64 não foram alterados.** Todos os patches
+dessas versões permanecem na ancestralidade da branch Wii para
+integração posterior; consultar COMPAT_TEST19.md.
 
-- Parser real de PAK: índices LE32, validação de limites e arquivos truncados.
-- Descompressão modo 1 (implode), adaptada do código Cyril VOILA / Mark Adler.
-- Leitura de dados modo 0 sem compressão.
-- **Modo 4 (DEFLATE) ainda não suportado.**
-- Carregamento de imagem CAMERA00.PAK índice 0 (320x200, 8 bits indexados).
-- Conversão ao formato Wii GX RGB565 em blocos 4x4.
-- Paleta original ITD_RESS.PAK entrada 3; caso não esteja disponível, tons
-  de cinza provisórios (as cores originais ainda não são garantidas).
-- Teclas para mudar de câmera, alternar a prévia com a demo 3D, gerar log.
-- Testes sintéticos do PAK, sem arquivos comerciais.
+## Novidades
 
-### Instalação pelo Homebrew Channel
+- Parser BODY do FITD baseado em createBodyFromPtr() original, com
+  vértices XYZ, primitivas de linha, polígonos, pontos e grupos.
+- Dados de grupos INFO_ANIM e INFO_OPTIMISE lidos com checagem de
+  tamanho, alinhamento e endian-safety no PowerPC.
+- Renderização GX de polígonos reais e paleta RGB do ITD_RESS.PAK;
+  primitivas texturizadas ainda aparecem com cor sólida.
+- Visualização de modelos em 3D sobre o cenário original,
+  com rotação e seleção de entradas do LISTBODY.PAK.
+- Leitura de cabeçalhos da LISTANIM.PAK; **não executa as
+  animações esqueléticas na versão 0.3**.
+- Rejeição segura de modelos inválidos, entradas quebradas e tipos
+  de primitivas não suportados, mantendo a versão anterior visível.
+- Testes automáticos com modelos sintéticos e compilação devkitPPC.
 
-Copie o conteúdo do ZIP para a raiz do cartão SD:
+## Estrutura do SD
 
-    SD:/apps/fitd-wii/boot.dol
-    SD:/apps/fitd-wii/meta.xml
-    SD:/apps/fitd-wii/icon.png
-    SD:/apps/fitd-wii/data/CAMERA00.PAK
-    SD:/apps/fitd-wii/data/ITD_RESS.PAK
+Extraia o ZIP de Homebrew Channel diretamente na raiz do cartão SD.
+**Copie da sua instalação original** estes quatro arquivos
+(não estão incluídos):
 
-**CAMERA00.PAK e ITD_RESS.PAK devem ser copiados da sua própria instalação
-original de Alone in the Dark.** NÃO estão no ZIP. Sem eles, a demo de
-cubos do Teste 01 continua funcionando e o log explica a falha.
+    SD:/
+    └── apps/
+        └── fitd-wii/
+            ├── boot.dol
+            ├── meta.xml
+            ├── icon.png
+            ├── README.md
+            ├── COMPAT_TEST19.md
+            └── data/
+                ├── CAMERA00.PAK
+                ├── ITD_RESS.PAK
+                ├── LISTBODY.PAK
+                └── LISTANIM.PAK
 
-Abra Homebrew Channel > FITD Wii Teste 02 > A.
+Abra o Homebrew Channel, selecione FITD Wii Teste 03 e pressione A.
+Se os quatro arquivos existirem e os dados forem suportados, verá
+um modelo original do jogo sobre o cenário da câmera.
 
 ### Controles
 
-- Wii A / GameCube A: entrar na prévia GX
-- Wii + e - / GameCube R e L: trocar imagem de CAMERA00.PAK
-- Wii 1 / GameCube Y: alternar imagem original e demo 3D
-- D-pad (demo): mover personagem experimental
-- Wii B / GameCube B (demo): girar personagem experimental
-- Wii HOME / GameCube START: sair
+| Botões | Função |
+|---|---|
+| Wii A / GameCube A | Iniciar GX |
+| Wii + e - / GC R e L | Selecionar imagem da câmera |
+| Wii D-pad ESQUERDA / DIREITA, na cena original | Trocar índice do BODY |
+| Wii 2 / GC X | Mostrar ou ocultar o modelo BODY |
+| Wii B / GC B | Girar o modelo |
+| Wii 1 / GC Y | Alternar imagem original e demo 3D do Teste 01 |
+| Wii HOME / GC START | Sair |
 
-Envie o arquivo de log após testar:
-SD:/apps/fitd-wii/wii-diagnostic.txt (alternativo: SD:/fitd-wii-diagnostic.txt).
+A seleção de índices BODY pode escolher um objeto de cenário ou um
+modelo que ainda não renderizamos corretamente. Teste alguns índices
+com o D-pad até encontrar um objeto/personagem reconhecível.
 
-### Limitações antes da versão jogável
+## Log
 
-1. Integrar motor FITD C++ (salas, câmeras, máscaras e BODY/ANIM).
-2. Desenhar geometria real, UI, paleta e máscaras no backend GX.
-3. Portar IA, colisões, scripts, efeitos, áudio e cinco saves das versões
-   Android Teste 19 e R36S ARM64, sem perder as correções existentes.
-4. Resolver casts de ponteiro e outros acessos binários little-endian no Wii.
-5. Testar gameplay e desempenho em hardware original.
+Após sair, envie:
+SD:/apps/fitd-wii/wii-diagnostic.txt
+ou SD:/fitd-wii-diagnostic.txt.
 
-Este pacote NÃO é o jogo completo. O Teste 01 validou somente a demo GX.
+Mensagens novas:
+- FITD-WII-BODY OK index=... vertices=... groups=... primitives=...
+- FITD-WII-BODY REJECT index=... parser=...
+- FITD-WII-ANIM index=0 status=METADATA_OK ...
+- FITD-WII-MODEL status=visible:... index=... fps=...
 
-### Créditos e legalidade
+Com elas identificaremos formatos reais encontrados e ajustaremos a
+decodificação. Nenhuma alteração é feita nos arquivos .PAK do SD.
 
-Baseada em yaz0r/FITD (https://github.com/yaz0r/FITD), com correções
-de dehalbuq/FITD-R36S e comparação ao Re-Haunted. Descompressor:
-Cyril VOILA (2004), parcialmente Mark Adler (1992). Código do motor
-GPL-2.0 e respectivos avisos de licença preservados.
+## Próximos marcos
 
-Nenhum asset comercial do jogo é distribuído. Nintendo não é afiliada.
+1. Validar modelos reais exibidos no console; ajustar coordenadas e
+   ordenação de polígonos onde necessário.
+2. Interpretar os grupos de animação originais e aplicar poses corretas.
+3. Implementar as máscaras/oclusão da câmera da sala atual.
+4. Conectar o motor FITD C++ completo; integrar TODAS as correções de IA,
+   monstros presos, scripts, colisão, áudio, five save slots e controle
+   do Android Teste 19 / ARM64.
+5. Medir o desempenho com o jogo real (60 FPS da demo GX não garante
+   60 FPS do motor completo).
+
+## Créditos e legalidade
+
+Base do motor: Free in the Dark (yaz0r/FITD), GPL-2.0.
+Port e correções: dehalbuq/FITD-R36S e contribuições anteriores;
+referência comparativa ao Re-Haunted.
+Leitura PAK original: Cyril VOILA / Mark Adler.
+Os créditos e obrigações de licenciamento deverão ser preservados
+na integração completa do motor.
+
+Não contém arquivos comerciais do Alone in the Dark.
+Use arquivos de sua cópia legitimamente adquirida.
+Nintendo não é afiliada ao projeto.
