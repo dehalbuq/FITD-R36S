@@ -1,4 +1,4 @@
-name: FITD Wii Test04 - LISTANIM skeletal animation GX
+name: FITD Wii Test05 - original ETAGE camera and mask GX
 
 on:
   push:
@@ -8,6 +8,7 @@ on:
       - "port/wii-test03-native-body-preview"
       - "fix/wii-test03-1-diagnostic-save"
       - "port/wii-test04-animation-gx"
+      - "port/wii-test05-stage-camera-masks"
     paths:
       - "v2/wii/**"
       - ".github/workflows/wii-gx-boot-dol.yml"
@@ -41,6 +42,11 @@ jobs:
              v2/wii/source/fitd_body.c v2/wii/source/fitd_pak.c \
              v2/wii/source/fitd_unpack.c -lm -o /tmp/fitd-wii-anim-test
           /tmp/fitd-wii-anim-test
+          cc -DFITD_HOST_TEST -std=c11 -O2 -Wall -Wextra -Werror \
+             v2/wii/tests/test_stage.c v2/wii/source/fitd_stage.c \
+             v2/wii/source/fitd_pak.c v2/wii/source/fitd_unpack.c \
+             -lm -o /tmp/fitd-wii-stage-test
+          /tmp/fitd-wii-stage-test
           # Confirm the stable Android Test19 corrections and R36S ARM64
           # recovery patches remain in branch ancestry for engine integration.
           test -f v2/android-kitkat/engine-runtime/patch_android_enemy_arm64_rehaunted.py
@@ -49,7 +55,7 @@ jobs:
           test -f v2/patch_hit_object_rehaunted.py
           test -f v2/patch_orb_enemy_effects.py
           test -f v2/patch_cellar_barrel_stuck.py
-          echo "FITD Wii Test04: gameplay-fix source baseline preserved"
+          echo "FITD Wii Test05: gameplay-fix source baseline preserved"
 
       - name: Compile Nintendo Wii boot.dol with real devkitPPC/libogc
         run: |
@@ -83,15 +89,15 @@ jobs:
           cp v2/wii/README.md dist/apps/fitd-wii/README.md
           cp v2/wii/PORT_PLAN.md dist/apps/fitd-wii/PORT_PLAN.md
           cp v2/wii/COMPAT_TEST19.md dist/apps/fitd-wii/COMPAT_TEST19.md
-          printf 'Copy CAMERA00.PAK, ITD_RESS.PAK, LISTBODY.PAK and LISTANIM.PAK from your original game. Test04 previews original 3D models with interpolated LISTANIM keyframes; original game data is NOT bundled.\n' > dist/apps/fitd-wii/data/PUT_GAME_FILES_HERE.txt
-          (cd dist && zip -q -r ../FITD-WII-GX-TEST04-ANIMACAO-NATIVA.zip apps)
-          test -s FITD-WII-GX-TEST04-ANIMACAO-NATIVA.zip
-          unzip -t FITD-WII-GX-TEST04-ANIMACAO-NATIVA.zip | tail -n 2
-          ls -lh FITD-WII-GX-TEST04-ANIMACAO-NATIVA.zip
+          printf 'Copy ETAGE00.PAK, CAMERA00.PAK, ITD_RESS.PAK, LISTBODY.PAK and LISTANIM.PAK from your own original game. Test05 previews ETAGE rooms, camera/mask polygons, 3D models and animation. Game assets are NOT included.\n' > dist/apps/fitd-wii/data/PUT_GAME_FILES_HERE.txt
+          (cd dist && zip -q -r ../FITD-WII-GX-TEST05-ETAGE-CAMERAS-MASCARAS.zip apps)
+          test -s FITD-WII-GX-TEST05-ETAGE-CAMERAS-MASCARAS.zip
+          unzip -t FITD-WII-GX-TEST05-ETAGE-CAMERAS-MASCARAS.zip | tail -n 2
+          ls -lh FITD-WII-GX-TEST05-ETAGE-CAMERAS-MASCARAS.zip
 
       - name: Upload Wii Homebrew boot.dol ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: FITD-WII-TEST04-LISTANIM-50HZ-GX-NO-GAME
-          path: FITD-WII-GX-TEST04-ANIMACAO-NATIVA.zip
+          name: FITD-WII-TEST05-ETAGE-CAMERA-MASK-GX-NO-GAME
+          path: FITD-WII-GX-TEST05-ETAGE-CAMERAS-MASCARAS.zip
           if-no-files-found: error
