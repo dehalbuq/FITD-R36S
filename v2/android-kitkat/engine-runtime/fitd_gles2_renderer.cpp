@@ -402,7 +402,9 @@ void deleteBgfxGlue() {
 }
 void StartFrame() {
     if(!graphicsReady)return;
-    recordingDrawCommands=true;
+    // Native 60Hz PlayWorld creates a genuinely new pose every ~16.7 ms.
+    // Do not waste time recording old meshes for screenshot interpolation.
+    recordingDrawCommands=false;
     composingCommands.clear();
     // The writer FBO is never the texture being displayed or sampled.
     if(offscreenReady && fboBindFramebuffer)fboBindFramebuffer(GL_FRAMEBUFFER,historyFrameFbo);
@@ -444,8 +446,9 @@ extern "C" void fitdAndroidCaptureFrame() {
     cachedWidth=GAME_FBO_WIDTH;cachedHeight=GAME_FBO_HEIGHT;
     cachedFrameReady=true;
     priorFrameReady=hadPrior;
-    sameCameraFrame=hadPrior && lastCamera==NumCamera &&
-                    lastRoom==currentRoom && lastFloor==g_currentFloor;
+    // Stop compositing between historical 25Hz poses: native 60Hz already
+    // generates real new model geometry. Blending with history adds lag.
+    sameCameraFrame=false;
     lastCamera=NumCamera;lastRoom=currentRoom;lastFloor=g_currentFloor;
     lastCaptureTicks=SDL_GetTicks();
     recordingDrawCommands=false;
@@ -472,12 +475,12 @@ extern "C" void fitdAndroidCaptureFrame() {
                 containsPolygons=true;
         }
     }
-    meshInterpolationAvailable=meshInterpolationAvailable && containsPolygons;
+    meshInterpolationAvailable=false; // native real pose updates supersede mesh tween
+    (void)containsPolygons;
     static unsigned captured=0;
-    if(++captured==1 || captured%250==0)
-        SDL_Log("FITD-FBO: captured=%u prior=%d mesh_commands=%zu matched_mesh=%d",
-                captured,hadPrior?1:0,sceneCommands.size(),
-                meshInterpolationAvailable?1:0);
+    if(++captured==1 || captured%300==0)
+        SDL_Log("FITD-ENGINE: rendered_native_pose_frames=%u direct_fbo=1 old_mesh_interpolation=OFF",
+                captured);
 }
 // Rebuild actor polygons with per-vertex interpolation, preserving mask
 // occlusion and z testing. We do not mutate the original engine's actors,
