@@ -90,7 +90,7 @@ static void openRuntimeLog() {
     const char* root=SDL_AndroidGetExternalStoragePath();
     if(root && strlen(root)<440) {
         char path[512]={};
-        snprintf(path,sizeof(path),"%s/fitd-test10-runtime.txt",root);
+        snprintf(path,sizeof(path),"%s/fitd-test11-runtime.txt",root);
         externalRuntimeLog=fopen(path,"w");
         if(externalRuntimeLog){
             // Preserve upstream printf()/fprintf(stderr) checkpoints in TXT
@@ -303,10 +303,12 @@ void osystem_endOfFrame() {
     osystem_drawUILayer();
     renderGameWindow();
     fitdAndroidCaptureFrame(); // GPU-side copy, no glReadPixels CPU stall
-    // Never exceed the 60 Hz ceiling, even with fast logic redraws.
+    // Show the previous frame at t=0, then interpolate toward the just
+    // captured game image at up to 60Hz during the next 40ms logic interval.
+    // On camera cuts the renderer shows the new frame immediately.
     while(!presentationDue() && !engineExitRequested.load())
         SDL_Delay(1);
-    EndFrame();
+    if(!fitdAndroidPresentCachedFrame())EndFrame();
     notePresentation();
     SDL_SemPost(endOfRender);
 }
