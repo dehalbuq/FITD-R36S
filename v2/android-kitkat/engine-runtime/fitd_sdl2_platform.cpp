@@ -34,15 +34,21 @@ static Uint64 presentPeriod=0;
 static Uint32 renderedPresentations=0;
 static Uint32 presentationWindowStart=0;
 static Uint32 cachedPresentationAttempts=0,cachedPresentationSuccesses=0;
+static std::atomic<Uint32> realLogicCounter{0};
+static Uint32 lastReportedLogicCounter=0;
 static Uint32 presentationOverruns=0;
 static void notePresentation() {
     ++renderedPresentations;
     const Uint32 now=SDL_GetTicks();
     if(!presentationWindowStart)presentationWindowStart=now;
     if(now-presentationWindowStart>=5000u) {
-        SDL_Log("FITD-PERF: presentation_fps=%.1f logic_hz=25 target_hz=60 gpu_attempts=%u gpu_success=%u overruns=%u",
-            (renderedPresentations*1000.0)/(now-presentationWindowStart),
+        const Uint32 logicCount=realLogicCounter.load(std::memory_order_relaxed);
+        const double windowSeconds=(now-presentationWindowStart)/1000.0;
+        SDL_Log("FITD-PERF: presentation_fps=%.1f engine_loop_fps=%.1f target_logic_hz=60 target_present_hz=60 gpu_attempts=%u gpu_success=%u overruns=%u",
+            renderedPresentations/windowSeconds,
+            (logicCount-lastReportedLogicCounter)/windowSeconds,
             cachedPresentationAttempts,cachedPresentationSuccesses,presentationOverruns);
+        lastReportedLogicCounter=logicCount;
         renderedPresentations=0;
         cachedPresentationAttempts=cachedPresentationSuccesses=presentationOverruns=0;
         presentationWindowStart=now;
@@ -114,7 +120,7 @@ static void openRuntimeLog() {
     const char* root=SDL_AndroidGetExternalStoragePath();
     if(root && strlen(root)<440) {
         char path[512]={};
-        snprintf(path,sizeof(path),"%s/fitd-test17-runtime.txt",root);
+        snprintf(path,sizeof(path),"%s/fitd-test18-runtime.txt",root);
         externalRuntimeLog=fopen(path,"w");
         if(externalRuntimeLog){
             // Preserve upstream printf()/fprintf(stderr) checkpoints in TXT
@@ -253,23 +259,25 @@ int FitdInit(int argc,char* argv[]) {
         SDL_GL_DeleteContext(engineContext);
         SDL_DestroyWindow(engineWindow);SDL_Quit();return 17;
     }
-    // IMPORTANT: the previous implementation posted the NEXT simulation
-    // semaphore BEFORE its 40ms sleep. The engine consumed it instantly, so
-    // there was never any interval in which it could present cached frames.
-    // Wait BEFORE posting each tick: the worker now owns GLES and presents
-    // completed frames at up to 60 Hz while waiting for the next game tick.
-    constexpr Uint32 logicMs=40;
-    Uint32 nextLogic=SDL_GetTicks();
-    SDL_Log("FITD-PERF: independent 25Hz simulation and 60Hz presentation active");
+    // R36S-style native-engine experiment: raise actual PlayWorld iterations,
+    // including model pose generation, from 25Hz to 60Hz. This is NOT just a
+    // shader swap or a GPU frame-rate override. Each iteration receives one
+    // engine tick and is run on the actual FitdMain worker. It deliberately
+    // changes gameplay timing and must be validated for animation/script pace.
+    constexpr Uint64 logicHz=60;
+    const Uint64 frequency=SDL_GetPerformanceFrequency();
+    const Uint64 period=std::max<Uint64>(1,frequency/logicHz);
+    Uint64 nextLogic=SDL_GetPerformanceCounter();
+    SDL_Log("FITD-ENGINE: REAL game loop UNLOCKED target=%uHz old=25Hz tick_ms=%.3f",
+            (unsigned)logicHz,1000.0*(double)period/(double)frequency);
     while(!engineExitRequested.load()) {
         readKeyboard();
         if(engineExitRequested.load())break;
-        const Uint32 now=SDL_GetTicks();
-        if(static_cast<Sint32>(now-nextLogic)<0) {
-            SDL_Delay(std::min<Uint32>(2, nextLogic-now));
+        const Uint64 now=SDL_GetPerformanceCounter();
+        if(now<nextLogic) {
+            if(nextLogic-now>frequency/500u)SDL_Delay(1);
             continue;
         }
-        // At most one pending game tick; never enqueue catch-up bursts.
         SDL_SemPost(startOfRender);
         const int code=SDL_SemWaitTimeout(endOfRender,30000);
         if(code==SDL_MUTEX_TIMEDOUT) {
@@ -282,16 +290,10 @@ int FitdInit(int argc,char* argv[]) {
             engineExitRequested.store(true);
             break;
         }
-        nextLogic+=logicMs;
-        // If frame work overran a tick, do not try to catch up by running
-        // several gameplay loops at once. Recover the stable fixed cadence.
-        const Uint32 after=SDL_GetTicks();
-        if(static_cast<Sint32>(after-nextLogic)>=0)
-            nextLogic=after+logicMs;
+        nextLogic+=period;
+        const Uint64 after=SDL_GetPerformanceCounter();
+        if(after>nextLogic+period)nextLogic=after+period;
     }
-    // An Android activity recreation can request cancellation while the
-    // native game loop is blocked on the next semaphore. Wake it and allow
-    // the frame-boundary cancellation exception to unwind to worker entry.
     if(!engineWorkerExited.load()) {
         SDL_SemPost(startOfRender);
         const Uint32 deadline=SDL_GetTicks()+1000u;
@@ -334,15 +336,17 @@ u32 osystem_startOfFrame() {
     StartFrame();
     osystem_startFrame();
     bFirst=false;
-    // One 40ms simulation step, regardless of 60Hz presentation frequency.
-    // This prevents physics, actor animation and sound events from running at
-    // 2.4x speed when interpolation is enabled.
+    // Experimental native-engine 60Hz update: the actual game, AI, actor
+    // animation and geometry now execute at up to 60 frames each second.
+    // This can change legacy gameplay pace. Keep Test17 installed as backup.
     static Uint32 lastClock=0,sampled=0;
     const Uint32 now=SDL_GetTicks();
     const Uint32 elapsed=lastClock?now-lastClock:40;
     lastClock=now;
-    if(++sampled%100u==0u)
-        SDL_Log("FITD-PERF: logic_frames=%u recent_step_ms=%u tick=40",sampled,elapsed);
+    realLogicCounter.fetch_add(1,std::memory_order_relaxed);
+    if(++sampled%120u==0u)
+        SDL_Log("FITD-ENGINE: actual_update=%u recent_step_ms=%u tick=1 (native 60Hz experimental)",
+                sampled,elapsed);
     return 1u;
 }
 void osystem_endOfFrame() {
@@ -351,9 +355,9 @@ void osystem_endOfFrame() {
     renderGameWindow();
     fitdAndroidCaptureFrame(); // swap GLES2 FBO attachments, no pixel copy
     if(engineExitRequested.load())throw FitdAndroidStopEngine{};
-    // Do NOT block the 25Hz game thread until a 60Hz presentation is due.
-    // That coupled the two clocks and lost 8-10 output frames per second.
-    // The first and all subsequent GPU presentations happen exclusively in
-    // osystem_startOfFrame() via presentOnFixedClock().
+    // At 60Hz native simulation there may be no idle time between two
+    // PlayWorld iterations. Present the freshly generated frame here as well,
+    // otherwise the previous 25Hz idle-only path can starve the display.
+    presentOnFixedClock();
     SDL_SemPost(endOfRender);
 }
