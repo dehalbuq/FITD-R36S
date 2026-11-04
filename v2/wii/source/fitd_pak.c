@@ -20,7 +20,11 @@
 #include <limits.h>
 
 static int read_at(FILE *f,uint32_t pos,void *to,size_t size){
-    if(!f || pos>LONG_MAX || fseek(f,(long)pos,SEEK_SET)!=0)return -1;
+    if(!f)return -1;
+#if LONG_MAX < UINT32_MAX
+    if(pos>(uint32_t)LONG_MAX)return -1;
+#endif
+    if(fseek(f,(long)pos,SEEK_SET)!=0)return -1;
     return fread(to,1,size,f)==size?0:-2;
 }
 
