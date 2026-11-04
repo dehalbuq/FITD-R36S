@@ -184,7 +184,7 @@ bool fitd_anim_pose(const FitdAnimClip *a,const FitdBody *b,
         if(phase<beginning+duration)break;
         beginning+=duration;
     }
-    const unsigned from=(to==0)?a->frame_count-1:to-1;
+    const unsigned from=(to==0)?((unsigned)a->frame_count-1u):(to-1u);
     const unsigned duration=a->frames[to].duration?
                             a->frames[to].duration:1u;
     float t=(float)((phase-beginning)/duration);
