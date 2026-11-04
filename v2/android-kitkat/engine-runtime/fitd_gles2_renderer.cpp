@@ -40,11 +40,13 @@ static unsigned char palette[256*3]={};
 static GLuint texProg=0,polyProg=0,maskProg=0,backgroundTexture=0,uiTexture=0;
 static std::map<std::pair<int,int>,GLuint> maskTextures;
 static unsigned maskRendered=0;
-static GLuint quadVbo=0,triVbo=0;
+static GLuint quadVbo=0,triVbo=0,cachedQuadVbo=0,cachedFrameTexture=0;
+static int cachedWidth=0,cachedHeight=0;
+static bool cachedFrameReady=false;
 static int targetWidth=640,targetHeight=480,viewportW=640,viewportH=480;
 static int viewportX=0,viewportY=0;
-struct Vertex{float x,y;float r,g,b,a;};
-struct QueuedFace{float depth;std::vector<Vertex> verts;};
+struct Vertex{float x,y,z;float r,g,b,a;};
+struct QueuedFace{float depth;u8 type;std::vector<Vertex> verts;};
 static std::vector<QueuedFace> queuedFaces;
 static std::vector<Vertex> queuedLines;
 static std::array<uint8_t,320*200*4> converted{};
@@ -109,6 +111,10 @@ static void drawTexture(GLuint tex,const unsigned char* data,bool useAlpha) {
     glBindTexture(GL_TEXTURE_2D,tex);
     glTexSubImage2D(GL_TEXTURE_2D,0,0,0,320,200,GL_RGBA,
                     GL_UNSIGNED_BYTE,converted.data());
+    // Both the photographic background and the indexed UI are independent
+    // of the actor depth buffer. Never let a full-screen quad occlude a model.
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
     if(useAlpha) {
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
@@ -130,10 +136,13 @@ static void drawTexture(GLuint tex,const unsigned char* data,bool useAlpha) {
 static void drawVertices(GLenum primitive,const std::vector<Vertex>& data) {
     if(!graphicsReady||data.empty())return;
     std::vector<float> f;
-    f.reserve(data.size()*6);
+    f.reserve(data.size()*7);
     for(const Vertex& v:data) {
         f.push_back(v.x/160.f-1.f);
         f.push_back(1.f-v.y/100.f);
+        // Preserve original 3D Z ordering instead of painter-sorting entire
+        // polygons by their mean depth (which broke intersecting body parts).
+        f.push_back(v.z/(std::fabs(v.z)+1024.f));
         f.push_back(v.r);f.push_back(v.g);
         f.push_back(v.b);f.push_back(v.a);
     }
@@ -141,17 +150,17 @@ static void drawVertices(GLenum primitive,const std::vector<Vertex>& data) {
     glBindBuffer(GL_ARRAY_BUFFER,triVbo);
     glBufferData(GL_ARRAY_BUFFER,f.size()*sizeof(float),f.data(),GL_STREAM_DRAW);
     glEnableVertexAttribArray(0);glEnableVertexAttribArray(1);
-    glVertexAttribPointer(0,2,GL_FLOAT,GL_FALSE,6*sizeof(float),(void*)0);
-    glVertexAttribPointer(1,4,GL_FLOAT,GL_FALSE,6*sizeof(float),
-                          (void*)(2*sizeof(float)));
+    glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,7*sizeof(float),(void*)0);
+    glVertexAttribPointer(1,4,GL_FLOAT,GL_FALSE,7*sizeof(float),
+                          (void*)(3*sizeof(float)));
     glDrawArrays(primitive,0,(GLsizei)data.size());
     glDisableVertexAttribArray(0);glDisableVertexAttribArray(1);
 }
-static Vertex vtx(float x,float y,int index) {
-    return {x,y,
+static Vertex vtx(float x,float y,int index,float z=0.f,float alpha=1.f) {
+    return {x,y,z,
         palette[(index&255)*3+0]/255.f,
         palette[(index&255)*3+1]/255.f,
-        palette[(index&255)*3+2]/255.f,1.f};
+        palette[(index&255)*3+2]/255.f,alpha};
 }
 static bool initGL(){
     if(graphicsReady)return true;
@@ -159,8 +168,8 @@ static bool initGL(){
                    "varying vec2 t;void main(){t=uv;gl_Position=vec4(p,0.,1.);}";
     const char* tF="precision mediump float;varying vec2 t;"
                    "uniform sampler2D pic;void main(){gl_FragColor=texture2D(pic,t);}";
-    const char* pV="attribute vec2 p;attribute vec4 color;"
-                   "varying vec4 col;void main(){col=color;gl_Position=vec4(p,0.,1.);}";
+    const char* pV="attribute vec3 p;attribute vec4 color;"
+                   "varying vec4 col;void main(){col=color;gl_Position=vec4(p,1.);}";
     const char* pF="precision mediump float;varying vec4 col;"
                    "void main(){gl_FragColor=col;}";
     const char* maskF=
@@ -179,6 +188,20 @@ static bool initGL(){
     glBindBuffer(GL_ARRAY_BUFFER,quadVbo);
     glBufferData(GL_ARRAY_BUFFER,sizeof(quad),quad,GL_STATIC_DRAW);
     glGenBuffers(1,&triVbo);
+    // GPU-side backbuffer cache for up to 60 presentations/s while the
+    // original AI, collision and scripts continue at fixed 25 Hz.
+    static const GLfloat screenQuad[]={
+        -1.f, 1.f,0.f,1.f, -1.f,-1.f,0.f,0.f,
+         1.f, 1.f,1.f,1.f,  1.f,-1.f,1.f,0.f};
+    glGenBuffers(1,&cachedQuadVbo);
+    glBindBuffer(GL_ARRAY_BUFFER,cachedQuadVbo);
+    glBufferData(GL_ARRAY_BUFFER,sizeof(screenQuad),screenQuad,GL_STATIC_DRAW);
+    glGenTextures(1,&cachedFrameTexture);
+    glBindTexture(GL_TEXTURE_2D,cachedFrameTexture);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
     glGenTextures(1,&backgroundTexture);
     glGenTextures(1,&uiTexture);
     for(GLuint tex:{backgroundTexture,uiTexture}){
@@ -206,6 +229,9 @@ int initBgfxGlue(int,char**) {
 void deleteBgfxGlue() {
     if(quadVbo)glDeleteBuffers(1,&quadVbo);
     if(triVbo)glDeleteBuffers(1,&triVbo);
+    if(cachedQuadVbo)glDeleteBuffers(1,&cachedQuadVbo);
+    if(cachedFrameTexture)glDeleteTextures(1,&cachedFrameTexture);
+    cachedFrameReady=false; cachedWidth=0; cachedHeight=0;
     if(backgroundTexture)glDeleteTextures(1,&backgroundTexture);
     if(uiTexture)glDeleteTextures(1,&uiTexture);
     if(texProg)glDeleteProgram(texProg);
@@ -223,14 +249,57 @@ void StartFrame() {
     if(!graphicsReady)return;
     updateViewport();
     glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glDepthFunc(GL_LEQUAL);
     glDisable(GL_SCISSOR_TEST);
     glClearColor(0.f,0.f,0.f,1.f);
+    glClearDepthf(1.f);
     glViewport(0,0,targetWidth,targetHeight);
-    glClear(GL_COLOR_BUFFER_BIT);
+    glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
     updateViewport();
 }
 void EndFrame() {
     if(gWindowBGFX)SDL_GL_SwapWindow(gWindowBGFX);
+}
+// The GLES context belongs exclusively to the engine worker. The UI
+// thread never touches these functions, avoiding EGL ownership races.
+extern "C" void fitdAndroidCaptureFrame() {
+    if(!graphicsReady || !cachedFrameTexture || targetWidth<1 || targetHeight<1)
+        return;
+    if(cachedWidth!=targetWidth || cachedHeight!=targetHeight) {
+        cachedFrameReady=false;
+        cachedWidth=targetWidth; cachedHeight=targetHeight;
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D,cachedFrameTexture);
+        glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,cachedWidth,cachedHeight,0,
+                     GL_RGBA,GL_UNSIGNED_BYTE,nullptr);
+    }
+    glBindTexture(GL_TEXTURE_2D,cachedFrameTexture);
+    glCopyTexSubImage2D(GL_TEXTURE_2D,0,0,0,0,0,cachedWidth,cachedHeight);
+    cachedFrameReady=(glGetError()==GL_NO_ERROR);
+}
+extern "C" bool fitdAndroidPresentCachedFrame() {
+    if(!graphicsReady || !cachedFrameReady || !gWindowBGFX)return false;
+    glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_BLEND);
+    glViewport(0,0,cachedWidth,cachedHeight);
+    glUseProgram(texProg);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D,cachedFrameTexture);
+    glUniform1i(glGetUniformLocation(texProg,"pic"),0);
+    glBindBuffer(GL_ARRAY_BUFFER,cachedQuadVbo);
+    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(0,2,GL_FLOAT,GL_FALSE,4*sizeof(GLfloat),(void*)0);
+    glVertexAttribPointer(1,2,GL_FLOAT,GL_FALSE,4*sizeof(GLfloat),
+                          (void*)(2*sizeof(GLfloat)));
+    glDrawArrays(GL_TRIANGLE_STRIP,0,4);
+    glDisableVertexAttribArray(0);
+    glDisableVertexAttribArray(1);
+    SDL_GL_SwapWindow(gWindowBGFX);
+    return true;
 }
 void renderGameWindow(){}
 void osystem_preinigGL(){}
@@ -305,16 +374,32 @@ void osystem_setClip(float left,float top,float right,float bottom){
 }
 void osystem_clearClip(){clipEnabled=false;glDisable(GL_SCISSOR_TEST);}
 void osystem_fillPoly(float* points,int count,unsigned char color,u8 type){
-    (void)type; // shading permutations to be ported after initial gameplay.
     if(!points||count<3||count>80)return;
     QueuedFace face;
-    face.depth=0.f;
-    for(int n=0;n<count;n++)face.depth+=points[3*n+2];
+    face.depth=0.f; face.type=type;
+    float minX=points[0],maxX=points[0],minY=points[1];
+    for(int n=0;n<count;n++){
+        face.depth+=points[3*n+2];
+        minX=std::min(minX,points[3*n]);
+        maxX=std::max(maxX,points[3*n]);
+        minY=std::min(minY,points[3*n+1]);
+    }
     face.depth/=count;
+    const float width=std::max(1.f,maxX-minX);
+    const int bank=color&0xf0;
+    const int start=color&0xf;
     face.verts.reserve((count-2)*3);
     for(int n=1;n<count-1;n++){
-        for(int idx:{0,n,n+1})
-            face.verts.push_back(vtx(points[3*idx],points[3*idx+1],color));
+        for(int idx:{0,n,n+1}){
+            const float x=points[3*idx],y=points[3*idx+1],z=points[3*idx+2];
+            int shade=start;
+            if(type==3)shade+=int(15.f*(x-minX)/width);
+            else if(type==6)shade+=int(15.f*(maxX-x)/width);
+            else if(type==4)shade+=int(y-minY);
+            else if(type==5)shade+=int((y-minY)*0.5f);
+            shade=std::max(0,std::min(15,shade));
+            face.verts.push_back(vtx(x,y,bank|shade,z,type==2?0.55f:1.f));
+        }
     }
     queuedFaces.push_back(std::move(face));
 }
@@ -341,15 +426,28 @@ void osystem_drawSphere(float x,float y,float z,u8 color,u8 material,float size)
     osystem_drawPoint(x,y,z,color,material,size);
 }
 void osystem_flushPendingPrimitives(){
-    std::stable_sort(queuedFaces.begin(),queuedFaces.end(),
-        [](const QueuedFace&a,const QueuedFace&b){return a.depth>b.depth;});
-    std::vector<Vertex> triangles;
-    size_t n=0;for(const QueuedFace& f:queuedFaces)n+=f.verts.size();
-    triangles.reserve(n);
-    for(const QueuedFace& f:queuedFaces)
-        triangles.insert(triangles.end(),f.verts.begin(),f.verts.end());
-    drawVertices(GL_TRIANGLES,triangles);
+    if(queuedFaces.empty()&&queuedLines.empty())return;
+    std::vector<Vertex> opaque,translucent;
+    for(const QueuedFace& face:queuedFaces){
+        auto& dst=(face.type==2)?translucent:opaque;
+        dst.insert(dst.end(),face.verts.begin(),face.verts.end());
+    }
+    // Original renderer uses a per-pixel Z buffer, not sorting whole actors
+    // by mean Z. Restore the former to fix intersecting/overlapping meshes.
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    drawVertices(GL_TRIANGLES,opaque);
+    glDepthMask(GL_FALSE);
+    if(!translucent.empty()){
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
+        drawVertices(GL_TRIANGLES,translucent);
+        glDisable(GL_BLEND);
+    }
     drawVertices(GL_LINES,queuedLines);
+    glDisable(GL_DEPTH_TEST);
     queuedFaces.clear();queuedLines.clear();
 }
 void osystem_flip(unsigned char* buffer){
@@ -388,6 +486,9 @@ void osystem_createMask(const std::array<u8,320*200>& mask,
 }
 void osystem_drawMask(int roomId,int maskId){
     if(!graphicsReady||!maskProg)return;
+    // Apply the camera's occlusion over actors already drawn this frame.
+    // If geometry is still queued, a mask drawn first cannot occlude it.
+    osystem_flushPendingPrimitives();
     auto it=maskTextures.find(std::make_pair(roomId,maskId));
     if(it==maskTextures.end())return;
     glDisable(GL_BLEND);
