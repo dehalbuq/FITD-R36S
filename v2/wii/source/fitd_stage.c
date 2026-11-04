@@ -229,9 +229,9 @@ int fitd_stage_raster_polygon(uint8_t *mask,size_t pixels,
         if(y<min_y)min_y=y;
         if(y>max_y)max_y=y;
     }
-    if(max_y<0 || min_y>=FITD_STAGE_MASK_H)return 0;
+    if(max_y<0 || min_y>=(int)FITD_STAGE_MASK_H)return 0;
     if(min_y<0)min_y=0;
-    if(max_y>=FITD_STAGE_MASK_H)max_y=FITD_STAGE_MASK_H-1;
+    if(max_y>=(int)FITD_STAGE_MASK_H)max_y=(int)FITD_STAGE_MASK_H-1;
     for(int y=min_y;y<=max_y;y++){
         const float scan=(float)y+0.5f;
         float xx[64];unsigned n=0;
@@ -253,7 +253,7 @@ int fitd_stage_raster_polygon(uint8_t *mask,size_t pixels,
             int x1=(int)floorf(xx[k+1]);
             if(x1<0 || x0>=(int)FITD_STAGE_MASK_W)continue;
             if(x0<0)x0=0;
-            if(x1>=FITD_STAGE_MASK_W)x1=FITD_STAGE_MASK_W-1;
+            if(x1>=(int)FITD_STAGE_MASK_W)x1=(int)FITD_STAGE_MASK_W-1;
             for(int x=x0;x<=x1;x++){
                 const unsigned idx=(unsigned)y*FITD_STAGE_MASK_W+(unsigned)x;
                 if(!mask[idx]){mask[idx]=255;filled++;}
