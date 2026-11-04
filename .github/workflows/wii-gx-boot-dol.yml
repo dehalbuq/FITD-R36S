@@ -1,4 +1,4 @@
-name: FITD Wii Test05 - original ETAGE camera and mask GX
+name: FITD Wii Test05.1 - fix ETAGE PAK directory off by one
 
 on:
   push:
@@ -9,6 +9,7 @@ on:
       - "fix/wii-test03-1-diagnostic-save"
       - "port/wii-test04-animation-gx"
       - "port/wii-test05-stage-camera-masks"
+      - "fix/wii-test05-1-etage-pak-count"
     paths:
       - "v2/wii/**"
       - ".github/workflows/wii-gx-boot-dol.yml"
@@ -55,7 +56,7 @@ jobs:
           test -f v2/patch_hit_object_rehaunted.py
           test -f v2/patch_orb_enemy_effects.py
           test -f v2/patch_cellar_barrel_stuck.py
-          echo "FITD Wii Test05: gameplay-fix source baseline preserved"
+          echo "FITD Wii Test05.1: gameplay-fix source baseline preserved"
 
       - name: Compile Nintendo Wii boot.dol with real devkitPPC/libogc
         run: |
@@ -90,14 +91,14 @@ jobs:
           cp v2/wii/PORT_PLAN.md dist/apps/fitd-wii/PORT_PLAN.md
           cp v2/wii/COMPAT_TEST19.md dist/apps/fitd-wii/COMPAT_TEST19.md
           printf 'Copy ETAGE00.PAK, CAMERA00.PAK, ITD_RESS.PAK, LISTBODY.PAK and LISTANIM.PAK from your own original game. Test05 previews ETAGE rooms, camera/mask polygons, 3D models and animation. Game assets are NOT included.\n' > dist/apps/fitd-wii/data/PUT_GAME_FILES_HERE.txt
-          (cd dist && zip -q -r ../FITD-WII-GX-TEST05-ETAGE-CAMERAS-MASCARAS.zip apps)
-          test -s FITD-WII-GX-TEST05-ETAGE-CAMERAS-MASCARAS.zip
-          unzip -t FITD-WII-GX-TEST05-ETAGE-CAMERAS-MASCARAS.zip | tail -n 2
-          ls -lh FITD-WII-GX-TEST05-ETAGE-CAMERAS-MASCARAS.zip
+          (cd dist && zip -q -r ../FITD-WII-GX-TEST05-1-ETAGE-CORRIGIDO.zip apps)
+          test -s FITD-WII-GX-TEST05-1-ETAGE-CORRIGIDO.zip
+          unzip -t FITD-WII-GX-TEST05-1-ETAGE-CORRIGIDO.zip | tail -n 2
+          ls -lh FITD-WII-GX-TEST05-1-ETAGE-CORRIGIDO.zip
 
       - name: Upload Wii Homebrew boot.dol ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: FITD-WII-TEST05-ETAGE-CAMERA-MASK-GX-NO-GAME
-          path: FITD-WII-GX-TEST05-ETAGE-CAMERAS-MASCARAS.zip
+          name: FITD-WII-TEST05-1-ETAGE-PAK-FIX-POWERPC
+          path: FITD-WII-GX-TEST05-1-ETAGE-CORRIGIDO.zip
           if-no-files-found: error
