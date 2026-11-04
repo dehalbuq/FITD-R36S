@@ -11,6 +11,7 @@ endif()
 add_library(fitd_real_runtime_objects OBJECT
     fitd_sdl2_platform.cpp
     fitd_sdl2_input.cpp
+    fitd_android_entry.cpp
     "${FITD_UPSTREAM_DIR}/FitdLib/main.cpp"
     "${FITD_UPSTREAM_DIR}/FitdLib/mainLoop.cpp"
 )
@@ -61,6 +62,7 @@ add_library(fitd_android_gameplay_core_objects OBJECT
     ${FITD_RUNTIME_ALL_SOURCES}
     fitd_sdl2_platform.cpp
     fitd_sdl2_input.cpp
+    fitd_android_entry.cpp
 )
 set_target_properties(fitd_android_gameplay_core_objects PROPERTIES
     POSITION_INDEPENDENT_CODE ON)
