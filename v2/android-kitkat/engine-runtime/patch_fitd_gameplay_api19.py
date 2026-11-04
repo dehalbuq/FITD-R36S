@@ -43,3 +43,129 @@ one("FitdLib/hqr.cpp",
     'template void HQR_Free(hqrEntryStruct<sBody>* hqrPtr);\n'
     'template void HQR_Reset(hqrEntryStruct<sBody>* hqrPtr);',
     "instantiate original body resource cache reset for final link")
+
+
+# Merge only source-pinned R36S gameplay fixes, not R36S Linux SDL3/GLES3
+# patches, renderer diagnostics or the noisy debug audio crash reporter.
+# This model-state fix (used on R36S) prevents wrongly dropping animated
+# special objects from the game's active rendering and AI list.
+one("FitdLib/main.cpp",
+    'if(!(actorPtr->objectType & (AF_SPECIAL & AF_ANIMATED)))',
+    'if(!(actorPtr->objectType & (AF_SPECIAL | AF_ANIMATED)))',
+    "R36S animated-special actor flag fix")
+
+# Original systemMenu.cpp displays option 6 ("ABANDONAR") but its switch
+# handles only options 0,1,2. Android should actually leave when selected.
+one("FitdLib/systemMenu.cpp",
+    '                        break;\n\n                    }\n                }\n                else',
+    '''                        break;
+                    case 6: // abandon/exit application
+#ifdef FITD_R36S
+                        SDL_Log("FITD-ANDROID: menu ABANDONAR selected; exit requested");
+                        fitdAndroidQuitNow();
+#endif
+                        exitMenu = 1;
+                        break;
+
+                    }
+                }
+                else''',
+    "implement original menu option 6")
+one("FitdLib/systemMenu.cpp",
+    '#include "common.h"',
+    '''#include "common.h"
+#ifdef FITD_R36S
+#include <SDL.h>
+extern "C" void fitdAndroidQuitNow(void);
+#endif''',
+    "declare Android menu quit handler")
+
+# Original save writes 300 records for AITD1, while LoadWorld may have a
+# shorter vector. Reuse the proven R36S 300-record padding fix, assigning
+# invalid object index to empty entries to avoid writing arbitrary data.
+p=root/"FitdLib/save.cpp"
+save=p.read_text()
+target='''        oldNumMaxObj = maxObjects;
+        maxObjects = 300; // fix for save engine..'''
+assert save.count(target)==2, "expected exactly two AITD1 save/load blocks"
+replace=target+'''
+#ifdef FITD_R36S
+        if (ListWorldObjets.size() < 300) {
+            const size_t oldSize=ListWorldObjets.size();
+            ListWorldObjets.resize(300);
+            for(size_t n=oldSize;n<300;++n)
+                ListWorldObjets[n].objIndex=-1;
+            SDL_Log("FITD-ANDROID: padded save world objects %u -> 300",
+                    (unsigned)oldSize);
+        }
+#endif'''
+save=save.replace(target,replace)
+save=save.replace('#include "common.h"',
+    '#include "common.h"\n#ifdef FITD_R36S\n#include <SDL.h>\n#endif',1)
+# An incomplete write should never replace a valid prior save.
+old='''    sprintf(buffer,"SAVE%d.ITD",entry);
+
+    fHandle = fopen(buffer,"wb+");'''
+new='''    sprintf(buffer,"SAVE%d.ITD",entry);
+#ifdef FITD_R36S
+    char temporary[128];
+    snprintf(temporary,sizeof(temporary),"SAVE%d.ITD.tmp",entry);
+    fHandle = fopen(temporary,"wb+");
+#else
+    fHandle = fopen(buffer,"wb+");
+#endif'''
+assert save.count(old)==1,"save opener mismatch"
+save=save.replace(old,new,1)
+old='''    fclose(fHandle);
+
+    return 1;
+}
+
+int makeSave(int arg0)'''
+new='''#ifdef FITD_R36S
+    const long savedBytes=ftell(fHandle);
+    const int ioError=ferror(fHandle);
+    const int closeError=fclose(fHandle);
+    if(ioError||closeError||savedBytes<=0) {
+        SDL_Log("FITD-ANDROID: save write failed slot=%d",entry);
+        remove(temporary);
+        return 0;
+    }
+    if(rename(temporary,buffer)!=0) {
+        SDL_Log("FITD-ANDROID: atomic save rename failed slot=%d",entry);
+        remove(temporary);
+        return 0;
+    }
+    SDL_Log("FITD-ANDROID: save complete slot=%d bytes=%ld",entry,savedBytes);
+#else
+    fclose(fHandle);
+#endif
+    return 1;
+}
+
+int makeSave(int arg0)'''
+assert save.count(old)==1,"save close mismatch"
+save=save.replace(old,new,1)
+p.write_text(save)
+print("FITD-API19: restored R36S 300-entry save/load and atomic save protection")
+
+# Prevent repeat door sounds (3/4), which the R36S tests previously proved
+# can pile up every frame. Keep all other original sounds untouched.
+one("FitdLib/tatou.cpp",
+    'void playSound(int num)\n{\n\tif(num == -1)\n\t\treturn;',
+    '''void playSound(int num)
+{
+\tif(num == -1)
+\t\treturn;
+#ifdef FITD_R36S
+    if (num==3 || num==4) {
+        static unsigned lastPlayed[2]={0,0};
+        static bool initialized[2]={false,false};
+        const int which=num-3;
+        if(initialized[which] && (unsigned)(timer-lastPlayed[which])<90u)
+            return;
+        initialized[which]=true;
+        lastPlayed[which]=(unsigned)timer;
+    }
+#endif''',
+    "port R36S repeated door sample filter")
