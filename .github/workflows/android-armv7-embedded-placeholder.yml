@@ -66,6 +66,10 @@ jobs:
           assert s.count('android:label="@string/app_name"')==1
           s=s.replace('android:label="@string/app_name"','android:label="@string/app_name"\n        android:banner="@drawable/fitd_tv_banner"',1)
           m.write_text(s)
+          strings=app/'src/main/res/values/strings.xml'
+          original=strings.read_text()
+          assert original.count('FITD GLES2 Test')==1
+          strings.write_text(original.replace('FITD GLES2 Test','Alone in the Dark - FITD ARMv7'))
           # Generate simple 320x180 banner entirely in stdlib, with no external
           # image files, commercial assets or network image dependencies.
           import struct,zlib
