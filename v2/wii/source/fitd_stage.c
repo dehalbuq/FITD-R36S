@@ -90,8 +90,28 @@ bool fitd_stage_load(FitdStage *stage,const char *directory,
     FitdPakDirectory dir={0};
     FitdPakEntry room_entry={0},camera_entry={0};
     int st=fitd_pak_directory(f,&dir);
+    if(log){
+        fprintf(log,
+            "FITD-WII-STAGE05-PACK floor=%u directory_status=%d "
+            "entries=%lu file_bytes=%lu table_end=%lu\n",
+            floor,st,(unsigned long)dir.count,
+            (unsigned long)dir.file_size,(unsigned long)dir.table_end);
+        fflush(log);
+    }
     if(st==0)st=fitd_pak_entry(f,&dir,0,&room_entry);
     if(st==0)st=fitd_pak_entry(f,&dir,1,&camera_entry);
+    if(st==0 && log){
+        fprintf(log,
+            "FITD-WII-STAGE05-ENTRIES room=0:%lu/%lu comp=%u "
+            "camera=1:%lu/%lu comp=%u\n",
+            (unsigned long)room_entry.packed_size,
+            (unsigned long)room_entry.unpacked_size,
+            (unsigned)room_entry.compression,
+            (unsigned long)camera_entry.packed_size,
+            (unsigned long)camera_entry.unpacked_size,
+            (unsigned)camera_entry.compression);
+        fflush(log);
+    }
     uint8_t *rooms=NULL,*cams=NULL;
     size_t nr=0,nc=0;
     if(st==0)st=fitd_pak_load(f,&room_entry,&rooms,&nr);
