@@ -1,5 +1,5 @@
 /*
- * FITD Wii GX original BODY model preview v0.3 -- Wii homebrew hardware/renderer validation.
+ * FITD Wii GX original LISTANIM skeletal animation preview v0.4 -- Wii homebrew hardware/renderer validation.
  *
  * This is NOT the FITD game engine yet. It exercises native PowerPC,
  * Hollywood GX 3D + Z-buffer, 480p/480i VI, Wii Remote/GameCube inputs,
@@ -28,11 +28,12 @@
 #include "fitd_pak.h"
 #include "fitd_camera.h"
 #include "fitd_body.h"
+#include "fitd_anim.h"
 
 #define GX_FIFO_BYTES (256u*1024u)
 #define DATA_DIR "sd:/apps/fitd-wii/data"
 #define LOG_FILE "sd:/apps/fitd-wii/wii-diagnostic.txt"
-#define ROOT_LOG_FILE "sd:/fitd-wii-test03-diagnostic.txt"
+#define ROOT_LOG_FILE "sd:/fitd-wii-test04-diagnostic.txt"
 
 static GXRModeObj *videoMode;
 static void *xfb[2]={NULL,NULL};
@@ -45,6 +46,13 @@ static bool showOriginalCamera=false;
 static FitdBody originalBody={0};
 static FitdAnimInfo animMetadata={0};
 static bool showOriginalBody=false;
+static FitdAnimClip originalAnimation={0};
+static FitdPoseVertex animationPose[FITD_BODY_MAX_VERTICES];
+static FitdAnimSample animationSample={0};
+static bool animationPlaying=true;
+static double animationTicks=0.0;
+static u64 previousAnimTime=0;
+static bool poseReady=false;
 static unsigned long frameCount=0;
 static int storedFrame=0;
 static FILE *diag=NULL;
@@ -65,7 +73,7 @@ static void diagnostic_open(void){
         const char *path=candidates[i];
         FILE *f=fopen(path,"wb");
         if(!f){firstLogError=errno;continue;}
-        const int bad=fputs("FITD Wii Test03.1 - log created at boot\n",f)==EOF
+        const int bad=fputs("FITD Wii Test04 - log created at boot\n",f)==EOF
                     || fflush(f)!=0 || ferror(f);
         const int closed=fclose(f);
         if(bad || closed!=0){firstLogError=errno;continue;}
@@ -137,7 +145,7 @@ static void inspect_game_data(void){
     }
 }
 static void scan_hardware(void){
-    puts("FITD Wii / GX Teste 03.1 (diagnostic fix)");
+    puts("FITD Wii / GX Teste 04 (LISTANIM keyframes)");
     puts("----------------------------------------");
     puts("Native Wii Broadway PowerPC / libogc");
     printf("Framebuffer: %ux%u, EFB height: %u\n",
@@ -159,19 +167,20 @@ static void scan_hardware(void){
         puts("Check SD write protection and free space.");
     }
     puts("");
-    puts("Native Wii GX + original AITD1 BODY and backgrounds.");
-    puts("NOT yet playable. Gameplay engine not integrated.");
+    puts("Native Wii GX: original BODY + LISTANIM preview.");
+    puts("NOT the playable game; skeleton is under test.");
     puts("");
     puts("Wii A / GC A: enter camera and GX tests");
     puts("Wii +/- / GC L/R: change CAMERA00.PAK frame");
-    puts("Wii LEFT/RIGHT: select original BODY model");
-    puts("Wii 2 / GC X: toggle original BODY overlay");
-    puts("Wii 1 / GC Y: toggle original image vs GX demo");
-    puts("Wii B / GC B: rotate model or GX demo actor");
+    puts("D-pad LEFT/RIGHT: choose BODY model");
+    puts("D-pad UP/DOWN: choose LISTANIM entry");
+    puts("A: pause/resume keyframe animation (in GX)");
+    puts("2 / GC X: toggle BODY; 1 / GC Y: GX demo");
+    puts("+/- / GC R/L: switch camera; B: rotate model");
     puts("HOME / GC START: exit");
     puts("");
     puts("Press A. Without data: original GX demo.");
-    record("build","wii-body-model-test03.1-log-fix");
+    record("build","wii-body-anim-test04-0.4");
     record("gx_stage","waiting-input");
 }
 static void present_console(void){
@@ -261,7 +270,13 @@ static void render_gx(float x,float z,float rotation,float walk){
     if(showOriginalCamera && originalCamera.valid){
         fitd_camera_draw(&originalCamera,videoMode->fbWidth,videoMode->efbHeight);
         if(showOriginalBody && originalBody.valid){
-            fitd_body_draw(&originalBody,cameraMatrix,projection,rotation,x,z);
+            poseReady=fitd_anim_pose(&originalAnimation,&originalBody,
+                animationTicks,animationPose,FITD_BODY_MAX_VERTICES,
+                &animationSample);
+            fitd_body_draw(&originalBody,cameraMatrix,projection,rotation,x,z,
+                           poseReady?animationPose:NULL);
+        }else{
+            poseReady=false;
         }
         GX_DrawDone();
         storedFrame^=1;
@@ -317,7 +332,7 @@ int main(int argc,char **argv){
     sdReady=fatInitDefault()?1:0;
     diagnostic_open();
     if(diag){
-        fprintf(diag,"FITD WII GX original BODY preview v0.3.1\n");
+        fprintf(diag,"FITD WII GX original LISTANIM preview v0.4\n");
         fprintf(diag,"log_path=%s\n",activeLogPath);
         fprintf(diag,"native_ppc_endian=%s\n",fitd_is_big_endian()?"BE":"LE");
         fprintf(diag,"framebuffer=%ux%u efb=%u\n",
@@ -360,16 +375,64 @@ int main(int argc,char **argv){
                         }
                     }
                     fitd_animation_info(&animMetadata,DATA_DIR,0,diag);
-                    if(diag)fprintf(diag,
-                        "FITD-WII-TEST03 model_preview=%s animations=%s\n",
-                        originalBody.valid?"ACTIVE":"UNAVAILABLE",
-                        animMetadata.valid?"HEADER_OK":"UNAVAILABLE");
+                    if(fitd_anim_load(&originalAnimation,DATA_DIR,0,diag)){
+                        animationPlaying=true;
+                        animationTicks=0.0;
+                    }
+                    if(diag){
+                        fprintf(diag,
+                          "FITD-WII-TEST04 model_preview=%s "
+                          "animation_decoder=%s compatible=%d\n",
+                          originalBody.valid?"ACTIVE":"UNAVAILABLE",
+                          originalAnimation.valid?"ACTIVE":"UNAVAILABLE",
+                          fitd_anim_can_apply(&originalAnimation,&originalBody)?1:0);
+                        fputs("FITD-WII-MASK status=not-integrated "
+                              "(original camera masking deferred to full runtime)\n",diag);
+                        fflush(diag);
+                    }
                 }
                 startTicks=gettime();
+                previousAnimTime=startTicks;
             }else VIDEO_WaitVSync();
             continue;
         }
         const u32 wpHeld=WPAD_ButtonsHeld(0), gcHeld=PAD_ButtonsHeld(0);
+        const u64 nowAnimTime=gettime();
+        const u64 passedMs=ticks_to_millisecs(nowAnimTime-previousAnimTime);
+        previousAnimTime=nowAnimTime;
+        /* 50 original-game timing ticks per second; VSync stays near 60.
+           No speed-up or animation dependence on the display FPS. */
+        if(animationPlaying && passedMs<=250)
+            animationTicks+=(double)passedMs*0.050;
+        if((wpDown&WPAD_BUTTON_A)||(gcDown&PAD_BUTTON_A)){
+            animationPlaying=!animationPlaying;
+            if(diag){
+                fprintf(diag,"FITD-WII-ANIM04 playing=%d ticks=%.2f\n",
+                        animationPlaying?1:0,animationTicks);
+                fflush(diag);
+            }
+        }
+        if(showOriginalCamera && originalAnimation.valid){
+            int direction=0;
+            if((wpDown&WPAD_BUTTON_UP)||(gcDown&PAD_BUTTON_UP))direction=1;
+            if((wpDown&WPAD_BUTTON_DOWN)||(gcDown&PAD_BUTTON_DOWN))direction=-1;
+            if(direction && originalAnimation.archive_count){
+                unsigned next=(originalAnimation.index+
+                    (direction>0?1u:originalAnimation.archive_count-1u))%
+                    originalAnimation.archive_count;
+                if(fitd_anim_load(&originalAnimation,DATA_DIR,next,diag)){
+                    animationTicks=0.0;
+                    if(diag){
+                        fprintf(diag,
+                          "FITD-WII-ANIM04 select=%u compatible=%d body=%u\n",
+                          next,fitd_anim_can_apply(
+                              &originalAnimation,&originalBody)?1:0,
+                          originalBody.index);
+                        fflush(diag);
+                    }
+                }
+            }
+        }
         if(originalCamera.valid){
             if((wpDown & WPAD_BUTTON_1)||(gcDown & PAD_BUTTON_Y)){
                 showOriginalCamera=!showOriginalCamera;
@@ -412,8 +475,8 @@ int main(int argc,char **argv){
         // Do not also translate the actor out of the visible scene.
         if(!browsingBodies && ((wpHeld&WPAD_BUTTON_LEFT)||(gcHeld&PAD_BUTTON_LEFT))){x-=0.045f;walking=true;}
         if(!browsingBodies && ((wpHeld&WPAD_BUTTON_RIGHT)||(gcHeld&PAD_BUTTON_RIGHT))){x+=0.045f;walking=true;}
-        if((wpHeld&WPAD_BUTTON_UP)||(gcHeld&PAD_BUTTON_UP)){z-=0.045f;walking=true;}
-        if((wpHeld&WPAD_BUTTON_DOWN)||(gcHeld&PAD_BUTTON_DOWN)){z+=0.045f;walking=true;}
+        if(!browsingBodies && ((wpHeld&WPAD_BUTTON_UP)||(gcHeld&PAD_BUTTON_UP))){z-=0.045f;walking=true;}
+        if(!browsingBodies && ((wpHeld&WPAD_BUTTON_DOWN)||(gcHeld&PAD_BUTTON_DOWN))){z+=0.045f;walking=true;}
         if((wpHeld&WPAD_BUTTON_B)||(gcHeld&PAD_BUTTON_B))rotation+=1.65f;
         if(x>3.5f)x=3.5f;
         if(x< -3.5f)x=-3.5f;
@@ -424,6 +487,15 @@ int main(int argc,char **argv){
         render_gx(x,z,rotation,walk);
         ++frameCount;
         if(diag && frameCount%300==0){
+            fprintf(diag,
+              "FITD-WII-ANIM04 status=%s compatible=%d playing=%d "
+              "entry=%u tick=%.2f pose=%d frame=%u->%u alpha=%.3f\n",
+              originalAnimation.valid?"DECODED":"NO_CLIP",
+              fitd_anim_can_apply(&originalAnimation,&originalBody)?1:0,
+              animationPlaying?1:0,originalAnimation.index,
+              animationTicks,poseReady?1:0,
+              (unsigned)animationSample.from_frame,
+              (unsigned)animationSample.to_frame,animationSample.fraction);
             if(originalBody.valid){
                 fprintf(diag,"FITD-WII-MODEL status=visible:%d "
                              "index=%u vertices=%u groups=%u primitives=%u "
@@ -450,6 +522,7 @@ int main(int argc,char **argv){
     diagnostic_mirror_to_app();
     fitd_camera_release(&originalCamera);
     fitd_body_release(&originalBody);
+    fitd_anim_release(&originalAnimation);
     if(gxFifo)free(gxFifo);
     return 0;
 }
