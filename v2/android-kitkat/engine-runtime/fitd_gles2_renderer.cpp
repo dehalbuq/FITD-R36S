@@ -42,7 +42,7 @@ static std::map<std::pair<int,int>,GLuint> maskTextures;
 static unsigned maskRendered=0;
 static GLuint quadVbo=0,triVbo=0,cachedQuadVbo=0,cachedFrameTexture=0,historyFrameTexture=0;
 static Uint32 lastCaptureTicks=0;
-static uint64_t lastBackgroundHash=0;
+static int lastCamera=-32768,lastRoom=-32768,lastFloor=-32768;
 static bool sameCameraFrame=false;
 static bool priorFrameReady=false;
 static int cachedWidth=0,cachedHeight=0;
@@ -282,14 +282,6 @@ void EndFrame() {
 }
 // The GLES context belongs exclusively to the engine worker. The UI
 // thread never touches these functions, avoiding EGL ownership races.
-static uint64_t backgroundFingerprint() {
-    uint64_t hash=1469598103934665603ULL;
-    for(unsigned char pixel:physicalScreen){
-        hash^=pixel;
-        hash*=1099511628211ULL;
-    }
-    return hash;
-}
 extern "C" void fitdAndroidCaptureFrame() {
     if(!graphicsReady || !cachedFrameTexture || !historyFrameTexture ||
        targetWidth<1 || targetHeight<1)return;
@@ -312,11 +304,12 @@ extern "C" void fitdAndroidCaptureFrame() {
     const bool ok=(glGetError()==GL_NO_ERROR);
     priorFrameReady=cachedFrameReady && ok;
     cachedFrameReady=ok;
-    const uint64_t fingerprint=backgroundFingerprint();
-    // Only blend frames within the same photographic background; a camera
-    // cut, palette reset or menu switch must remain crisp, never ghosted.
-    sameCameraFrame=priorFrameReady && lastBackgroundHash==fingerprint;
-    lastBackgroundHash=fingerprint;
+    // Camera changes are hard cuts. Comparing the indexed framebuffer bytes
+    // is incorrect: UI redraws and palette effects can legitimately change
+    // individual pixels every game tick without changing the camera.
+    sameCameraFrame=priorFrameReady && lastCamera==NumCamera &&
+                    lastRoom==currentRoom && lastFloor==g_currentFloor;
+    lastCamera=NumCamera;lastRoom=currentRoom;lastFloor=g_currentFloor;
     lastCaptureTicks=SDL_GetTicks();
 }
 extern "C" bool fitdAndroidPresentCachedFrame() {
