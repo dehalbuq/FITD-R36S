@@ -134,7 +134,7 @@ jobs:
           s=gradle.read_text()
           old="io.github.dehalbuq.fitdkitkatprobe"
           assert s.count(old)==1
-          s=s.replace(old,"io.github.dehalbuq.fitdandroidembedded")
+          s=s.replace(old,"io.github.dehalbuq.fitdandroidtest17")
           s=s.replace("versionCode 1","versionCode 17")
           s=s.replace("versionName '0.1'","versionName '0.17.0-mesh-interpolation'")
           gradle.write_text(s)
