@@ -241,8 +241,13 @@ static bool initGL(){
 int initBgfxGlue(int,char**) {
     // Retain upstream function signature; no BGFX object is created.
     const char* v=reinterpret_cast<const char*>(glGetString(GL_VERSION));
-    SDL_Log("FITD-GLES2: original game renderer using GLES2, version=%s",
-            v?v:"unknown");
+    const char* renderer=reinterpret_cast<const char*>(glGetString(GL_RENDERER));
+    const char* vendor=reinterpret_cast<const char*>(glGetString(GL_VENDOR));
+    GLint maxTexture=0;
+    glGetIntegerv(GL_MAX_TEXTURE_SIZE,&maxTexture);
+    SDL_Log("FITD-GPU: backend=GLESv2/EGL HW renderer=%s vendor=%s GL_version=%s max_texture=%d",
+            renderer?renderer:"unknown",vendor?vendor:"unknown",
+            v?v:"unknown",maxTexture);
     return initGL()?1:0;
 }
 void deleteBgfxGlue() {
@@ -280,7 +285,16 @@ void StartFrame() {
     updateViewport();
 }
 void EndFrame() {
-    if(gWindowBGFX)SDL_GL_SwapWindow(gWindowBGFX);
+    if(gWindowBGFX) {
+        const Uint64 before=SDL_GetPerformanceCounter();
+        SDL_GL_SwapWindow(gWindowBGFX);
+        const Uint64 after=SDL_GetPerformanceCounter();
+        const Uint64 freq=SDL_GetPerformanceFrequency();
+        static unsigned slowSwap=0;
+        const unsigned ms=freq?unsigned((after-before)*1000u/freq):0u;
+        if(ms>12 && ++slowSwap<=6)
+            SDL_Log("FITD-GPU: slow_native_swap_ms=%u; driver may throttle",ms);
+    }
 }
 // The GLES context belongs exclusively to the engine worker. The UI
 // thread never touches these functions, avoiding EGL ownership races.
@@ -302,8 +316,38 @@ extern "C" void fitdAndroidCaptureFrame() {
     if(cachedFrameReady)std::swap(cachedFrameTexture,historyFrameTexture);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D,cachedFrameTexture);
+    // A previous mask/shader error must NOT invalidate a successful GPU
+    // copy. Test12 queried GL error only after the copy and misclassified
+    // errors from other GLES calls as failed framebuffer captures.
+    GLenum previousError=GL_NO_ERROR;
+    for(int i=0;i<8;++i) {
+        const GLenum e=glGetError();
+        if(e==GL_NO_ERROR)break;
+        if(previousError==GL_NO_ERROR)previousError=e;
+    }
+    static unsigned priorErrors=0,copyErrors=0,goodCaptures=0;
+    if(previousError!=GL_NO_ERROR && ++priorErrors<=5)
+        SDL_Log("FITD-GPU: pre_capture_gl_error=0x%x (not a copy failure)",previousError);
     glCopyTexSubImage2D(GL_TEXTURE_2D,0,0,0,0,0,cachedWidth,cachedHeight);
-    const bool ok=(glGetError()==GL_NO_ERROR);
+    const GLenum copyError=glGetError();
+    bool ok=(copyError==GL_NO_ERROR);
+    if(!ok) {
+        ++copyErrors;
+        if(copyErrors<=8 || copyErrors%250==0)
+            SDL_Log("FITD-GPU: copy_frame_failed error=0x%x size=%dx%d failures=%u",
+                    copyError,cachedWidth,cachedHeight,copyErrors);
+        // Some EGL implementations reject glCopyTexSubImage2D from their
+        // window backbuffer. Try GLES2 glCopyTexImage2D before giving up.
+        glCopyTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,0,0,cachedWidth,cachedHeight,0);
+        const GLenum fallbackError=glGetError();
+        ok=(fallbackError==GL_NO_ERROR);
+        if(ok && copyErrors<=8)
+            SDL_Log("FITD-GPU: GLES2 copy_frame_fallback=glCopyTexImage2D SUCCESS");
+        if(!ok && copyErrors<=8)
+            SDL_Log("FITD-GPU: GLES2 copy_frame_fallback FAILED error=0x%x",fallbackError);
+    } else if(++goodCaptures==1)
+        SDL_Log("FITD-GPU: GPU frame cache initialized successfully %dx%d",
+                cachedWidth,cachedHeight);
     priorFrameReady=cachedFrameReady && ok;
     cachedFrameReady=ok;
     // Camera changes are hard cuts. Comparing the indexed framebuffer bytes
@@ -347,7 +391,14 @@ extern "C" bool fitdAndroidPresentCachedFrame() {
     glDisableVertexAttribArray(0);
     glDisableVertexAttribArray(1);
     glActiveTexture(GL_TEXTURE0);
+    const Uint64 before=SDL_GetPerformanceCounter();
     SDL_GL_SwapWindow(gWindowBGFX);
+    const Uint64 after=SDL_GetPerformanceCounter();
+    const Uint64 frequency=SDL_GetPerformanceFrequency();
+    static unsigned slowPresent=0;
+    const unsigned swapMs=frequency?unsigned((after-before)*1000u/frequency):0u;
+    if(swapMs>12 && ++slowPresent<=6)
+        SDL_Log("FITD-GPU: cached_swap_wait_ms=%u; display compositor may throttle",swapMs);
     return true;
 }
 void renderGameWindow(){}
