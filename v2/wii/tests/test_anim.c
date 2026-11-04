@@ -58,9 +58,9 @@ static int test_case(int optimized){
     FitdPoseVertex v1[FITD_BODY_MAX_VERTICES];
     FitdAnimSample sample={0};
     int ok=fitd_anim_can_apply(&a,b) &&
-           fitd_anim_pose(&a,b,2.5,v0,FITD_BODY_MAX_VERTICES,&sample) &&
+           fitd_anim_pose(&a,b,1.0,v0,FITD_BODY_MAX_VERTICES,&sample) &&
            sample.animated && sample.to_frame==0 &&
-           fabsf(sample.fraction-0.5f)<.001f &&
+           fabsf(sample.fraction-0.2f)<.001f &&
            fitd_anim_pose(&a,b,7.5,v1,FITD_BODY_MAX_VERTICES,&sample) &&
            sample.animated && sample.to_frame==1 &&
            fabsf(sample.fraction-0.5f)<.001f &&
