@@ -26,24 +26,47 @@
 // Presentation may run between 25 Hz logic ticks on the same GLES2 worker.
 extern "C" bool fitdAndroidPresentCachedFrame();
 extern "C" void fitdAndroidCaptureFrame();
-static Uint64 lastPresentCounter=0;
+// High-resolution presentation clock, independent of the original 40ms
+// simulation clock. Test15 rendered once per logic frame and waited for an
+// additional optional swap; those waits quantized output to ~51 FPS.
+static Uint64 presentDeadline=0;
+static Uint64 presentPeriod=0;
 static Uint32 renderedPresentations=0;
 static Uint32 presentationWindowStart=0;
+static Uint32 cachedPresentationAttempts=0,cachedPresentationSuccesses=0;
+static Uint32 presentationOverruns=0;
 static void notePresentation() {
-    lastPresentCounter=SDL_GetPerformanceCounter();
     ++renderedPresentations;
     const Uint32 now=SDL_GetTicks();
-    if(!presentationWindowStart) presentationWindowStart=now;
+    if(!presentationWindowStart)presentationWindowStart=now;
     if(now-presentationWindowStart>=5000u) {
-        SDL_Log("FITD-PERF: presentation_fps=%.1f (25 Hz logic, target <=60 Hz)",
-            (renderedPresentations*1000.0)/(now-presentationWindowStart));
-        renderedPresentations=0; presentationWindowStart=now;
+        SDL_Log("FITD-PERF: presentation_fps=%.1f logic_hz=25 target_hz=60 gpu_attempts=%u gpu_success=%u overruns=%u",
+            (renderedPresentations*1000.0)/(now-presentationWindowStart),
+            cachedPresentationAttempts,cachedPresentationSuccesses,presentationOverruns);
+        renderedPresentations=0;
+        cachedPresentationAttempts=cachedPresentationSuccesses=presentationOverruns=0;
+        presentationWindowStart=now;
     }
 }
-static bool presentationDue() {
+static void presentOnFixedClock() {
     const Uint64 freq=SDL_GetPerformanceFrequency();
+    if(!freq)return;
+    if(!presentPeriod)presentPeriod=std::max<Uint64>(1,freq/60u);
     const Uint64 now=SDL_GetPerformanceCounter();
-    return !lastPresentCounter || (now-lastPresentCounter)>=freq/60u;
+    if(!presentDeadline)presentDeadline=now;
+    if(now<presentDeadline)return;
+    ++cachedPresentationAttempts;
+    if(fitdAndroidPresentCachedFrame()) {
+        ++cachedPresentationSuccesses;
+        notePresentation();
+    }
+    // Preserve fractional phase, but discard stale deadlines after a stall.
+    if(now-presentDeadline>presentPeriod*2u) {
+        ++presentationOverruns;
+        presentDeadline=now+presentPeriod;
+    } else {
+        presentDeadline+=presentPeriod;
+    }
 }
 
 extern void detectGame(void);
@@ -90,7 +113,7 @@ static void openRuntimeLog() {
     const char* root=SDL_AndroidGetExternalStoragePath();
     if(root && strlen(root)<440) {
         char path[512]={};
-        snprintf(path,sizeof(path),"%s/fitd-test13-runtime.txt",root);
+        snprintf(path,sizeof(path),"%s/fitd-test16-runtime.txt",root);
         externalRuntimeLog=fopen(path,"w");
         if(externalRuntimeLog){
             // Preserve upstream printf()/fprintf(stderr) checkpoints in TXT
@@ -279,39 +302,19 @@ int FitdInit(int argc,char* argv[]) {
 }
 
 u32 osystem_startOfFrame() {
-    // Engine worker owns GLES. Re-present its last complete scene up to
-    // 60 Hz while waiting for the next 40 ms GAME tick from the SDL UI thread.
-    // A repeated frame is not an additional simulation update.
+    // The worker is the only EGL context owner. Present on the absolute
+    // 60Hz clock during its idle intervals, not only at osystem_endOfFrame().
+    // Do not hold the worker waiting for a 25Hz game tick before presenting.
     const Uint32 waitStarted=SDL_GetTicks();
-    static uint32_t idleAttempts=0,idleSuccess=0,idleNoCache=0;
-    static Uint32 lastIdleReport=0;
     for(;;) {
-        const int waitResult=SDL_SemWaitTimeout(startOfRender,2);
-        if(waitResult==0) {
-            const Uint32 now=SDL_GetTicks();
-            if(!lastIdleReport)lastIdleReport=now;
-            if(now-lastIdleReport>=5000u) {
-                SDL_Log("FITD-PERF: idle_present attempts=%u success=%u no_cache=%u last_wait_ms=%u",
-                        idleAttempts,idleSuccess,idleNoCache,now-waitStarted);
-                idleAttempts=idleSuccess=idleNoCache=0;
-                lastIdleReport=now;
-            }
-            break;
-        }
+        if(engineExitRequested.load())return 1;
+        presentOnFixedClock();
+        const int waitResult=SDL_SemWaitTimeout(startOfRender,1);
+        if(waitResult==0)break;
         if(waitResult!=SDL_MUTEX_TIMEDOUT || SDL_GetTicks()-waitStarted>30000u) {
             SDL_Log("FITD-RUNTIME: E_WAIT_FOR_FRAME %s",SDL_GetError());
             engineExitRequested.store(true);
             return 1;
-        }
-        if(engineExitRequested.load()) return 1;
-        if(presentationDue()) {
-            ++idleAttempts;
-            if(fitdAndroidPresentCachedFrame()) {
-                ++idleSuccess;
-                notePresentation();
-            } else {
-                ++idleNoCache;
-            }
         }
     }
     StartFrame();
@@ -332,13 +335,10 @@ void osystem_endOfFrame() {
     osystem_flushPendingPrimitives();
     osystem_drawUILayer();
     renderGameWindow();
-    fitdAndroidCaptureFrame(); // GPU-side copy, no glReadPixels CPU stall
-    // Show the previous frame at t=0, then interpolate toward the just
-    // captured game image at up to 60Hz during the next 40ms logic interval.
-    // On camera cuts the renderer shows the new frame immediately.
-    while(!presentationDue() && !engineExitRequested.load())
-        SDL_Delay(1);
-    if(!fitdAndroidPresentCachedFrame())EndFrame();
-    notePresentation();
+    fitdAndroidCaptureFrame(); // swap GLES2 FBO attachments, no pixel copy
+    // Do NOT block the 25Hz game thread until a 60Hz presentation is due.
+    // That coupled the two clocks and lost 8-10 output frames per second.
+    // The first and all subsequent GPU presentations happen exclusively in
+    // osystem_startOfFrame() via presentOnFixedClock().
     SDL_SemPost(endOfRender);
 }
