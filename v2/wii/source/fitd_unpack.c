@@ -117,6 +117,7 @@ static unsigned short cpdist8[] = {
 }
 
 void PAK_huft_free(PAK_stream * pG, PAK_huft * t) {
+    (void)pG;
   PAK_huft *p, *q;
   p = t;
   while(p != (PAK_huft *)NULL) {
