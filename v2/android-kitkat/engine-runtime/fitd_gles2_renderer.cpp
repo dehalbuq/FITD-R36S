@@ -37,10 +37,14 @@ std::array<unsigned char,320*200> uiLayer={};
 
 namespace {
 static unsigned char palette[256*3]={};
-static GLuint texProg=0,polyProg=0,maskProg=0,backgroundTexture=0,uiTexture=0;
+static GLuint texProg=0,polyProg=0,maskProg=0,temporalProg=0,backgroundTexture=0,uiTexture=0;
 static std::map<std::pair<int,int>,GLuint> maskTextures;
 static unsigned maskRendered=0;
-static GLuint quadVbo=0,triVbo=0,cachedQuadVbo=0,cachedFrameTexture=0;
+static GLuint quadVbo=0,triVbo=0,cachedQuadVbo=0,cachedFrameTexture=0,historyFrameTexture=0;
+static Uint32 lastCaptureTicks=0;
+static uint64_t lastBackgroundHash=0;
+static bool sameCameraFrame=false;
+static bool priorFrameReady=false;
 static int cachedWidth=0,cachedHeight=0;
 static bool cachedFrameReady=false;
 static int targetWidth=640,targetHeight=480,viewportW=640,viewportH=480;
@@ -178,10 +182,20 @@ static bool initGL(){
         "void main(){float visible=texture2D(maskTex,t).r;"
         "if(visible<0.001)discard;"
         "gl_FragColor=texture2D(bgTex,t);}";
+    // GPU temporal blend: present 60 visually distinct updates per second,
+    // while original AI, collision, scripts and saves keep 40ms logic ticks.
+    // Delay presentation by one game tick so alpha moves forward (no rewind).
+    const char* temporalF=
+        "precision mediump float;varying vec2 t;"
+        "uniform sampler2D oldFrame;uniform sampler2D newFrame;"
+        "uniform float blendAmount;"
+        "void main(){gl_FragColor=mix(texture2D(oldFrame,t),"
+        "texture2D(newFrame,t),blendAmount);}";
     texProg=makeProgram(tV,tF,"p","uv");
     polyProg=makeProgram(pV,pF,"p","color");
     maskProg=makeProgram(tV,maskF,"p","uv");
-    if(!texProg||!polyProg||!maskProg)return false;
+    temporalProg=makeProgram(tV,temporalF,"p","uv");
+    if(!texProg||!polyProg||!maskProg||!temporalProg)return false;
     static const GLfloat quad[]={-1,1,0,0, -1,-1,0,1,
                                   1,1,1,0, 1,-1,1,1};
     glGenBuffers(1,&quadVbo);
@@ -197,11 +211,14 @@ static bool initGL(){
     glBindBuffer(GL_ARRAY_BUFFER,cachedQuadVbo);
     glBufferData(GL_ARRAY_BUFFER,sizeof(screenQuad),screenQuad,GL_STATIC_DRAW);
     glGenTextures(1,&cachedFrameTexture);
-    glBindTexture(GL_TEXTURE_2D,cachedFrameTexture);
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+    glGenTextures(1,&historyFrameTexture);
+    for(GLuint tex:{cachedFrameTexture,historyFrameTexture}) {
+        glBindTexture(GL_TEXTURE_2D,tex);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+    }
     glGenTextures(1,&backgroundTexture);
     glGenTextures(1,&uiTexture);
     for(GLuint tex:{backgroundTexture,uiTexture}){
@@ -231,19 +248,21 @@ void deleteBgfxGlue() {
     if(triVbo)glDeleteBuffers(1,&triVbo);
     if(cachedQuadVbo)glDeleteBuffers(1,&cachedQuadVbo);
     if(cachedFrameTexture)glDeleteTextures(1,&cachedFrameTexture);
+    if(historyFrameTexture)glDeleteTextures(1,&historyFrameTexture);
     cachedFrameReady=false; cachedWidth=0; cachedHeight=0;
     if(backgroundTexture)glDeleteTextures(1,&backgroundTexture);
     if(uiTexture)glDeleteTextures(1,&uiTexture);
     if(texProg)glDeleteProgram(texProg);
     if(polyProg)glDeleteProgram(polyProg);
     if(maskProg)glDeleteProgram(maskProg);
+    if(temporalProg)glDeleteProgram(temporalProg);
     for(const auto& item:maskTextures){
         GLuint tex=item.second;
         glDeleteTextures(1,&tex);
     }
     maskTextures.clear();
-    maskProg=0;texProg=0;polyProg=0;
-    graphicsReady=false;
+    maskProg=0;texProg=0;polyProg=0;temporalProg=0;
+    graphicsReady=false;priorFrameReady=false;cachedFrameReady=false;
 }
 void StartFrame() {
     if(!graphicsReady)return;
@@ -263,20 +282,42 @@ void EndFrame() {
 }
 // The GLES context belongs exclusively to the engine worker. The UI
 // thread never touches these functions, avoiding EGL ownership races.
-extern "C" void fitdAndroidCaptureFrame() {
-    if(!graphicsReady || !cachedFrameTexture || targetWidth<1 || targetHeight<1)
-        return;
-    if(cachedWidth!=targetWidth || cachedHeight!=targetHeight) {
-        cachedFrameReady=false;
-        cachedWidth=targetWidth; cachedHeight=targetHeight;
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D,cachedFrameTexture);
-        glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,cachedWidth,cachedHeight,0,
-                     GL_RGBA,GL_UNSIGNED_BYTE,nullptr);
+static uint64_t backgroundFingerprint() {
+    uint64_t hash=1469598103934665603ULL;
+    for(unsigned char pixel:physicalScreen){
+        hash^=pixel;
+        hash*=1099511628211ULL;
     }
+    return hash;
+}
+extern "C" void fitdAndroidCaptureFrame() {
+    if(!graphicsReady || !cachedFrameTexture || !historyFrameTexture ||
+       targetWidth<1 || targetHeight<1)return;
+    const bool resized=(cachedWidth!=targetWidth || cachedHeight!=targetHeight);
+    if(resized) {
+        cachedFrameReady=false;priorFrameReady=false;
+        cachedWidth=targetWidth;cachedHeight=targetHeight;
+        for(GLuint tex:{cachedFrameTexture,historyFrameTexture}){
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D,tex);
+            glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,cachedWidth,cachedHeight,0,
+                         GL_RGBA,GL_UNSIGNED_BYTE,nullptr);
+        }
+    }
+    // Preserve previous completed frame entirely on GPU; no CPU readback.
+    if(cachedFrameReady)std::swap(cachedFrameTexture,historyFrameTexture);
+    glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D,cachedFrameTexture);
     glCopyTexSubImage2D(GL_TEXTURE_2D,0,0,0,0,0,cachedWidth,cachedHeight);
-    cachedFrameReady=(glGetError()==GL_NO_ERROR);
+    const bool ok=(glGetError()==GL_NO_ERROR);
+    priorFrameReady=cachedFrameReady && ok;
+    cachedFrameReady=ok;
+    const uint64_t fingerprint=backgroundFingerprint();
+    // Only blend frames within the same photographic background; a camera
+    // cut, palette reset or menu switch must remain crisp, never ghosted.
+    sameCameraFrame=priorFrameReady && lastBackgroundHash==fingerprint;
+    lastBackgroundHash=fingerprint;
+    lastCaptureTicks=SDL_GetTicks();
 }
 extern "C" bool fitdAndroidPresentCachedFrame() {
     if(!graphicsReady || !cachedFrameReady || !gWindowBGFX)return false;
@@ -285,10 +326,22 @@ extern "C" bool fitdAndroidPresentCachedFrame() {
     glDepthMask(GL_FALSE);
     glDisable(GL_BLEND);
     glViewport(0,0,cachedWidth,cachedHeight);
-    glUseProgram(texProg);
+    const bool tween=sameCameraFrame && priorFrameReady;
+    glUseProgram(tween?temporalProg:texProg);
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D,cachedFrameTexture);
-    glUniform1i(glGetUniformLocation(texProg,"pic"),0);
+    glBindTexture(GL_TEXTURE_2D,tween?historyFrameTexture:cachedFrameTexture);
+    glUniform1i(glGetUniformLocation(tween?temporalProg:texProg,
+                                    tween?"oldFrame":"pic"),0);
+    if(tween){
+        // Between genuine 25Hz render samples, output up to 60Hz unique
+        // blended images; this is VISUAL interpolation, not gameplay ticks.
+        const float phase=std::max(0.f,std::min(1.f,
+                             (SDL_GetTicks()-lastCaptureTicks)/40.f));
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D,cachedFrameTexture);
+        glUniform1i(glGetUniformLocation(temporalProg,"newFrame"),1);
+        glUniform1f(glGetUniformLocation(temporalProg,"blendAmount"),phase);
+    }
     glBindBuffer(GL_ARRAY_BUFFER,cachedQuadVbo);
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
@@ -298,6 +351,7 @@ extern "C" bool fitdAndroidPresentCachedFrame() {
     glDrawArrays(GL_TRIANGLE_STRIP,0,4);
     glDisableVertexAttribArray(0);
     glDisableVertexAttribArray(1);
+    glActiveTexture(GL_TEXTURE0);
     SDL_GL_SwapWindow(gWindowBGFX);
     return true;
 }
@@ -403,10 +457,10 @@ void osystem_fillPoly(float* points,int count,unsigned char color,u8 type){
     }
     queuedFaces.push_back(std::move(face));
 }
-void osystem_draw3dLine(float x1,float y1,float,float x2,float y2,float,
+void osystem_draw3dLine(float x1,float y1,float z1,float x2,float y2,float z2,
                          unsigned char color){
-    queuedLines.push_back(vtx(x1,y1,color));
-    queuedLines.push_back(vtx(x2,y2,color));
+    queuedLines.push_back(vtx(x1,y1,color,z1));
+    queuedLines.push_back(vtx(x2,y2,color,z2));
 }
 void osystem_draw3dQuad(float x1,float y1,float z1,float x2,float y2,float z2,
                         float x3,float y3,float z3,float x4,float y4,float z4,
@@ -417,10 +471,24 @@ void osystem_draw3dQuad(float x1,float y1,float z1,float x2,float y2,float z2,
     osystem_draw3dLine(x3,y3,z3,x4,y4,z4,color);
     osystem_draw3dLine(x4,y4,z4,x1,y1,z1,color);
 }
-void osystem_drawPoint(float x,float y,float,u8 color,u8,float size){
-    const float h=std::max(1.f,std::min(10.f,size/5.f));
-    const float pts[]={x-h,y-h,0,x+h,y-h,0,x+h,y+h,0,x-h,y+h,0};
-    osystem_fillPoly(const_cast<float*>(pts),4,color,0);
+void osystem_drawPoint(float x,float y,float z,u8 color,u8,float size){
+    // Original sphere/point impostor uses size*6/5. A depth-preserving
+    // triangle fan avoids the Test10 axis-aligned square artifact.
+    if(size<=0.f)return;
+    const float radius=std::max(.5f,std::min(180.f,size*1.2f));
+    QueuedFace face;
+    face.depth=z;face.type=0;
+    const float pi=3.14159265358979323846f;
+    for(int i=0;i<12;++i){
+        const float a=2.f*pi*i/12.f;
+        const float b=2.f*pi*(i+1)/12.f;
+        face.verts.push_back(vtx(x,y,color,z));
+        face.verts.push_back(vtx(x+std::cos(a)*radius,
+                                 y+std::sin(a)*radius,color,z));
+        face.verts.push_back(vtx(x+std::cos(b)*radius,
+                                 y+std::sin(b)*radius,color,z));
+    }
+    queuedFaces.push_back(std::move(face));
 }
 void osystem_drawSphere(float x,float y,float z,u8 color,u8 material,float size){
     osystem_drawPoint(x,y,z,color,material,size);
