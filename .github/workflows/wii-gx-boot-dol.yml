@@ -1,10 +1,11 @@
-name: FITD Wii Test02 - native PAK CAMERA GX
+name: FITD Wii Test03 - native BODY model GX
 
 on:
   push:
     branches:
       - "port/wii-devkitppc-gx-prototype"
       - "port/wii-test02-archive-camera-gx"
+      - "port/wii-test03-native-body-preview"
     paths:
       - "v2/wii/**"
       - ".github/workflows/wii-gx-boot-dol.yml"
@@ -28,6 +29,11 @@ jobs:
           /tmp/fitd-wii-endian-test
           cc -std=c11 -O2 -Wall -Wextra              v2/wii/tests/test_pak.c v2/wii/source/fitd_pak.c              v2/wii/source/fitd_unpack.c -o /tmp/fitd-wii-pak-test
           /tmp/fitd-wii-pak-test
+          cc -DFITD_HOST_TEST -std=c11 -O2 -Wall -Wextra -Werror \
+             v2/wii/tests/test_body.c v2/wii/source/fitd_body.c \
+             v2/wii/source/fitd_pak.c v2/wii/source/fitd_unpack.c \
+             -lm -o /tmp/fitd-wii-body-test
+          /tmp/fitd-wii-body-test
           # Confirm the stable Android Test19 corrections and R36S ARM64
           # recovery patches remain in branch ancestry for engine integration.
           test -f v2/android-kitkat/engine-runtime/patch_android_enemy_arm64_rehaunted.py
@@ -36,7 +42,7 @@ jobs:
           test -f v2/patch_hit_object_rehaunted.py
           test -f v2/patch_orb_enemy_effects.py
           test -f v2/patch_cellar_barrel_stuck.py
-          echo "FITD Wii Test02: gameplay-fix source baseline preserved"
+          echo "FITD Wii Test03: gameplay-fix source baseline preserved"
 
       - name: Compile Nintendo Wii boot.dol with real devkitPPC/libogc
         run: |
@@ -70,15 +76,15 @@ jobs:
           cp v2/wii/README.md dist/apps/fitd-wii/README.md
           cp v2/wii/PORT_PLAN.md dist/apps/fitd-wii/PORT_PLAN.md
           cp v2/wii/COMPAT_TEST19.md dist/apps/fitd-wii/COMPAT_TEST19.md
-          printf 'Put original CAMERA00.PAK and ITD_RESS.PAK here (not included). In Test02 they are used for the 320x200 background preview.\n' > dist/apps/fitd-wii/data/PUT_GAME_FILES_HERE.txt
-          (cd dist && zip -q -r ../FITD-WII-GX-TEST02-CAMERA-PAK-NO-GAME.zip apps)
-          test -s FITD-WII-GX-TEST02-CAMERA-PAK-NO-GAME.zip
-          unzip -t FITD-WII-GX-TEST02-CAMERA-PAK-NO-GAME.zip | tail -n 2
-          ls -lh FITD-WII-GX-TEST02-CAMERA-PAK-NO-GAME.zip
+          printf 'Copy CAMERA00.PAK, ITD_RESS.PAK, LISTBODY.PAK and LISTANIM.PAK from your original game. Test03 displays original BODY polygons over the background; game assets are not included.\n' > dist/apps/fitd-wii/data/PUT_GAME_FILES_HERE.txt
+          (cd dist && zip -q -r ../FITD-WII-GX-TEST03-ORIGINAL-BODY-NO-GAME.zip apps)
+          test -s FITD-WII-GX-TEST03-ORIGINAL-BODY-NO-GAME.zip
+          unzip -t FITD-WII-GX-TEST03-ORIGINAL-BODY-NO-GAME.zip | tail -n 2
+          ls -lh FITD-WII-GX-TEST03-ORIGINAL-BODY-NO-GAME.zip
 
       - name: Upload Wii Homebrew boot.dol ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: FITD-WII-TEST02-CAMERA-PAK-POWERPC-GX-NO-GAME
-          path: FITD-WII-GX-TEST02-CAMERA-PAK-NO-GAME.zip
+          name: FITD-WII-TEST03-BODY-MODELS-POWERPC-GX-NO-GAME
+          path: FITD-WII-GX-TEST03-ORIGINAL-BODY-NO-GAME.zip
           if-no-files-found: error
