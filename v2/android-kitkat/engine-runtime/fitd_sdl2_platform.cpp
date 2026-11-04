@@ -24,8 +24,8 @@
 extern void detectGame(void);
 extern void renderGameWindow(void);
 extern "C" int FitdMain(int argc, char* argv[]);
-extern int osystem_mouseLeft;
-extern int osystem_mouseRight;
+int osystem_mouseLeft=0;
+int osystem_mouseRight=0;
 
 extern "C" { char homePath[512] = {}; }
 
@@ -37,6 +37,9 @@ static SDL_Thread* engineThread = nullptr;
 static std::atomic<bool> engineExitRequested{false};
 static std::atomic<bool> engineWorkerExited{false};
 static std::atomic<int> engineWorkerResult{-1};
+extern "C" void fitdAndroidRequestExit(void) {
+    engineExitRequested.store(true);
+}
 bool bFirst = true;
 static uint32_t engineTickTimestamp = 0;
 
