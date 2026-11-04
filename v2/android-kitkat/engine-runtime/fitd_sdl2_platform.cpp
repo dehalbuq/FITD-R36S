@@ -23,6 +23,29 @@
 #include <unistd.h>
 #include <android/log.h>
 
+// Presentation may run between 25 Hz logic ticks on the same GLES2 worker.
+extern "C" bool fitdAndroidPresentCachedFrame();
+extern "C" void fitdAndroidCaptureFrame();
+static Uint64 lastPresentCounter=0;
+static Uint32 renderedPresentations=0;
+static Uint32 presentationWindowStart=0;
+static void notePresentation() {
+    lastPresentCounter=SDL_GetPerformanceCounter();
+    ++renderedPresentations;
+    const Uint32 now=SDL_GetTicks();
+    if(!presentationWindowStart) presentationWindowStart=now;
+    if(now-presentationWindowStart>=5000u) {
+        SDL_Log("FITD-PERF: presentation_fps=%.1f (25 Hz logic, target <=60 Hz)",
+            (renderedPresentations*1000.0)/(now-presentationWindowStart));
+        renderedPresentations=0; presentationWindowStart=now;
+    }
+}
+static bool presentationDue() {
+    const Uint64 freq=SDL_GetPerformanceFrequency();
+    const Uint64 now=SDL_GetPerformanceCounter();
+    return !lastPresentCounter || (now-lastPresentCounter)>=freq/60u;
+}
+
 extern void detectGame(void);
 extern void renderGameWindow(void);
 extern "C" int FitdMain(int argc, char* argv[]);
@@ -67,7 +90,7 @@ static void openRuntimeLog() {
     const char* root=SDL_AndroidGetExternalStoragePath();
     if(root && strlen(root)<440) {
         char path[512]={};
-        snprintf(path,sizeof(path),"%s/fitd-test08-runtime.txt",root);
+        snprintf(path,sizeof(path),"%s/fitd-test10-runtime.txt",root);
         externalRuntimeLog=fopen(path,"w");
         if(externalRuntimeLog){
             // Preserve upstream printf()/fprintf(stderr) checkpoints in TXT
@@ -107,6 +130,11 @@ static int SDLCALL fitdEngineThread(void*) {
                      "FITD-RUNTIME: GL make-current failed: %s",SDL_GetError());
         engineWorkerResult.store(27);
     } else {
+        // The 60 Hz presentation cap is enforced by a monotonic clock, not
+        // by requesting extra simulation ticks. Disable vsync where possible;
+        // the physical display/driver can still impose its refresh rate.
+        if(SDL_GL_SetSwapInterval(0)!=0)
+            SDL_Log("FITD-PERF: swap interval 0 unavailable: %s",SDL_GetError());
         SDL_Log("FITD-RUNTIME: GL ES context ownership transferred to worker");
         engineWorkerResult.store(FitdMain(0,nullptr));
     }
@@ -156,6 +184,8 @@ int FitdInit(int argc,char* argv[]) {
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION,2);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION,0);
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER,1);
+    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE,24);
+    SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE,0);
     engineWindow=SDL_CreateWindow("Alone in the Dark",SDL_WINDOWPOS_CENTERED,
                       SDL_WINDOWPOS_CENTERED,640,480,
                       SDL_WINDOW_OPENGL|SDL_WINDOW_FULLSCREEN);
@@ -206,6 +236,8 @@ int FitdInit(int argc,char* argv[]) {
         // Never advance simulation multiple steps just because one frame is late.
         // Output frame pacing can later be interpolated separately to 60 Hz.
         if(elapsed<40u)SDL_Delay(40u-elapsed);
+        // Preserve the original game clock: one logic/AI update per 40 ms.
+        // Missed ticks are not queued in bursts after a GPU stall.
         engineTickTimestamp=SDL_GetTicks();
     }
     if(!engineWorkerExited.load()) {
@@ -227,10 +259,21 @@ int FitdInit(int argc,char* argv[]) {
 }
 
 u32 osystem_startOfFrame() {
-    if(SDL_SemWaitTimeout(startOfRender,30000)!=0) {
-        SDL_Log("FITD-RUNTIME: E_WAIT_FOR_FRAME");
-        engineExitRequested.store(true);
-        return 0;
+    // Engine worker owns GLES. Re-present its last complete scene up to
+    // 60 Hz while waiting for the next 40 ms GAME tick from the SDL UI thread.
+    // A repeated frame is not an additional simulation update.
+    const Uint32 waitStarted=SDL_GetTicks();
+    for(;;) {
+        const int waitResult=SDL_SemWaitTimeout(startOfRender,2);
+        if(waitResult==0)break;
+        if(waitResult!=SDL_MUTEX_TIMEDOUT || SDL_GetTicks()-waitStarted>30000u) {
+            SDL_Log("FITD-RUNTIME: E_WAIT_FOR_FRAME %s",SDL_GetError());
+            engineExitRequested.store(true);
+            return 1;
+        }
+        if(engineExitRequested.load()) return 1;
+        if(presentationDue() && fitdAndroidPresentCachedFrame())
+            notePresentation();
     }
     StartFrame();
     osystem_startFrame();
@@ -259,6 +302,11 @@ void osystem_endOfFrame() {
     osystem_flushPendingPrimitives();
     osystem_drawUILayer();
     renderGameWindow();
+    fitdAndroidCaptureFrame(); // GPU-side copy, no glReadPixels CPU stall
+    // Never exceed the 60 Hz ceiling, even with fast logic redraws.
+    while(!presentationDue() && !engineExitRequested.load())
+        SDL_Delay(1);
     EndFrame();
+    notePresentation();
     SDL_SemPost(endOfRender);
 }
