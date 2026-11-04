@@ -19,7 +19,7 @@ import java.util.zip.*;
  * First-run installer for an ARMv7, Android API19+ SDL2 engine-core test APK.
  * An APK with empty placeholder PAK files is compiled on public CI; any actual
  * proprietary game assets must be injected and re-signed privately/offline.
- * This app does not yet run the playable FITD engine.
+ * This activity prepares user-supplied game assets and starts the real FITD engine.
  */
 public final class FITDEmbeddedActivity extends Activity {
     private static final String TAG = "FITD-EMBEDDED";
@@ -162,7 +162,7 @@ public final class FITDEmbeddedActivity extends Activity {
         root.setPadding(22,22,22,22);
         root.setBackgroundColor(Color.rgb(13,16,31));
         TextView title=new TextView(this);
-        title.setText("ALONE IN THE DARK\\nFITD ARMv7 - TESTE DE DADOS");
+        title.setText("ALONE IN THE DARK\\nFITD ARMv7 - TESTE 10");
         title.setTextColor(Color.WHITE);
         title.setTextSize(22);
         title.setGravity(Gravity.CENTER);
