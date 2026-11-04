@@ -1,8 +1,8 @@
-name: FITD Android ARMv7 TEST14 native GLES2 FBO double buffering
+name: FITD Android ARMv7 TEST15 dynamic GLES2 FBO linker compatibility
 
 on:
   push:
-    branches: ["port/android-kitkat-api19", "fix/android-armv7-test11-60fps-gles2", "fix/android-armv7-test11-fps-font-save-3d", "fix/android-armv7-test14-60hz-options-slots", "fix/android-armv7-test14-vsync-gles2-cache", "fix/android-armv7-test14-fbo-60fps"]
+    branches: ["port/android-kitkat-api19", "fix/android-armv7-test11-60fps-gles2", "fix/android-armv7-test11-fps-font-save-3d", "fix/android-armv7-test15-60hz-options-slots", "fix/android-armv7-test15-vsync-gles2-cache", "fix/android-armv7-test15-fbo-60fps", "fix/android-armv7-test15-dynamic-gles2-fbo"]
     paths:
       - "v2/android-kitkat/engine-runtime/**"
       - "v2/android-kitkat/embedded/**"
@@ -108,6 +108,13 @@ jobs:
             -D /tmp/fitd-runtime-link/libmain.so | grep ' SDL_main'
           "$ANDROID_HOME/ndk/23.2.8568313/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm" \
             -C /tmp/fitd-runtime-link/libmain.so | grep ' FitdMain'
+          # Never introduce hard FBO symbol dependencies; on some older
+          # Android/ANGLE libraries the loader can fail before app logging.
+          if "$ANDROID_HOME/ndk/23.2.8568313/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" \
+                --dyn-syms -W /tmp/fitd-runtime-link/libmain.so | grep -E ' UND .*gl(Gen|Bind|Delete)(Frame|Render)buffers| UND .*glFramebuffer| UND .*glRenderbufferStorage| UND .*glCheckFramebufferStatus'; then
+             echo "FAIL: native linker still requires hard FBO imports" >&2
+             exit 78
+          fi
 
       - name: Assemble experimental Android API19 APK without game assets
         run: |
@@ -128,8 +135,8 @@ jobs:
           old="io.github.dehalbuq.fitdkitkatprobe"
           assert s.count(old)==1
           s=s.replace(old,"io.github.dehalbuq.fitdandroidembedded")
-          s=s.replace("versionCode 1","versionCode 14")
-          s=s.replace("versionName '0.1'","versionName '0.14.0-native-fbo-60fps'")
+          s=s.replace("versionCode 1","versionCode 15")
+          s=s.replace("versionName '0.1'","versionName '0.15.0-fbo-dynamic-compat'")
           gradle.write_text(s)
           m=app/"src/main/AndroidManifest.xml"
           v=m.read_text()
@@ -146,18 +153,18 @@ jobs:
             '    </application>')
           m.write_text(v)
           label=app/"src/main/res/values/strings.xml"
-          label.write_text(label.read_text().replace("FITD GLES2 Test","FITD Android TEST14"))
+          label.write_text(label.read_text().replace("FITD GLES2 Test","FITD Android TEST15"))
           PY
           curl -fsSL https://services.gradle.org/distributions/gradle-8.1.1-bin.zip -o /tmp/gradle.zip
           unzip -q /tmp/gradle.zip -d /tmp
           (cd work/fitd-realgame && /tmp/gradle-8.1.1/bin/gradle --no-daemon :app:assembleDebug)
           mkdir -p dist
-          cp work/fitd-realgame/app/build/outputs/apk/debug/app-debug.apk dist/FITD-Android-ARMv7-TEST14-60FPS-GLES2-API19.apk
+          cp work/fitd-realgame/app/build/outputs/apk/debug/app-debug.apk dist/FITD-Android-ARMv7-TEST15-60FPS-GLES2-API19.apk
 
       - name: Validate native executable and no proprietary data
         run: |
           set -euo pipefail
-          apk=dist/FITD-Android-ARMv7-TEST14-60FPS-GLES2-API19.apk
+          apk=dist/FITD-Android-ARMv7-TEST15-60FPS-GLES2-API19.apk
           "$ANDROID_HOME/build-tools/34.0.0/aapt" dump badging "$apk" | tee /tmp/fitd-realgame-badging.txt
           grep -Fq "sdkVersion:'19'" /tmp/fitd-realgame-badging.txt
           grep -Fq "native-code: 'armeabi-v7a'" /tmp/fitd-realgame-badging.txt
@@ -172,6 +179,6 @@ jobs:
       - name: Upload real engine experimental APK (no original game files)
         uses: actions/upload-artifact@v4
         with:
-          name: FITD-ANDROID-ARMV7-TEST14-GLES2-NO-ASSETS
+          name: FITD-ANDROID-ARMV7-TEST15-GLES2-NO-ASSETS
           path: dist/*
           if-no-files-found: error
