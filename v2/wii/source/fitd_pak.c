@@ -5,6 +5,10 @@
  * Layout (from yaz0r/FITD FitdLib/pak.cpp):
  *   u32 reserved
  *   u32 offsets[count]   index i offset lives at file offset (i+1)*4
+ *   First data offset = 4*(count+1), NOT 4*(count+2).
+ *   Upstream PAK_getNumFiles() subtracts 2 for legacy iteration, but
+ *   loadPak() accepts index==that value. Wii must count physical entries,
+ *   including the last record (notably ETAGE00.PAK entry 1).
  *   u32 additional_desc_size
  *   [additional_desc_size-4 bytes, when nonzero]
  *   u32 packed_bytes, u32 expanded_bytes, u8 compression, u8 flags,
@@ -37,9 +41,9 @@ int fitd_pak_directory(FILE *f,FitdPakDirectory *d){
     uint8_t b[8];
     if(read_at(f,0,b,sizeof(b))<0)return -2;
     const uint32_t first=fitd_read_le32(b+4);
-    if((first&3u)!=0 || first<12u ||
-       first>(uint32_t)length || first/4u<2u)return -4;
-    const uint32_t count=first/4u-2u;
+    if((first&3u)!=0 || first<8u ||
+       first>(uint32_t)length)return -4;
+    const uint32_t count=first/4u-1u;
     if(count>FITD_PAK_MAX_ENTRIES)return -5;
     d->file_size=(uint32_t)length;
     d->count=count;
