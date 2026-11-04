@@ -186,3 +186,35 @@ com saves sem backup. A Release Linux do R36S permanece separada.
 **Próximo marco:** implementar inicialização efetiva da simulação
 (`FitdMain`), adaptar a camada SDL3 do upstream para SDL2 e desenvolver
 o backend de personagens/objetos em GLES2, com FPS sem acelerar a lógica.
+
+
+## Teste 06 aprovado em hardware — 03/11/2026
+
+O usuário confirmou **funcionou como esperado** no Chanuo A1 com o
+`FITD-Alone-in-the-Dark-ARMv7-TEST06-CENARIOS-REAIS.zip`.
+A validação abrange a pré-visualização de cenários do jogo real
+`CAMERAxx.PAK` renderizados em OpenGL ES 2.0, preservando o aspecto 4:3
+e o suporte ao iPega PG-9068 já testado. Este marco **não** equivale a
+gameplay completo, pois a prévia ainda não executa o ciclo `FitdMain`
+nem desenha os personagens.
+
+### Início da integração de controles de gameplay
+
+O módulo `v2/android-kitkat/engine-gameplay/fitd_gameplay_input_sdl2.h`
+mapeia as entradas SDL2 no formato nativo do motor original:
+
+- `JoyD`: cima 1, baixo 2, esquerda 4 e direita 8;
+- `Click`: botão de ação A ou gatilho/ombro direito, teclado espaço/Z;
+- `key`: `0x1B` para B/START ou Escape, `0x1C` para Y/Enter;
+- Entrada do iPega físico selecionada pelo helper do Teste 03,
+  em vez do receptor IR virtual do firmware.
+
+A pré-visualização também coleta `FITD-GAMEPLAY-INPUT` para validar o
+mapeamento sem alterar o funcionamento comprovado no Teste 06.
+Esses valores serão ligados aos globais `JoyD`, `Click` e `key`
+quando o loop `FitdMain` estiver integrado.
+
+**Próximo bloqueio principal:** converter o motor completo do upstream,
+que usa SDL3, bgfx, shaders e ImGui, para SDL2 e GLES2 com timing e áudio
+consistentes. Não publicar um APK de jogo real antes de compilar e testar
+a lógica de gameplay.
