@@ -377,4 +377,45 @@ once("FitdLib/mainLoop.cpp",
         handleAnim2d();''',
 "Re-Haunted empty actor draw-list fallback")
 
+
+# Periodic state reports for every live enemy in the current room, not just
+# the two window followers. This is critical for identifying WHICH monster
+# remains stuck if the test scene is elsewhere in the mansion.
+once("FitdLib/mainLoop.cpp",
+    '#include "common.h"',
+    '#include "common.h"\n#ifdef FITD_R36S\n#include <SDL.h>\n#endif',
+    "SDL2 native AI trace dependency")
+once("FitdLib/mainLoop.cpp",
+'''        updatePendingEvents();
+    }
+
+    //  mainLoopVar1 = 0;''',
+'''        updatePendingEvents();
+#ifdef FITD_R36S
+        static Uint32 nextNpcReportMs=0;
+        const Uint32 nowNpcMs=SDL_GetTicks();
+        if(static_cast<Sint32>(nowNpcMs-nextNpcReportMs)>=0){
+            nextNpcReportMs=nowNpcMs+3000;
+            int count=0;
+            for(int id=0;id<NUM_MAX_OBJECT && count<8;++id){
+                const tObject& ai=ListObjets[id];
+                if(id==currentCameraTargetActor || ai.indexInWorld<0 ||
+                   ai.room!=currentRoom || ai.trackMode!=2 ||
+                   ai.life==-1)continue;
+                SDL_Log("FITD-AI: actor=%d world=%d room=%d life=%d "
+                        "mode=%d path=%d pos=%d speed=%d anim=%d frame=%d "
+                        "xyz=%d,%d step=%d,%d wall=%d coll=%d",
+                        id,ai.indexInWorld,ai.room,ai.life,ai.trackMode,
+                        ai.trackNumber,ai.positionInTrack,ai.speed,ai.ANIM,
+                        ai.frame,ai.roomX,ai.roomZ,ai.stepX,ai.stepZ,
+                        ai.HARD_COL,ai.COL_BY);
+                ++count;
+            }
+        }
+#endif
+    }
+
+    //  mainLoopVar1 = 0;''',
+"observe all following NPCs every 3 seconds without noise")
+
 print("FITD-TEST19: ARM64 actor/shot safety + Re-Haunted AI/root motion applied")
