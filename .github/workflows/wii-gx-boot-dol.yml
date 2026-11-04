@@ -1,0 +1,71 @@
+name: FITD Wii - devkitPPC GX bootstrap
+
+on:
+  push:
+    branches:
+      - "port/wii-devkitppc-gx-prototype"
+    paths:
+      - "v2/wii/**"
+      - ".github/workflows/wii-gx-boot-dol.yml"
+  workflow_dispatch:
+
+jobs:
+  wii-powerpc:
+    name: Build PowerPC Wii boot.dol and tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout FITD-R36S Wii port
+        uses: actions/checkout@v4
+
+      - name: Test endian-safe original-game binary decoding on host
+        run: |
+          set -euxo pipefail
+          cc -std=c11 -O2 -Wall -Wextra -Werror \
+             v2/wii/tests/test_endian.c -o /tmp/fitd-wii-endian-test
+          /tmp/fitd-wii-endian-test
+
+      - name: Compile Nintendo Wii boot.dol with real devkitPPC/libogc
+        run: |
+          set -euxo pipefail
+          docker run --rm \
+            --volume "$GITHUB_WORKSPACE:/src" \
+            --workdir /src/v2/wii \
+            devkitpro/devkitppc:20261102 \
+            /bin/sh -c 'make clean && make -j2'
+          test -s v2/wii/boot.dol
+          test -s v2/wii/fitd-wii-gx.elf
+
+      - name: Verify real PowerPC ELF and Nintendo Wii DOL
+        run: |
+          set -euxo pipefail
+          file v2/wii/fitd-wii-gx.elf
+          readelf -h v2/wii/fitd-wii-gx.elf | tee /tmp/fitd-wii-elf.txt
+          grep -Eq 'Machine:.*PowerPC' /tmp/fitd-wii-elf.txt
+          grep -Eq 'Data:.*big endian' /tmp/fitd-wii-elf.txt
+          test "$(stat -c %s v2/wii/boot.dol)" -gt 8000
+          sha256sum v2/wii/boot.dol
+
+      - name: Package Homebrew Channel SD card layout (NO game assets)
+        run: |
+          set -euxo pipefail
+          python3 v2/wii/create_icon.py v2/wii/icon.png
+          mkdir -p dist/apps/fitd-wii/data
+          cp v2/wii/boot.dol dist/apps/fitd-wii/boot.dol
+          cp v2/wii/meta.xml dist/apps/fitd-wii/meta.xml
+          cp v2/wii/icon.png dist/apps/fitd-wii/icon.png
+          cp v2/wii/README.md dist/apps/fitd-wii/README.md
+          cp v2/wii/PORT_PLAN.md dist/apps/fitd-wii/PORT_PLAN.md
+          printf 'Optional: legally acquired original Alone in the Dark .PAK/.HQR files. Not used until later Wii engine milestones.\n' > dist/apps/fitd-wii/data/PUT_GAME_FILES_HERE.txt
+          (cd dist && zip -q -r ../FITD-WII-GX-PROTOTYPE-v0.1-NO-GAME.zip apps)
+          test -s FITD-WII-GX-PROTOTYPE-v0.1-NO-GAME.zip
+          unzip -t FITD-WII-GX-PROTOTYPE-v0.1-NO-GAME.zip | tail -n 2
+          ls -lh FITD-WII-GX-PROTOTYPE-v0.1-NO-GAME.zip
+
+      - name: Upload Wii Homebrew boot.dol ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: FITD-WII-POWERPC-GX-BOOT-DOL-NO-GAME
+          path: FITD-WII-GX-PROTOTYPE-v0.1-NO-GAME.zip
+          if-no-files-found: error
