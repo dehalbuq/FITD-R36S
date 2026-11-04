@@ -166,8 +166,8 @@ bool fitd_anim_pose(const FitdAnimClip *a,const FitdBody *b,
                     double ticks,FitdPoseVertex *v,size_t cap,
                     FitdAnimSample *sample){
     if(sample)memset(sample,0,sizeof(*sample));
-    if(!v || cap<b->vertex_count || !fitd_anim_can_apply(a,b) ||
-       !a->total_ticks)return false;
+    if(!b || !v || !fitd_anim_can_apply(a,b) ||
+       cap<b->vertex_count || !a->total_ticks)return false;
     for(unsigned i=0;i<b->vertex_count;i++){
         v[i].x=(float)b->vertices[i].x;
         v[i].y=(float)b->vertices[i].y;
@@ -188,7 +188,8 @@ bool fitd_anim_pose(const FitdAnimClip *a,const FitdBody *b,
     const unsigned duration=a->frames[to].duration?
                             a->frames[to].duration:1u;
     float t=(float)((phase-beginning)/duration);
-    if(t<0.f)t=0.f;if(t>1.f)t=1.f;
+    if(t<0.f)t=0.f;
+    if(t>1.f)t=1.f;
     if(sample){
         sample->from_frame=from;
         sample->to_frame=to;
@@ -207,7 +208,11 @@ bool fitd_anim_pose(const FitdAnimClip *a,const FitdBody *b,
      * Crucially, it does not replay a canned animation or change FPS timing.
      */
     for(unsigned g=0;g<a->group_count;g++){
+        if(b->group_order[g]>=b->group_count)return false;
         const FitdGroup *group=&b->groups[b->group_order[g]];
+        if(group->first<0 || group->count<0 ||
+           (unsigned)group->first+(unsigned)group->count>b->vertex_count)
+            return false;
         const FitdAnimGroupState *before=
             &a->states[(size_t)from*a->group_count+g];
         const FitdAnimGroupState *after=
