@@ -260,3 +260,48 @@ do corpo correto do protagonista e integração de animações e câmeras;
 manter Teste 07 intacto como referência de prévia 3D aprovada. Todos
 os APKs privados continuam distribuídos em ZIP; dados comerciais ficam
 fora do repositório e do GitHub Actions.
+
+
+## Teste 08 — PRIMEIRO APK com FitdMain real (experimental, 03/11/2026)
+
+**Compilação completa concluída (CI):**
+https://github.com/dehalbuq/FITD-R36S/actions/runs/41753606149
+
+A biblioteca Android ARMv7 API19 agora contem todos os modulos originais de
+simulacao FITD selecionados do upstream fixado, incluindo FitdMain,
+PlayWorld, scripts, colisoes, animacoes, save, sala e inventario.
+A camada original SDL3/BGFX foi substituida por modulo Android SDL2
+fitd_sdl2_platform.cpp + fitd_sdl2_input.cpp, e um backend experimental
+fitd_gles2_renderer.cpp. Na inicializacao, o motor usa SDL_main do arquivo
+fitd_android_entry.cpp, detecta os dados reais do jogo no armazenamento
+privado, transfere o contexto EGL/GLES2 para a thread do game engine e
+recebe JoyD/Click/key do iPega fisico (evita gpio_ir_recv).
+
+Historico de compilacao: FitdMain e PlayWorld compilados; depois 48
+arquivos de codigo original + entrada SDL2; linker completo encontrou
+simbolo original faltante HQR_Reset<sBody> e patch_fitd_gameplay_api19.py
+instancia explicitamente o template. O build final gera libmain.so e APK
+Android 4.4+ 32 bits. O CI NAO inclui recursos comerciais.
+
+**Atenção: este e um teste de boot do motor, NAO release jogavel comprovada.**
+Nao foi executado fisicamente no Chanuo A1. Os shaders GLES2 originais
+BGFX foram substituidos inicialmente por renderizacao experimental de
+poligonos/cenas/interface, portanto oclusao, dither e profundidade ainda
+podem estar incorretos. Audio foi temporariamente silenciado, via
+fitd_audio_silent.cpp, ate integracao do SoLoud/OpenSL ES.
+
+O codigo do runtime grava mensagens em
+Android/data/io.github.dehalbuq.fitdandroidembedded/files/fitd-test08-runtime.txt
+na versao privada, quando armazenamento externo do app estiver acessivel.
+
+**Privacidade:** todos os 37 arquivos originais enviados pelo usuario
+foram colocados exclusivamente na variante privada local, que e entregue
+como arquivo ZIP contendo o APK assinado e SHA-256. O artefato publico no
+GitHub Actions e um APK sem recursos do jogo. O pacote privado herda a
+tela de importacao automatica comprovada nos testes anteriores. Como a
+assinatura local e temporaria, uma nova instalacao pode exigir remover
+o APK anterior: fazer backup de saves antes da desinstalacao.
+
+Proximo passo: teste real do boot no projetor, relato do que aparece na
+tela e inspecao do TXT do runtime; depois corrigir renderer, audio,
+controles e persistencia antes de considerar release.
