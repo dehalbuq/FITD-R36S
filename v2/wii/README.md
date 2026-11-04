@@ -1,3 +1,44 @@
+# FITD Wii Teste 05.1 — correção do índice PAK de ETAGE00
+
+**Esta revisão corrige um erro confirmado no Teste 05.**
+ETAGE00.PAK possui duas entradas físicas:
+- índice 0: registros de salas;
+- índice 1: registros de câmeras.
+
+O leitor Wii contava uma entrada a menos. Assim, o Teste 05
+registrou FITD-WII-STAGE floor=0 archive_error=BAD_ARGUMENT_OR_INDEX,
+apesar de o arquivo estar presente.
+
+O Teste 05.1 aplica a contagem física correta: first_data_offset / 4 - 1.
+A mesma correção revela a última imagem de CAMERA00.PAK e os últimos
+índices de LISTBODY.PAK e LISTANIM.PAK. Não modifica nenhum arquivo
+original do usuário.
+
+O log principal desta versão está em:
+
+    SD:/fitd-wii-test05-1-diagnostic.txt
+
+Há uma cópia adicional, se possível, em:
+
+    SD:/apps/fitd-wii/wii-diagnostic.txt
+
+Para testar: mantenha os PAKs originais, sobretudo ETAGE00.PAK,
+abra no Homebrew Channel, pressione A e ative a visualização de
+máscaras com B+1. Experimente B + ou B - para alternar salas. Saia
+com HOME e envie o novo diagnóstico. Procure:
+
+    FITD-WII-STAGE05-PACK floor=0 directory_status=0 entries=2
+    FITD-WII-STAGE05-ENTRIES room=0:... camera=1:...
+    FITD-WII-STAGE OK floor=0 rooms=... cameras=...
+    FITD-WII-MASK05 ... ready=...
+
+A leitura real das salas e a sobreposição ainda precisam ser
+confirmadas no Wii. A compilação pode revelar erros posteriores do
+formato interno; os novos logs detalham a etapa. Isso ainda é um
+visualizador técnico, não o motor completo com gameplay.
+
+---
+
 # FITD Wii — Teste 05: ETAGE, salas, câmeras e máscaras originais GX
 
 Esta versão é um **teste técnico nativo PowerPC para Nintendo Wii**.
