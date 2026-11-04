@@ -51,7 +51,7 @@ static int test_valid(void){
     for(int j=0;j<8;j++)
         w16(cam+base+18+j*2,(uint16_t)square[j]);
     FitdStage stage={0};
-    if(fitd_stage_set_blobs(&stage,room,22,cam,base+34)!=0){
+    if(fitd_stage_set_blobs(&stage,room,22,cam,128)!=0){
         free(room);free(cam);return 2;
     }
     FitdStageRoom data;
@@ -75,6 +75,33 @@ static int test_valid(void){
     data.hard_count=1;data.hard[0]=h;
     if(!fitd_stage_collision_xz(&data,15,0,15,NULL) ||
        fitd_stage_collision_xz(&data,3,0,3,NULL))pass=0;
+    /* Test05.3: two independent original-format mask polygons. The
+       descriptors precede two polygons at separate byte offsets. */
+    w16(cam+base,2);
+    w16(cam+base+2,0);w16(cam+base+4,10);
+    w16(cam+base+6,0);w16(cam+base+8,30);
+    w16(cam+base+10,1);w16(cam+base+12,4);
+    for(int j=0;j<8;j++)
+        w16(cam+base+14+j*2,(uint16_t)square[j]);
+    w16(cam+base+30,1);w16(cam+base+32,4);
+    const int16_t second[8]={100,100,110,100,110,110,100,110};
+    for(int j=0;j<8;j++)
+        w16(cam+base+34+j*2,(uint16_t)second[j]);
+    int a0=fitd_stage_masks_selected(&stage,0,0,0,mask,NULL);
+    unsigned firstPixels=mask->covered_pixels;
+    if(a0!=0 || mask->masks!=2 || mask->polygons!=1 ||
+       mask->covered[15*320+15]!=255 ||
+       mask->covered[105*320+105]!=0)pass=0;
+    int a1=fitd_stage_masks_selected(&stage,0,0,1,mask,NULL);
+    unsigned secondPixels=mask->covered_pixels;
+    if(a1!=0 || mask->masks!=2 || mask->polygons!=1 ||
+       mask->covered[15*320+15]!=0 ||
+       mask->covered[105*320+105]!=255)pass=0;
+    int all=fitd_stage_masks_selected(&stage,0,0,-1,mask,NULL);
+    if(all!=0 || mask->masks!=2 || mask->polygons!=2 ||
+       mask->covered_pixels!=firstPixels+secondPixels)pass=0;
+    if(fitd_stage_masks_selected(&stage,0,0,2,mask,NULL)>=0)
+        pass=0; /* invalid index must never silently union everything */
     cam[4+22]=0xFF;
     if(fitd_stage_masks(&stage,0,0,mask,NULL)>=0)pass=0;
     free(mask);
