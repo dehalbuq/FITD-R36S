@@ -137,6 +137,23 @@ bool fitd_stage_load(FitdStage *stage,const char *directory,
         free(rooms);free(cams);
         return false;
     }
+    /* Log the INNER offset table in addition to the outer PAK table.
+       In AITD1, table candidates include the first record header, which
+       is not an actual offset. This distinction caused Test05.1 failure. */
+    unsigned room_count=0,camera_count=0;
+    const int room_st=fitd_stage_blob_count(rooms,nr,&room_count);
+    const int camera_st=fitd_stage_blob_count(cams,nc,&camera_count);
+    if(log){
+        fprintf(log,
+          "FITD-WII-STAGE05-INNER floor=%u "
+          "room_first=%lu room_count=%u room_status=%d "
+          "camera_first=%lu camera_count=%u camera_status=%d\n",
+          floor,(unsigned long)(nr>=4?u32(rooms,0):0),
+          room_count,room_st,
+          (unsigned long)(nc>=4?u32(cams,0):0),
+          camera_count,camera_st);
+        fflush(log);
+    }
     st=fitd_stage_set_blobs(stage,rooms,nr,cams,nc);
     if(st!=0){
         if(log){fprintf(log,"FITD-WII-STAGE floor=%u parse_error=%d room_bytes=%lu camera_bytes=%lu\n",
