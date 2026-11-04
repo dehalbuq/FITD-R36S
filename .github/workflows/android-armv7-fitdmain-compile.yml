@@ -1,0 +1,80 @@
+name: FITD Android API19 original FitdMain SDL2 compile gate
+
+on:
+  push:
+    branches: ["port/android-kitkat-api19"]
+    paths:
+      - "v2/android-kitkat/engine-runtime/**"
+      - "v2/android-kitkat/engine-gameplay/**"
+      - ".github/workflows/android-armv7-fitdmain-compile.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compile-original-fitdmain-android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Android KitKat ARMv7 NDK
+        run: |
+          set -euo pipefail
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;23.2.8568313"
+
+      - name: Fetch pinned original FITD gameplay source and minimum headers
+        run: |
+          set -euo pipefail
+          git clone -q --no-checkout https://github.com/yaz0r/FITD.git /tmp/fitd-upstream
+          git -C /tmp/fitd-upstream fetch -q --depth=1 origin 543e22bc78b64405537ae545ecd382dcdf2c12b2
+          git -C /tmp/fitd-upstream checkout -q --detach FETCH_HEAD
+          git -C /tmp/fitd-upstream submodule update --init --recursive --depth 1 ThirdParty/bgfx.cmake
+          git clone -q --depth 1 --branch release-2.30.12 https://github.com/libsdl-org/SDL.git /tmp/SDL2
+          git clone -q --depth 1 --branch 10.2.1 https://github.com/fmtlib/fmt.git /tmp/fmt
+          test -s /tmp/fitd-upstream/ThirdParty/bgfx.cmake/bgfx/include/bgfx/bgfx.h
+          test -s /tmp/fitd-upstream/ThirdParty/bgfx.cmake/bx/include/bx/platform.h
+
+      - name: Adapt only compiler shim for std::format not shipped by NDK r23
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          config=Path('/tmp/fitd-upstream/FitdLib/config.h')
+          value=config.read_text()
+          needle='#include <format>'
+          assert value.count(needle)==1
+          value=value.replace(needle,
+              '#include <fmt/format.h>\nnamespace std {using fmt::format;}',1)
+          for macro in ('FITD_DEBUGGER','USE_IMGUI'):
+              value += '\n#ifdef '+macro+'\n#undef '+macro+'\n#endif\n'
+          config.write_text(value)
+          print('Android std::format shim and headless-debug exclusions ready')
+          PY
+
+      - name: Compile genuine FitdMain / PlayWorld / Android SDL2 platform
+        run: |
+          set -euo pipefail
+          cmake -S v2/android-kitkat/engine-runtime -B /tmp/fitd-runtime-api19 -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/23.2.8568313/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-19 \
+            -DANDROID_STL=c++_static -DCMAKE_BUILD_TYPE=Release \
+            -DFITD_UPSTREAM_DIR=/tmp/fitd-upstream \
+            -DSDL2_INCLUDE_DIR=/tmp/SDL2/include \
+            -DFMT_INCLUDE_DIR=/tmp/fmt/include
+          cmake --build /tmp/fitd-runtime-api19 --target fitd_real_runtime_objects --parallel 2
+          find /tmp/fitd-runtime-api19 -name '*.o' -print | sort | tee /tmp/fitd-real-object-files.txt
+          grep -q 'main.cpp.o' /tmp/fitd-real-object-files.txt
+          grep -q 'mainLoop.cpp.o' /tmp/fitd-real-object-files.txt
+          grep -q 'fitd_sdl2_platform.cpp.o' /tmp/fitd-real-object-files.txt
+          grep -q 'fitd_sdl2_input.cpp.o' /tmp/fitd-real-object-files.txt
+          echo 'FITD-RUNTIME: original FitdMain and PlayWorld translation units compile on Android API19 ARMv7.'
+
+      - name: Upload compile audit without proprietary resources
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FITD-ANDROID-ARMV7-FITDMAIN-COMPILE-AUDIT
+          path: /tmp/fitd-real-object-files.txt
+          if-no-files-found: ignore
