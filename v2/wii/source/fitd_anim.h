@@ -32,9 +32,6 @@ typedef struct {
     FitdAnimGroupState *states; /* frame_count * group_count */
 } FitdAnimClip;
 typedef struct {
-    float x,y,z;
-} FitdPoseVertex;
-typedef struct {
     uint16_t from_frame,to_frame;
     float fraction;
     bool compatible,animated;
