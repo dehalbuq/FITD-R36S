@@ -190,7 +190,8 @@ void fitd_camera_draw(const FitdCamera *c,unsigned width,unsigned height){
     GX_SetVtxDesc(GX_VA_TEX0,GX_DIRECT);
     GX_SetVtxAttrFmt(GX_VTXFMT0,GX_VA_POS,GX_POS_XYZ,GX_F32,0);
     GX_SetVtxAttrFmt(GX_VTXFMT0,GX_VA_TEX0,GX_TEX_ST,GX_F32,0);
-    GX_LoadTexObj(&c->tex,GX_TEXMAP0);
+    GXTexObj tex=c->tex;
+    GX_LoadTexObj(&tex,GX_TEXMAP0);
     GX_SetTevOrder(GX_TEVSTAGE0,GX_TEXCOORD0,GX_TEXMAP0,GX_COLORNULL);
     GX_SetTevOp(GX_TEVSTAGE0,GX_REPLACE);
     GX_Begin(GX_QUADS,GX_VTXFMT0,4);
