@@ -109,6 +109,28 @@ static int targetWidth=640,targetHeight=480,viewportW=640,viewportH=480;
 static int viewportX=0,viewportY=0;
 struct Vertex{float x,y,z;float r,g,b,a;};
 struct QueuedFace{float depth;u8 type;std::vector<Vertex> verts;};
+// Test17: collect the original 3D draw commands at each 25Hz simulation tick.
+// Reconstruct 60Hz output by interpolating *mesh vertices*, not ghosting two
+// complete 2D screenshots. Reuse the original draw order and mask commands.
+enum class DrawKind:u8 {Background,UI,Geometry,Mask,Clip,Unclip};
+struct DrawCommand {
+    DrawKind kind=DrawKind::Background;
+    int room=0,mask=0;
+    float rect[4]={0,0,320,200};
+    std::vector<Vertex> opaque,translucent,lines;
+};
+static std::vector<DrawCommand> composingCommands;
+static std::vector<DrawCommand> sceneCommands,priorSceneCommands;
+static bool recordingDrawCommands=false;
+static bool replayingDrawCommands=false;
+static bool meshInterpolationAvailable=false;
+static unsigned meshInterpolatedPresents=0,meshFallbackPresents=0;
+static void recordDrawKind(DrawKind kind,int room=0,int mask=0) {
+    if(!recordingDrawCommands || replayingDrawCommands)return;
+    DrawCommand cmd;
+    cmd.kind=kind;cmd.room=room;cmd.mask=mask;
+    composingCommands.push_back(std::move(cmd));
+}
 static std::vector<QueuedFace> queuedFaces;
 static std::vector<Vertex> queuedLines;
 static std::array<uint8_t,320*200*4> converted{};
@@ -374,9 +396,14 @@ void deleteBgfxGlue() {
     maskTextures.clear();
     maskProg=0;texProg=0;polyProg=0;temporalProg=0;
     graphicsReady=false;priorFrameReady=false;cachedFrameReady=false;
+    recordingDrawCommands=false;replayingDrawCommands=false;
+    meshInterpolationAvailable=false;
+    composingCommands.clear();sceneCommands.clear();priorSceneCommands.clear();
 }
 void StartFrame() {
     if(!graphicsReady)return;
+    recordingDrawCommands=true;
+    composingCommands.clear();
     // The writer FBO is never the texture being displayed or sampled.
     if(offscreenReady && fboBindFramebuffer)fboBindFramebuffer(GL_FRAMEBUFFER,historyFrameFbo);
     updateViewport();
@@ -421,10 +448,127 @@ extern "C" void fitdAndroidCaptureFrame() {
                     lastRoom==currentRoom && lastFloor==g_currentFloor;
     lastCamera=NumCamera;lastRoom=currentRoom;lastFloor=g_currentFloor;
     lastCaptureTicks=SDL_GetTicks();
+    recordingDrawCommands=false;
+    priorSceneCommands=std::move(sceneCommands);
+    sceneCommands=std::move(composingCommands);
+    composingCommands.clear();
+    // Only replay strictly corresponding drawing commands. Animations may
+    // insert/remove polygons between keyframes; never morph unrelated meshes.
+    meshInterpolationAvailable=sameCameraFrame && !sceneCommands.empty() &&
+        sceneCommands.size()==priorSceneCommands.size();
+    bool containsPolygons=false;
+    if(meshInterpolationAvailable) {
+        for(size_t k=0;k<sceneCommands.size();++k) {
+            const auto& a=sceneCommands[k];
+            const auto& b=priorSceneCommands[k];
+            if(a.kind!=b.kind || a.room!=b.room || a.mask!=b.mask ||
+               a.opaque.size()!=b.opaque.size() ||
+               a.translucent.size()!=b.translucent.size() ||
+               a.lines.size()!=b.lines.size()) {
+                meshInterpolationAvailable=false;
+                break;
+            }
+            if(a.kind==DrawKind::Geometry && !a.opaque.empty())
+                containsPolygons=true;
+        }
+    }
+    meshInterpolationAvailable=meshInterpolationAvailable && containsPolygons;
     static unsigned captured=0;
     if(++captured==1 || captured%250==0)
-        SDL_Log("FITD-FBO: captured=%u ready=1 prior=%d render_texture=%u",
-                captured,hadPrior?1:0,(unsigned)cachedFrameTexture);
+        SDL_Log("FITD-FBO: captured=%u prior=%d mesh_commands=%zu matched_mesh=%d",
+                captured,hadPrior?1:0,sceneCommands.size(),
+                meshInterpolationAvailable?1:0);
+}
+// Rebuild actor polygons with per-vertex interpolation, preserving mask
+// occlusion and z testing. We do not mutate the original engine's actors,
+// collision boxes, AI or save structures; all changes are presentation-only.
+static void drawInterpolatedGeometry(const DrawCommand& oldCmd,
+                                     const DrawCommand& newCmd,float phase){
+    auto draw=[&](const std::vector<Vertex>& older,
+                  const std::vector<Vertex>& newer,GLenum mode){
+        if(newer.empty())return;
+        std::vector<Vertex> intermediate=newer;
+        for(size_t v=0;v<newer.size();++v){
+            const float dx=newer[v].x-older[v].x;
+            const float dy=newer[v].y-older[v].y;
+            // A sudden jump or reordered face should not stretch across
+            // the entire screen. Use the actual new vertex in that case.
+            if(std::fabs(dx)>42.f || std::fabs(dy)>42.f)continue;
+            intermediate[v].x=older[v].x+dx*phase;
+            intermediate[v].y=older[v].y+dy*phase;
+            intermediate[v].z=older[v].z+(newer[v].z-older[v].z)*phase;
+        }
+        drawVertices(mode,intermediate);
+    };
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    draw(oldCmd.opaque,newCmd.opaque,GL_TRIANGLES);
+    glDepthMask(GL_FALSE);
+    if(!newCmd.translucent.empty()) {
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
+        draw(oldCmd.translucent,newCmd.translucent,GL_TRIANGLES);
+        glDisable(GL_BLEND);
+    }
+    draw(oldCmd.lines,newCmd.lines,GL_LINES);
+    glDisable(GL_DEPTH_TEST);
+}
+static bool presentInterpolatedScene(float phase,int dw,int dh,
+                                     int drawW,int drawH){
+    if(!meshInterpolationAvailable || !sameCameraFrame)return false;
+    replayingDrawCommands=true;
+    const int ox=(dw-drawW)/2,oy=(dh-drawH)/2;
+    // The screenshot-FBO fallback remains available for unsupported
+    // dynamic scene geometry or camera changes.
+    glDisable(GL_SCISSOR_TEST);
+    glDepthMask(GL_TRUE);
+    glClearDepthf(1.f);
+    glViewport(0,0,dw,dh);
+    glClearColor(0.f,0.f,0.f,1.f);
+    glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+    glViewport(ox,oy,drawW,drawH);
+    for(size_t i=0;i<sceneCommands.size();++i){
+        const DrawCommand& cmd=sceneCommands[i];
+        const DrawCommand& prev=priorSceneCommands[i];
+        switch(cmd.kind){
+        case DrawKind::Background:
+            drawTexture(backgroundTexture,physicalScreen,false);
+            break;
+        case DrawKind::UI:
+            drawTexture(uiTexture,uiLayer.data(),true);
+            break;
+        case DrawKind::Mask:
+            osystem_drawMask(cmd.room,cmd.mask);
+            break;
+        case DrawKind::Clip: {
+            const float left=std::max(0.f,std::min(320.f,cmd.rect[0]));
+            const float right=std::max(left,std::min(320.f,cmd.rect[2]));
+            const float top=std::max(0.f,std::min(200.f,cmd.rect[1]));
+            const float bottom=std::max(top,std::min(200.f,cmd.rect[3]));
+            const int sx=ox+(int)(left*drawW/320.f);
+            const int sy=oy+(int)((200.f-bottom)*drawH/200.f);
+            glEnable(GL_SCISSOR_TEST);
+            glScissor(sx,sy,(int)((right-left)*drawW/320.f),
+                            (int)((bottom-top)*drawH/200.f));
+            break;
+        }
+        case DrawKind::Unclip:
+            glDisable(GL_SCISSOR_TEST);
+            break;
+        case DrawKind::Geometry:
+            drawInterpolatedGeometry(prev,cmd,phase);
+            break;
+        }
+    }
+    glDisable(GL_SCISSOR_TEST);
+    replayingDrawCommands=false;
+    ++meshInterpolatedPresents;
+    if(meshInterpolatedPresents%600==1)
+        SDL_Log("FITD-MESH: vertex interpolation ACTIVE presents=%u phase=%.2f commands=%zu",
+                meshInterpolatedPresents,phase,sceneCommands.size());
+    return true;
 }
 extern "C" bool fitdAndroidPresentCachedFrame() {
     if(!graphicsReady || !offscreenReady || !cachedFrameReady ||
@@ -445,6 +589,11 @@ extern "C" bool fitdAndroidPresentCachedFrame() {
     int w=dw,h=dw*3/4;
     if(h>dh){h=dh;w=dh*4/3;}
     glViewport((dw-w)/2,(dh-h)/2,w,h);
+    const float meshPhase=std::max(0.f,std::min(1.f,
+                             (SDL_GetTicks()-lastCaptureTicks)/40.f));
+    const bool modelTween=presentInterpolatedScene(meshPhase,dw,dh,w,h);
+    if(!modelTween){
+    ++meshFallbackPresents;
     const bool tween=sameCameraFrame && priorFrameReady;
     const GLuint program=tween?temporalProg:texProg;
     glUseProgram(program);
@@ -468,6 +617,7 @@ extern "C" bool fitdAndroidPresentCachedFrame() {
     glDrawArrays(GL_TRIANGLE_STRIP,0,4);
     glDisableVertexAttribArray(0);
     glDisableVertexAttribArray(1);
+    }
     glActiveTexture(GL_TEXTURE0);
     const Uint64 before=SDL_GetPerformanceCounter();
     SDL_GL_SwapWindow(gWindowBGFX);
@@ -530,8 +680,14 @@ void osystem_putpixel(int x,int y,int index){
         physicalScreen[y*320+x]=(uint8_t)index;
 }
 void osystem_refreshFrontTextureBuffer(){}
-void osystem_drawBackground() {drawTexture(backgroundTexture,physicalScreen,false);}
-void osystem_drawUILayer() {drawTexture(uiTexture,uiLayer.data(),true);}
+void osystem_drawBackground() {
+    recordDrawKind(DrawKind::Background);
+    drawTexture(backgroundTexture,physicalScreen,false);
+}
+void osystem_drawUILayer() {
+    recordDrawKind(DrawKind::UI);
+    drawTexture(uiTexture,uiLayer.data(),true);
+}
 void osystem_startFrame() {
     if(!graphicsReady && !initGL())return;
     queuedFaces.clear();
@@ -544,6 +700,12 @@ void osystem_cleanScreenKeepZBuffer(){
     osystem_drawBackground();
 }
 void osystem_setClip(float left,float top,float right,float bottom){
+    if(recordingDrawCommands && !replayingDrawCommands){
+        DrawCommand cmd; cmd.kind=DrawKind::Clip;
+        cmd.rect[0]=left;cmd.rect[1]=top;
+        cmd.rect[2]=right;cmd.rect[3]=bottom;
+        composingCommands.push_back(std::move(cmd));
+    }
     clipEnabled=true;
     clipCoords[0]=left;clipCoords[1]=top;
     clipCoords[2]=right;clipCoords[3]=bottom;
@@ -554,7 +716,10 @@ void osystem_setClip(float left,float top,float right,float bottom){
     glEnable(GL_SCISSOR_TEST);
     glScissor(viewportX+x,viewportY+y,w,h);
 }
-void osystem_clearClip(){clipEnabled=false;glDisable(GL_SCISSOR_TEST);}
+void osystem_clearClip(){
+    recordDrawKind(DrawKind::Unclip);
+    clipEnabled=false;glDisable(GL_SCISSOR_TEST);
+}
 void osystem_fillPoly(float* points,int count,unsigned char color,u8 type){
     if(!points||count<3||count>80)return;
     QueuedFace face;
@@ -648,6 +813,13 @@ void osystem_flushPendingPrimitives(){
     }
     drawVertices(GL_LINES,queuedLines);
     glDisable(GL_DEPTH_TEST);
+    if(recordingDrawCommands && !replayingDrawCommands){
+        DrawCommand cmd;cmd.kind=DrawKind::Geometry;
+        cmd.opaque=std::move(opaque);
+        cmd.translucent=std::move(translucent);
+        cmd.lines=std::move(queuedLines);
+        composingCommands.push_back(std::move(cmd));
+    }
     queuedFaces.clear();queuedLines.clear();
 }
 void osystem_flip(unsigned char* buffer){
@@ -691,6 +863,7 @@ void osystem_drawMask(int roomId,int maskId){
     osystem_flushPendingPrimitives();
     auto it=maskTextures.find(std::make_pair(roomId,maskId));
     if(it==maskTextures.end())return;
+    recordDrawKind(DrawKind::Mask,roomId,maskId);
     glDisable(GL_BLEND);
     glUseProgram(maskProg);
     glActiveTexture(GL_TEXTURE0);
@@ -709,8 +882,8 @@ void osystem_drawMask(int roomId,int maskId){
     glDisableVertexAttribArray(0);
     glDisableVertexAttribArray(1);
     glActiveTexture(GL_TEXTURE0);
-    ++maskRendered;
-    if(maskRendered%500==1)
+    if(!replayingDrawCommands)++maskRendered;
+    if(!replayingDrawCommands && maskRendered%500==1)
         SDL_Log("FITD-GLES2: occlusion mask drawn count=%u floor=%d mask=%d",
                 maskRendered,roomId,maskId);
 }
