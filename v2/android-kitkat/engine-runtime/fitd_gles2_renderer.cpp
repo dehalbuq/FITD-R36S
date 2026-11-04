@@ -22,6 +22,7 @@
 #include <cmath>
 #include <cstring>
 #include <cstdio>
+#include <atomic>
 
 SDL_Window* gWindowBGFX=nullptr;
 int gFrameLimit=60;
@@ -55,6 +56,7 @@ static std::vector<QueuedFace> queuedFaces;
 static std::vector<Vertex> queuedLines;
 static std::array<uint8_t,320*200*4> converted{};
 static bool graphicsReady=false;
+static std::atomic<bool> highDetail{true};
 static bool clipEnabled=false;
 static float clipCoords[4]={0,0,320,200};
 
@@ -231,7 +233,7 @@ static bool initGL(){
                       GL_UNSIGNED_BYTE,nullptr);
     }
     graphicsReady=true;
-    SDL_Log("FITD-GLES2: initialised real engine osystem backend");
+    SDL_Log("FITD-GLES2: initialised real engine osystem backend; detail=HIGH");
     return true;
 }
 } // namespace
@@ -434,16 +436,19 @@ void osystem_fillPoly(float* points,int count,unsigned char color,u8 type){
     face.depth/=count;
     const float width=std::max(1.f,maxX-minX);
     const int bank=color&0xf0;
+    const bool detailed=highDetail.load(std::memory_order_relaxed);
     const int start=color&0xf;
     face.verts.reserve((count-2)*3);
     for(int n=1;n<count-1;n++){
         for(int idx:{0,n,n+1}){
             const float x=points[3*idx],y=points[3*idx+1],z=points[3*idx+2];
             int shade=start;
-            if(type==3)shade+=int(15.f*(x-minX)/width);
-            else if(type==6)shade+=int(15.f*(maxX-x)/width);
-            else if(type==4)shade+=int(y-minY);
-            else if(type==5)shade+=int((y-minY)*0.5f);
+            if(detailed) {
+                if(type==3)shade+=int(15.f*(x-minX)/width);
+                else if(type==6)shade+=int(15.f*(maxX-x)/width);
+                else if(type==4)shade+=int(y-minY);
+                else if(type==5)shade+=int((y-minY)*0.5f);
+            }
             shade=std::max(0,std::min(15,shade));
             face.verts.push_back(vtx(x,y,bank|shade,z,type==2?0.55f:1.f));
         }
@@ -472,9 +477,10 @@ void osystem_drawPoint(float x,float y,float z,u8 color,u8,float size){
     QueuedFace face;
     face.depth=z;face.type=0;
     const float pi=3.14159265358979323846f;
-    for(int i=0;i<12;++i){
-        const float a=2.f*pi*i/12.f;
-        const float b=2.f*pi*(i+1)/12.f;
+    const int segments=highDetail.load(std::memory_order_relaxed)?12:6;
+    for(int i=0;i<segments;++i){
+        const float a=2.f*pi*i/segments;
+        const float b=2.f*pi*(i+1)/segments;
         face.verts.push_back(vtx(x,y,color,z));
         face.verts.push_back(vtx(x+std::cos(a)*radius,
                                  y+std::sin(a)*radius,color,z));
@@ -581,4 +587,10 @@ void osystem_addBgPolyPoint(int,int){}
 void osystem_drawLine(int x1,int x2,int y1,int y2,unsigned char color,
                       unsigned char*){
     osystem_draw3dLine(x1,y1,0,x2,y2,0,color);
+}
+
+extern "C" void fitdAndroidSetHighDetail(int enabled) {
+    highDetail.store(enabled!=0,std::memory_order_relaxed);
+    SDL_Log("FITD-OPTIONS: graphics detail=%s (GLES2, native 320x200 palette)",
+            enabled?"HIGH":"LOW");
 }
