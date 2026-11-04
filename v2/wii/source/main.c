@@ -341,9 +341,12 @@ int main(int argc,char **argv){
                     showOriginalBody=true;
             }
         }
+        const bool browsingBodies=showOriginalCamera && originalBody.valid;
         bool walking=false;
-        if((wpHeld&WPAD_BUTTON_LEFT)||(gcHeld&PAD_BUTTON_LEFT)){x-=0.045f;walking=true;}
-        if((wpHeld&WPAD_BUTTON_RIGHT)||(gcHeld&PAD_BUTTON_RIGHT)){x+=0.045f;walking=true;}
+        // D-pad LEFT/RIGHT selects models while previewing a camera.
+        // Do not also translate the actor out of the visible scene.
+        if(!browsingBodies && ((wpHeld&WPAD_BUTTON_LEFT)||(gcHeld&PAD_BUTTON_LEFT))){x-=0.045f;walking=true;}
+        if(!browsingBodies && ((wpHeld&WPAD_BUTTON_RIGHT)||(gcHeld&PAD_BUTTON_RIGHT))){x+=0.045f;walking=true;}
         if((wpHeld&WPAD_BUTTON_UP)||(gcHeld&PAD_BUTTON_UP)){z-=0.045f;walking=true;}
         if((wpHeld&WPAD_BUTTON_DOWN)||(gcHeld&PAD_BUTTON_DOWN)){z+=0.045f;walking=true;}
         if((wpHeld&WPAD_BUTTON_B)||(gcHeld&PAD_BUTTON_B))rotation+=1.65f;
