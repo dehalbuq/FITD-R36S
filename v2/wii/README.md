@@ -1,3 +1,49 @@
+# FITD Wii Teste 05.2 — salas e câmeras ETAGE corrigidas
+
+## Correção do erro do Teste 05.1
+
+O Teste 05.1 passou a descompactar corretamente os dois registros do
+ETAGE00.PAK (594 bytes de salas e 3.072 bytes de câmeras), mas a
+leitura da tabela interna falhava com parse_error=-2.
+
+Confirmamos nos dados reais que o diretório interno nao tem um numero
+de entradas explicito: o primeiro deslocamento indica apenas o
+tamanho maximo da tabela. O suposto ultimo indice ja pertence ao
+primeiro registro. Em ETAGE00.PAK, sao uma sala e cinco cameras.
+
+O novo leitor reconhece o final da tabela quando encontra um
+deslocamento fora dos limites ou nao crescente. Acrescentamos testes
+sinteticos dessa estrutura e novas mensagens FITD-WII-STAGE05-INNER.
+
+### Instalação e controles
+
+Extraia o ZIP na raiz do SD, mantendo seus arquivos .PAK originais em
+SD:/apps/fitd-wii/data/. Inclua ETAGE00.PAK. Pelo Homebrew Channel,
+abra FITD Wii Teste 05.2 e pressione A.
+
+- B + 1: liga/desliga a mascara experimental de primeiro plano.
+- B + tecla + ou -: alterna entre salas do ETAGE.
+- + ou - sozinho: alterna camera (agora 5 imagens em CAMERA00.PAK).
+- Direcional: troca modelos e animacoes.
+- HOME: sai e finaliza o log.
+
+O novo diagnostico principal fica em:
+
+    SD:/fitd-wii-test05-2-diagnostic.txt
+
+Ao testar, procure:
+
+    FITD-WII-STAGE05-INNER floor=0 room_first=8 room_count=1 room_status=0 camera_first=24 camera_count=5 camera_status=0
+    FITD-WII-STAGE OK floor=0 rooms=1 cameras=5
+    FITD-WII-ROOM05 index=0 cams=5 ... hard=33 sce=2
+    FITD-WII-MASK05 OK camera=... room=0 ...
+
+A correspondencia entre a mascara desenhada e o objeto real ainda e
+experimental. O jogo completo, com movimentacao, IA, interacoes,
+audio e save, ainda nao foi integrado ao executavel Wii.
+
+---
+
 # FITD Wii Teste 05.1 — correção do índice PAK de ETAGE00
 
 **Esta revisão corrige um erro confirmado no Teste 05.**
