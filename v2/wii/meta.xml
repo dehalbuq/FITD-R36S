@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <app version="1">
-  <name>FITD Wii Teste 02</name>
+  <name>FITD Wii Teste 03</name>
   <coder>dehalbuq / FITD-R36S contributors</coder>
-  <version>0.2.0</version>
+  <version>0.3.0</version>
   <release_date>20261104</release_date>
-  <short_description>Native Wii GX with original PAK backgrounds</short_description>
-  <long_description>Preliminary PowerPC/GX homebrew technical prototype for the classic Alone in the Dark engine. Displays original CAMERA00.PAK indexed backgrounds with ITD_RESS palette, and tests GX geometry, SD/FAT, big-endian archive reading and controllers. NOT a playable game. Original game files are not included.</long_description>
+  <short_description>GX preview of original BODY models and PAK backgrounds</short_description>
+  <long_description>Preliminary PowerPC/GX homebrew technical prototype for the classic Alone in the Dark engine. Displays original LISTBODY.PAK 3D geometry over CAMERA00.PAK backgrounds using ITD_RESS palette. Browsable models, GX polygons, endian-safe SD archives and skeletal metadata diagnostics. NOT the playable FITD engine. NOT a playable game. Original game files are not included.</long_description>
   <ahb_access/>
 </app>
