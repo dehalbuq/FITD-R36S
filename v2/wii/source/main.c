@@ -13,6 +13,7 @@
 #include <ogc/lwp_watchdog.h>
 #include <fat.h>
 #include <stdio.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
@@ -31,6 +32,7 @@
 #define GX_FIFO_BYTES (256u*1024u)
 #define DATA_DIR "sd:/apps/fitd-wii/data"
 #define LOG_FILE "sd:/apps/fitd-wii/wii-diagnostic.txt"
+#define ROOT_LOG_FILE "sd:/fitd-wii-test03-diagnostic.txt"
 
 static GXRModeObj *videoMode;
 static void *xfb[2]={NULL,NULL};
@@ -46,6 +48,60 @@ static bool showOriginalBody=false;
 static unsigned long frameCount=0;
 static int storedFrame=0;
 static FILE *diag=NULL;
+static const char *activeLogPath=NULL;
+static int firstLogError=0;
+
+/*
+ * Check that SD is WRITEABLE, rather than assuming fatInitDefault() means
+ * write access. Prefer a clearly named diagnostic at SD root, which is
+ * easy to locate even if Homebrew uses a different app working folder.
+ * Closing/reopening once immediately forces FAT directory metadata
+ * to be committed before entering GX graphics mode.
+ */
+static void diagnostic_open(void){
+    if(!sdReady){firstLogError=ENODEV;return;}
+    const char *candidates[]={ROOT_LOG_FILE,LOG_FILE};
+    for(unsigned i=0;i<2;i++){
+        const char *path=candidates[i];
+        FILE *f=fopen(path,"wb");
+        if(!f){firstLogError=errno;continue;}
+        const int bad=fputs("FITD Wii Test03.1 - log created at boot\\n",f)==EOF
+                    || fflush(f)!=0 || ferror(f);
+        const int closed=fclose(f);
+        if(bad || closed!=0){firstLogError=errno;continue;}
+        f=fopen(path,"ab");
+        if(!f){firstLogError=errno;continue;}
+        diag=f;
+        activeLogPath=path;
+        return;
+    }
+}
+static void diagnostic_checkpoint(void){
+    if(!diag || !activeLogPath)return;
+    /* fflush() alone does not always update the FAT file length after
+       an abrupt Homebrew Channel exit. Close/reopen every 300 frames. */
+    fflush(diag);
+    fclose(diag);
+    diag=fopen(activeLogPath,"ab");
+    if(!diag)firstLogError=errno;
+}
+static void diagnostic_mirror_to_app(void){
+    /* Keep legacy path available for users who look inside apps/fitd-wii;
+       root log stays authoritative if mirror cannot be written. */
+    if(!activeLogPath || strcmp(activeLogPath,LOG_FILE)==0)return;
+    FILE *src=fopen(activeLogPath,"rb");
+    if(!src)return;
+    FILE *out=fopen(LOG_FILE,"wb");
+    if(!out){fclose(src);return;}
+    unsigned char block[1024];
+    size_t count;
+    while((count=fread(block,1,sizeof(block),src))>0){
+        if(fwrite(block,1,count,out)!=count)break;
+    }
+    fflush(out);
+    fclose(out);
+    fclose(src);
+}
 
 static void record(const char *name,const char *value) {
     if(diag){
@@ -81,7 +137,7 @@ static void inspect_game_data(void){
     }
 }
 static void scan_hardware(void){
-    puts("FITD Wii / GX Teste 03 v0.3");
+    puts("FITD Wii / GX Teste 03.1 (diagnostic fix)");
     puts("----------------------------------------");
     puts("Native Wii Broadway PowerPC / libogc");
     printf("Framebuffer: %ux%u, EFB height: %u\n",
@@ -92,6 +148,16 @@ static void scan_hardware(void){
         fitd_endian_selftest()?"PASS":"FAIL");
     printf("FAT/SD mount: %s\n",sdReady?"OK":"NOT AVAILABLE");
     inspect_game_data();
+    puts("");
+    if(diag && activeLogPath){
+        printf("DIAGNOSTIC LOG: %s\\n",activeLogPath);
+        puts("SD write test: PASS (file created at boot)");
+        record("FITD-WII-LOG-PATH",activeLogPath);
+    }else{
+        printf("WARNING: DIAGNOSTIC NOT SAVED (errno=%d)\\n",firstLogError);
+        puts("SD read works, but file creation failed.");
+        puts("Check SD write protection and free space.");
+    }
     puts("");
     puts("Native Wii GX + original AITD1 BODY and backgrounds.");
     puts("NOT yet playable. Gameplay engine not integrated.");
@@ -105,7 +171,7 @@ static void scan_hardware(void){
     puts("HOME / GC START: exit");
     puts("");
     puts("Press A. Without data: original GX demo.");
-    record("build","wii-body-model-test03-0.3");
+    record("build","wii-body-model-test03.1-log-fix");
     record("gx_stage","waiting-input");
 }
 static void present_console(void){
@@ -249,15 +315,14 @@ int main(int argc,char **argv){
     VIDEO_Configure(videoMode);
     present_console();
     sdReady=fatInitDefault()?1:0;
-    if(sdReady){
-        diag=fopen(LOG_FILE,"w");
-        if(!diag)diag=fopen("sd:/fitd-wii-diagnostic.txt","w");
-        if(diag){
-            fprintf(diag,"FITD WII GX original BODY preview v0.3\n");
-            fprintf(diag,"native_ppc_endian=%s\n",fitd_is_big_endian()?"BE":"LE");
-            fprintf(diag,"framebuffer=%ux%u efb=%u\n",
+    diagnostic_open();
+    if(diag){
+        fprintf(diag,"FITD WII GX original BODY preview v0.3.1\\n");
+        fprintf(diag,"log_path=%s\\n",activeLogPath);
+        fprintf(diag,"native_ppc_endian=%s\\n",fitd_is_big_endian()?"BE":"LE");
+        fprintf(diag,"framebuffer=%ux%u efb=%u\\n",
                 videoMode->fbWidth,videoMode->xfbHeight,videoMode->efbHeight);
-        }
+        fflush(diag);
     }
     scan_hardware();
     int stage=0;
@@ -372,14 +437,17 @@ int main(int argc,char **argv){
             const float fps=elapsedMs?((float)frameCount*1000.f/elapsedMs):0.f;
             fprintf(diag,"GX frames=%lu fps=%.2f actor=%.2f,%.2f yaw=%.1f\n",
                 frameCount,fps,x,z,rotation);
-            fflush(diag);
+            diagnostic_checkpoint();
         }
     }
     if(diag){
-        fprintf(diag,"finish frames=%lu endianness_check=%s\n",frameCount,
+        fprintf(diag,"finish frames=%lu endianness_check=%s\\n",frameCount,
             fitd_endian_selftest()?"PASS":"FAIL");
+        fflush(diag);
         fclose(diag);
+        diag=NULL;
     }
+    diagnostic_mirror_to_app();
     fitd_camera_release(&originalCamera);
     fitd_body_release(&originalBody);
     if(gxFifo)free(gxFifo);
