@@ -69,6 +69,7 @@ jobs:
           cp v2/wii/icon.png dist/apps/fitd-wii/icon.png
           cp v2/wii/README.md dist/apps/fitd-wii/README.md
           cp v2/wii/PORT_PLAN.md dist/apps/fitd-wii/PORT_PLAN.md
+          cp v2/wii/COMPAT_TEST19.md dist/apps/fitd-wii/COMPAT_TEST19.md
           printf 'Put original CAMERA00.PAK and ITD_RESS.PAK here (not included). In Test02 they are used for the 320x200 background preview.\n' > dist/apps/fitd-wii/data/PUT_GAME_FILES_HERE.txt
           (cd dist && zip -q -r ../FITD-WII-GX-TEST02-CAMERA-PAK-NO-GAME.zip apps)
           test -s FITD-WII-GX-TEST02-CAMERA-PAK-NO-GAME.zip
