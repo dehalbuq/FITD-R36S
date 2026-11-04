@@ -53,6 +53,8 @@ jobs:
           config.write_text(value)
           print('Android std::format shim and headless-debug exclusions ready')
           PY
+          python3 -m py_compile v2/android-kitkat/engine-runtime/patch_fitd_gameplay_api19.py
+          python3 v2/android-kitkat/engine-runtime/patch_fitd_gameplay_api19.py /tmp/fitd-upstream
 
       - name: Compile genuine FitdMain / PlayWorld / Android SDL2 platform
         run: |
