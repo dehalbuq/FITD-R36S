@@ -1,61 +1,73 @@
-# FITD Wii / GX bootstrap v0.1 (original Nintendo Wii)
+# FITD Wii — Teste 02: arquivos reais e cenário GX (v0.2)
 
-## Current status
+## Situação
 
-**Hardware diagnostic / 3D graphics prototype ONLY. NOT the playable Alone in the Dark engine.** The original FITD engine has not yet been connected to the GX backend; no original-game files or audio are included.
+**Prévia gráfica experimental, NÃO é o jogo jogável.** Teste 01 já funcionou
+no Wii original a 59,95 FPS na cena experimental. O Teste 02 começa a ler
+os arquivos originais, suas paletas e fundos indexados.
 
-This bootstrap is the first independently compilable PowerPC Wii target inside the FITD-R36S repository. The Android Test 19 and R36S ARM64 releases are **untouched**.
+**Android Teste 19 e R36S ARM64 permanecem inalterados.** Esta branch Wii é
+descendente do Android Teste 19 e preserva todos os patches originais.
+Veja COMPAT_TEST19.md: essas correções ainda precisarão ser adaptadas ao
+PowerPC quando integrarmos o motor.
 
-What is already implemented:
-- Native **PowerPC / big-endian** devkitPPC build and Homebrew Channel boot.dol.
-- **libogc Hollywood GX** fixed-function 3D, depth-buffered polygon rendering and 480i/480p video selection.
-- An original low-polygon animated test scene (not copied from the game).
-- **Wii Remote** D-pad/buttons and **GameCube controller** input, SD/FAT mount.
-- Discovery of .PAK/.HQR files in private data folder; safe unaligned little-endian decode helpers and self-test.
-- SD diagnostic log with GPU test frame average and native endianness.
-- Workflow for Wii boot.dol in GitHub Actions; toolchain devkitpro/devkitppc:20261102.
+### Novidades
 
-## Install
+- Parser real de PAK: índices LE32, validação de limites e arquivos truncados.
+- Descompressão modo 1 (implode), adaptada do código Cyril VOILA / Mark Adler.
+- Leitura de dados modo 0 sem compressão.
+- **Modo 4 (DEFLATE) ainda não suportado.**
+- Carregamento de imagem CAMERA00.PAK índice 0 (320x200, 8 bits indexados).
+- Conversão ao formato Wii GX RGB565 em blocos 4x4.
+- Paleta original ITD_RESS.PAK entrada 3; caso não esteja disponível, tons
+  de cinza provisórios (as cores originais ainda não são garantidas).
+- Teclas para mudar de câmera, alternar a prévia com a demo 3D, gerar log.
+- Testes sintéticos do PAK, sem arquivos comerciais.
 
-Extract ZIP to SD card preserving paths:
+### Instalação pelo Homebrew Channel
+
+Copie o conteúdo do ZIP para a raiz do cartão SD:
 
     SD:/apps/fitd-wii/boot.dol
     SD:/apps/fitd-wii/meta.xml
     SD:/apps/fitd-wii/icon.png
-    SD:/apps/fitd-wii/data/
+    SD:/apps/fitd-wii/data/CAMERA00.PAK
+    SD:/apps/fitd-wii/data/ITD_RESS.PAK
 
-Launch FITD Wii GX Prototype from the Homebrew Channel.
+**CAMERA00.PAK e ITD_RESS.PAK devem ser copiados da sua própria instalação
+original de Alone in the Dark.** NÃO estão no ZIP. Sem eles, a demo de
+cubos do Teste 01 continua funcionando e o log explica a falha.
 
-In the diagnostic menu, press Wii Remote A or GameCube A to run GX 3D.
-- D-pad: move test character.
-- B: rotate.
-- Wii Remote HOME / GameCube START: exit.
-- A is **not** a Start Game button yet; there is no game engine in this build.
+Abra Homebrew Channel > FITD Wii Teste 02 > A.
 
-After exiting, check SD:/apps/fitd-wii/wii-diagnostic.txt (or fallback SD:/fitd-wii-diagnostic.txt) for detected archives, framebuffer, GX frame timing, and CPU byte order.
+### Controles
 
-The data folder is intentionally empty. If you want to prepare your legally acquired game files in advance, place them in SD:/apps/fitd-wii/data/. Nothing needs to be copied for this prototype.
+- Wii A / GameCube A: entrar na prévia GX
+- Wii + e - / GameCube R e L: trocar imagem de CAMERA00.PAK
+- Wii 1 / GameCube Y: alternar imagem original e demo 3D
+- D-pad (demo): mover personagem experimental
+- Wii B / GameCube B (demo): girar personagem experimental
+- Wii HOME / GameCube START: sair
 
-## Building
+Envie o arquivo de log após testar:
+SD:/apps/fitd-wii/wii-diagnostic.txt (alternativo: SD:/fitd-wii-diagnostic.txt).
 
-With devkitPro/devkitPPC, libogc and libfat installed:
+### Limitações antes da versão jogável
 
-    cd v2/wii
-    make
+1. Integrar motor FITD C++ (salas, câmeras, máscaras e BODY/ANIM).
+2. Desenhar geometria real, UI, paleta e máscaras no backend GX.
+3. Portar IA, colisões, scripts, efeitos, áudio e cinco saves das versões
+   Android Teste 19 e R36S ARM64, sem perder as correções existentes.
+4. Resolver casts de ponteiro e outros acessos binários little-endian no Wii.
+5. Testar gameplay e desempenho em hardware original.
 
-In Linux Docker (same toolchain as CI):
+Este pacote NÃO é o jogo completo. O Teste 01 validou somente a demo GX.
 
-    docker run --rm -v "$PWD":/src -w /src/v2/wii devkitpro/devkitppc:20261102 make
+### Créditos e legalidade
 
-Output: v2/wii/boot.dol.
+Baseada em yaz0r/FITD (https://github.com/yaz0r/FITD), com correções
+de dehalbuq/FITD-R36S e comparação ao Re-Haunted. Descompressor:
+Cyril VOILA (2004), parcialmente Mark Adler (1992). Código do motor
+GPL-2.0 e respectivos avisos de licença preservados.
 
-## Technical blockers before a playable engine
-
-1. Replace the Linux/Android SDL+EGL/GL backend with Wii **GX**, providing indexed backgrounds and masks, ordered 3D primitives, UI and palette conversion (RGB565/RGB5A3/GX texture tiling).
-2. Port original .PAK / HQR / life-script parsing to **big-endian PowerPC**. Old engine casts such as *(s16*)ptr require explicit byte-wise little-endian reads (plus fixes for alignment/struct layout).
-3. Integrate native FAT assets, sound (AESND/ASND), controllers, save slots and deterministic scheduling while retaining ARM64/Android Test19 gameplay fixes.
-4. Profile memory allocations against Wii MEM1/MEM2 and test on real hardware; 60 FPS is an aspirational benchmark, not promised.
-
-### Legal
-
-Based on Free in the Dark (https://github.com/yaz0r/FITD), with user port improvements in FITD-R36S (https://github.com/dehalbuq/FITD-R36S). FITD engine code is GPL-2.0; any future engine integration must preserve credits and licenses. The prototype contains **no proprietary Alone in the Dark game data**. Obtain game archives from your own legitimately acquired copy. Nintendo is not affiliated with this homebrew project.
+Nenhum asset comercial do jogo é distribuído. Nintendo não é afiliada.
