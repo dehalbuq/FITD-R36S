@@ -10,7 +10,9 @@
 #include "fitd_body.h"
 #include "fitd_pak.h"
 #include "fitd_endian.h"
+#ifndef FITD_HOST_TEST
 #include "fitd_camera.h"
+#endif
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -214,6 +216,7 @@ bool fitd_body_load(FitdBody *body,const char *directory,
     free(next);
     return st==0;
 }
+#ifndef FITD_HOST_TEST
 static void color_from_palette(uint8_t index){
     uint8_t rgb[3];
     fitd_camera_palette_rgb(index,rgb);
@@ -279,6 +282,7 @@ void fitd_body_draw(const FitdBody *b,const Mtx view,const Mtx44 projection,
         }
     }
 }
+ #endif /* !FITD_HOST_TEST */
 bool fitd_animation_info(FitdAnimInfo *info,const char *directory,
                          unsigned index,FILE *log){
     if(!info || !directory)return false;
