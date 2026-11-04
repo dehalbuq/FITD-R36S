@@ -93,6 +93,7 @@ int fitd_body_parse(const uint8_t *bytes,size_t size,FitdBody *out){
             order[g]=read16(&r);
             if(r.error || order[g]%(unsigned)group_bytes!=0 ||
                order[g]/(unsigned)group_bytes>=groups)return -5;
+            out->group_order[g]=order[g]/(unsigned)group_bytes;
         }
         for(unsigned g=0;g<groups;g++){
             FitdGroup *node=&out->groups[g];
@@ -223,14 +224,16 @@ static void color_from_palette(uint8_t index){
     fitd_camera_palette_rgb(index,rgb);
     GX_Color3f32(rgb[0]/255.f,rgb[1]/255.f,rgb[2]/255.f);
 }
-static void vertex(const FitdBody *b,uint16_t idx){
-    const FitdVertex *v=&b->vertices[idx];
-    GX_Position3f32((float)v->x-b->center[0],
-                     (float)v->y-b->center[1],
-                     (float)v->z-b->center[2]);
+static void vertex(const FitdBody *b,uint16_t idx,
+                   const FitdPoseVertex *pose){
+    const float x=pose?pose[idx].x:(float)b->vertices[idx].x;
+    const float y=pose?pose[idx].y:(float)b->vertices[idx].y;
+    const float z=pose?pose[idx].z:(float)b->vertices[idx].z;
+    GX_Position3f32(x-b->center[0],y-b->center[1],z-b->center[2]);
 }
 void fitd_body_draw(const FitdBody *b,Mtx view,Mtx44 projection,
-                    float yaw_deg,float px,float pz){
+                    float yaw_deg,float px,float pz,
+                    const FitdPoseVertex *pose){
     if(!b || !b->valid || !b->vertex_count)return;
     GX_LoadProjectionMtx(projection,GX_PERSPECTIVE);
     GX_SetZMode(GX_TRUE,GX_LEQUAL,GX_TRUE);
@@ -259,7 +262,7 @@ void fitd_body_draw(const FitdBody *b,Mtx view,Mtx44 projection,
         if(p->kind==0){
             GX_Begin(GX_LINES,GX_VTXFMT0,2);
             for(unsigned j=0;j<2;j++){
-                vertex(b,p->point[j]);
+                vertex(b,p->point[j],pose);
                 color_from_palette(p->color);
             }
             GX_End();
@@ -269,7 +272,7 @@ void fitd_body_draw(const FitdBody *b,Mtx view,Mtx44 projection,
                for this stage; texture UVs are decoded but not drawn yet. */
             GX_Begin(GX_TRIANGLEFAN,GX_VTXFMT0,p->count);
             for(unsigned j=0;j<p->count;j++){
-                vertex(b,p->point[j]);
+                vertex(b,p->point[j],pose);
                 color_from_palette(p->color);
             }
             GX_End();
@@ -277,7 +280,7 @@ void fitd_body_draw(const FitdBody *b,Mtx view,Mtx44 projection,
             /* Points/spheres approximated by small GX points in Test03. */
             GX_SetPointSize(p->kind==3?32:20,GX_TO_ZERO);
             GX_Begin(GX_POINTS,GX_VTXFMT0,1);
-            vertex(b,p->point[0]);
+            vertex(b,p->point[0],pose);
             color_from_palette(p->color);
             GX_End();
         }
