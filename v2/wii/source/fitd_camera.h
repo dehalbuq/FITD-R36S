@@ -13,6 +13,7 @@
 typedef struct {
     GXTexObj tex;
     void *tiled_pixels;  /* 320*200*2 bytes, 32-byte aligned MEM1/MEM2 */
+    uint8_t *raw_pixels; /* 320x200 original indexed colors for mask overlay */
     unsigned frames;
     unsigned current;
     bool valid,correct_palette;
