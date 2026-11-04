@@ -10,6 +10,7 @@
  */
 #include <gccore.h>
 #include <wiiuse/wpad.h>
+#include <ogc/lwp_watchdog.h>
 #include <fat.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -260,8 +261,10 @@ int main(int argc,char **argv){
         if((wpHeld&WPAD_BUTTON_UP)||(gcHeld&PAD_BUTTON_UP)){z-=0.045f;walking=true;}
         if((wpHeld&WPAD_BUTTON_DOWN)||(gcHeld&PAD_BUTTON_DOWN)){z+=0.045f;walking=true;}
         if((wpHeld&WPAD_BUTTON_B)||(gcHeld&PAD_BUTTON_B))rotation+=1.65f;
-        if(x>3.5f)x=3.5f; if(x< -3.5f)x=-3.5f;
-        if(z>2.f)z=2.f; if(z< -3.0f)z=-3.0f;
+        if(x>3.5f)x=3.5f;
+        if(x< -3.5f)x=-3.5f;
+        if(z>2.f)z=2.f;
+        if(z< -3.0f)z=-3.0f;
         phase+=walking?0.15f:0.04f;
         const float walk=walking?sinf(phase):0.f;
         render_gx(x,z,rotation,walk);
