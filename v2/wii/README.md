@@ -1,3 +1,67 @@
+# FITD Wii — Teste 05.3: inspeção visual das máscaras de oclusão
+
+## Por que este teste existe?
+
+No Wii Teste 05.2, os registros comprovaram o carregamento de 1 sala,
+5 câmeras, 33 zonas de colisão e todas as máscaras do ETAGE00.PAK.
+O diagnóstico mostrou, entretanto, mask_preview=0 durante todo o teste:
+as máscaras eram decodificadas e carregadas, mas não chegaram a ser
+efetivamente ativadas no renderizador. Além disso, a UNIÃO de máscaras
+pode cobrir quase toda a imagem em determinadas câmeras.
+
+O Teste 05.3 facilita a verificação visual SEM modificar arquivos do
+jogo e SEM alterar o código das versões Android/R36S/Wii anteriores.
+
+## Como inspecionar as máscaras
+
+1. Extraia o ZIP na raiz do SD, preservando os PAKs originais em
+   SD:/apps/fitd-wii/data/, incluindo ETAGE00.PAK.
+2. Inicie o app pelo Homebrew Channel e pressione A.
+3. Na cena original, aperte **1 uma vez**: a sobreposição será ativada
+   imediatamente, sem precisar combinar dois botões.
+4. Aperte 1 novamente para a antiga demo GX. Mais uma vez para
+   retornar à cena original SEM máscara.
+5. Com a cena original ativa, SEGURE **B** e aperte **2** para alternar:
+   união de todas as máscaras -> máscara 0 -> máscara 1 -> ... ->
+   última máscara -> união.
+6. Teste a câmera 3 ou 4 usando +/-: os registros anteriores mostram
+   menos pixels cobertos por suas máscaras, facilitando a inspeção.
+7. Saia com HOME e envie o diagnóstico.
+
+**Atenção**: na versão 05.3, apertar **1** alterna três estados em vez
+de apenas dois: cenário sem máscara, cenário com máscara e demo GX.
+O botão B+1 continua alternando a máscara diretamente.
+O botão 2 sozinho mantém a função de mostrar/ocultar BODY.
+B+2 navega pelas máscaras individuais; sem B não muda a seleção.
+
+## Log
+
+Arquivo principal:
+
+    SD:/fitd-wii-test05-3-diagnostic.txt
+
+Procure por:
+- FITD-WII-PREVIEW camera=1 mask_preview=1 ...
+- FITD-WII-MASK05 OK ... masks=N ... selected=-1 (união)
+- FITD-WII-MASK05 select=0 total=N pixels=... ready=1
+- FITD-WII-MASK05 select=1 total=N pixels=... ready=1
+- FITD-WII-STAGE05 ... mask_preview=1 mask_ready=1
+- finish frames=... endianness_check=PASS
+
+O objetivo é distinguir visualmente cada máscara e verificar como a
+GPU GX compõe os pixels originais sobre o BODY. O log confirma apenas
+que a camada foi comandada e tinha textura, não a exatidão visual.
+
+## Ainda não implementado
+
+O script do personagem, colisões ativas, escolha automática de máscara
+pela posição do ator, projeção cinematográfica exata, câmera dinâmica,
+inventário, IA, música, sons e save state ainda dependem da integração
+do motor FITD completo. Esta é uma ferramenta de inspeção/diagnóstico,
+não uma build jogável.
+
+---
+
 # FITD Wii Teste 05.2 — salas e câmeras ETAGE corrigidas
 
 ## Correção do erro do Teste 05.1
