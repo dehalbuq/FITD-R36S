@@ -128,6 +128,7 @@ bool fitd_camera_set(FitdCamera *c,const char *directory,
         free(image);
         return false;
     }
+    if(c->raw_pixels)memcpy(c->raw_pixels,image,CAMERA_PIXELS);
     upload_palette_indexed((uint16_t*)c->tiled_pixels,image);
     DCFlushRange(c->tiled_pixels,CAMERA_PIXELS*2);
     GX_InitTexObj(&c->tex,c->tiled_pixels,CAMERA_W,CAMERA_H,
@@ -163,8 +164,11 @@ bool fitd_camera_open(FitdCamera *c,const char *directory,FILE *log){
     }
     if(c->frames==0)return false;
     c->tiled_pixels=memalign(32,CAMERA_PIXELS*2);
-    if(!c->tiled_pixels){
+    c->raw_pixels=(uint8_t*)malloc(CAMERA_PIXELS);
+    if(!c->tiled_pixels || !c->raw_pixels){
         if(log)fprintf(log,"FITD-WII-CAMERA GX_TEXTURE_OOM\n");
+        free(c->tiled_pixels);c->tiled_pixels=NULL;
+        free(c->raw_pixels);c->raw_pixels=NULL;
         return false;
     }
     load_itd_palette(directory,log);
@@ -215,5 +219,6 @@ void fitd_camera_draw(const FitdCamera *c,unsigned width,unsigned height){
 void fitd_camera_release(FitdCamera *c){
     if(!c)return;
     free(c->tiled_pixels);
+    free(c->raw_pixels);
     memset(c,0,sizeof(*c));
 }
