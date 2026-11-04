@@ -65,7 +65,7 @@ static void diagnostic_open(void){
         const char *path=candidates[i];
         FILE *f=fopen(path,"wb");
         if(!f){firstLogError=errno;continue;}
-        const int bad=fputs("FITD Wii Test03.1 - log created at boot\\n",f)==EOF
+        const int bad=fputs("FITD Wii Test03.1 - log created at boot\n",f)==EOF
                     || fflush(f)!=0 || ferror(f);
         const int closed=fclose(f);
         if(bad || closed!=0){firstLogError=errno;continue;}
@@ -150,11 +150,11 @@ static void scan_hardware(void){
     inspect_game_data();
     puts("");
     if(diag && activeLogPath){
-        printf("DIAGNOSTIC LOG: %s\\n",activeLogPath);
+        printf("DIAGNOSTIC LOG: %s\n",activeLogPath);
         puts("SD write test: PASS (file created at boot)");
         record("FITD-WII-LOG-PATH",activeLogPath);
     }else{
-        printf("WARNING: DIAGNOSTIC NOT SAVED (errno=%d)\\n",firstLogError);
+        printf("WARNING: DIAGNOSTIC NOT SAVED (errno=%d)\n",firstLogError);
         puts("SD read works, but file creation failed.");
         puts("Check SD write protection and free space.");
     }
@@ -317,10 +317,10 @@ int main(int argc,char **argv){
     sdReady=fatInitDefault()?1:0;
     diagnostic_open();
     if(diag){
-        fprintf(diag,"FITD WII GX original BODY preview v0.3.1\\n");
-        fprintf(diag,"log_path=%s\\n",activeLogPath);
-        fprintf(diag,"native_ppc_endian=%s\\n",fitd_is_big_endian()?"BE":"LE");
-        fprintf(diag,"framebuffer=%ux%u efb=%u\\n",
+        fprintf(diag,"FITD WII GX original BODY preview v0.3.1\n");
+        fprintf(diag,"log_path=%s\n",activeLogPath);
+        fprintf(diag,"native_ppc_endian=%s\n",fitd_is_big_endian()?"BE":"LE");
+        fprintf(diag,"framebuffer=%ux%u efb=%u\n",
                 videoMode->fbWidth,videoMode->xfbHeight,videoMode->efbHeight);
         fflush(diag);
     }
@@ -441,7 +441,7 @@ int main(int argc,char **argv){
         }
     }
     if(diag){
-        fprintf(diag,"finish frames=%lu endianness_check=%s\\n",frameCount,
+        fprintf(diag,"finish frames=%lu endianness_check=%s\n",frameCount,
             fitd_endian_selftest()?"PASS":"FAIL");
         fflush(diag);
         fclose(diag);
