@@ -1,0 +1,352 @@
+/*
+ * Experimental GLES2 compatibility renderer for the original FITD osystem.h
+ * API, used only in the separate Android 4.4 ARMv7 runtime prototype.
+ *
+ * The original main game loop, animation, script, room and model code remain
+ * upstream. This backend converts 320x200 indexed scenes and the legacy
+ * polygon primitives into GLES2 calls. No BGFX, ImGui, GLES3 or SDL3.
+ *
+ * Initial limitations: scene mask compositing, primitive-specific dither,
+ * Z-depth occlusion and full UI blending are approximated until validated
+ * against the Chanuo A1 hardware. This file is not in the approved Test 07.
+ */
+#include "common.h"
+#include "bgfxGlue.h"
+#include <SDL.h>
+#include <SDL_opengles2.h>
+#include <vector>
+#include <array>
+#include <algorithm>
+#include <cmath>
+#include <cstring>
+#include <cstdio>
+
+SDL_Window* gWindowBGFX=nullptr;
+int gFrameLimit=60;
+bool gCloseApp=false;
+float gVolume=1.f;
+int g_screenWidth=320,g_screenHeight=200;
+int outputResolution[2]={640,480};
+unsigned int gameViewId=0;
+char backBuffer[512*256*3]={};
+unsigned char frontBuffer[320*200]={};
+unsigned char physicalScreen[320*200]={};
+std::array<unsigned char,320*200> uiLayer={};
+
+namespace {
+static unsigned char palette[256*3]={};
+static GLuint texProg=0,polyProg=0,backgroundTexture=0,uiTexture=0;
+static GLuint quadVbo=0,triVbo=0;
+static int targetWidth=640,targetHeight=480,viewportW=640,viewportH=480;
+static int viewportX=0,viewportY=0;
+struct Vertex{float x,y;float r,g,b,a;};
+struct QueuedFace{float depth;std::vector<Vertex> verts;};
+static std::vector<QueuedFace> queuedFaces;
+static std::vector<Vertex> queuedLines;
+static std::array<uint8_t,320*200*4> converted{};
+static bool graphicsReady=false;
+static bool clipEnabled=false;
+static float clipCoords[4]={0,0,320,200};
+
+static void rgbaFromIndexed(const unsigned char* data,bool transparent) {
+    for(int k=0;k<320*200;k++){
+        const unsigned char index=data[k];
+        converted[k*4+0]=palette[index*3+0];
+        converted[k*4+1]=palette[index*3+1];
+        converted[k*4+2]=palette[index*3+2];
+        converted[k*4+3]=(transparent && index==0)?0:255;
+    }
+}
+static GLuint compileShader(GLenum kind,const char* text) {
+    GLuint s=glCreateShader(kind);
+    glShaderSource(s,1,&text,nullptr);glCompileShader(s);
+    GLint ok=0;glGetShaderiv(s,GL_COMPILE_STATUS,&ok);
+    if(!ok) {
+        char err[512]={};
+        glGetShaderInfoLog(s,sizeof(err),nullptr,err);
+        SDL_Log("FITD-GLES2: shader compile failed: %s",err);
+        glDeleteShader(s);return 0;
+    }
+    return s;
+}
+static GLuint makeProgram(const char*vs,const char*fs,
+                          const char* a0,const char* a1) {
+    GLuint v=compileShader(GL_VERTEX_SHADER,vs),
+           f=compileShader(GL_FRAGMENT_SHADER,fs);
+    if(!v||!f)return 0;
+    GLuint prog=glCreateProgram();
+    glAttachShader(prog,v);glAttachShader(prog,f);
+    glBindAttribLocation(prog,0,a0);glBindAttribLocation(prog,1,a1);
+    glLinkProgram(prog);
+    GLint ok=0;glGetProgramiv(prog,GL_LINK_STATUS,&ok);
+    glDeleteShader(v);glDeleteShader(f);
+    if(!ok) {
+        SDL_Log("FITD-GLES2: program link failed");
+        glDeleteProgram(prog);return 0;
+    }
+    return prog;
+}
+static void updateViewport(){
+    int dw=640,dh=480;
+    if(gWindowBGFX)SDL_GL_GetDrawableSize(gWindowBGFX,&dw,&dh);
+    if(dw<1||dh<1)return;
+    targetWidth=dw;targetHeight=dh;
+    viewportW=dw;
+    viewportH=(dw*3)/4;
+    if(viewportH>dh){viewportH=dh;viewportW=(dh*4)/3;}
+    viewportX=(dw-viewportW)/2;
+    viewportY=(dh-viewportH)/2;
+    outputResolution[0]=dw;outputResolution[1]=dh;
+    glViewport(viewportX,viewportY,viewportW,viewportH);
+}
+static void drawTexture(GLuint tex,const unsigned char* data,bool useAlpha) {
+    if(!graphicsReady||!tex)return;
+    rgbaFromIndexed(data,useAlpha);
+    glBindTexture(GL_TEXTURE_2D,tex);
+    glTexSubImage2D(GL_TEXTURE_2D,0,0,0,320,200,GL_RGBA,
+                    GL_UNSIGNED_BYTE,converted.data());
+    if(useAlpha) {
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
+    } else glDisable(GL_BLEND);
+    glUseProgram(texProg);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D,tex);
+    glUniform1i(glGetUniformLocation(texProg,"pic"),0);
+    glBindBuffer(GL_ARRAY_BUFFER,quadVbo);
+    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(0,2,GL_FLOAT,GL_FALSE,4*sizeof(GLfloat),(void*)0);
+    glVertexAttribPointer(1,2,GL_FLOAT,GL_FALSE,4*sizeof(GLfloat),
+                          (void*)(2*sizeof(GLfloat)));
+    glDrawArrays(GL_TRIANGLE_STRIP,0,4);
+    glDisableVertexAttribArray(0);glDisableVertexAttribArray(1);
+    glDisable(GL_BLEND);
+}
+static void drawVertices(GLenum primitive,const std::vector<Vertex>& data) {
+    if(!graphicsReady||data.empty())return;
+    std::vector<float> f;
+    f.reserve(data.size()*6);
+    for(const Vertex& v:data) {
+        f.push_back(v.x/160.f-1.f);
+        f.push_back(1.f-v.y/100.f);
+        f.push_back(v.r);f.push_back(v.g);
+        f.push_back(v.b);f.push_back(v.a);
+    }
+    glUseProgram(polyProg);
+    glBindBuffer(GL_ARRAY_BUFFER,triVbo);
+    glBufferData(GL_ARRAY_BUFFER,f.size()*sizeof(float),f.data(),GL_STREAM_DRAW);
+    glEnableVertexAttribArray(0);glEnableVertexAttribArray(1);
+    glVertexAttribPointer(0,2,GL_FLOAT,GL_FALSE,6*sizeof(float),(void*)0);
+    glVertexAttribPointer(1,4,GL_FLOAT,GL_FALSE,6*sizeof(float),
+                          (void*)(2*sizeof(float)));
+    glDrawArrays(primitive,0,(GLsizei)data.size());
+    glDisableVertexAttribArray(0);glDisableVertexAttribArray(1);
+}
+static Vertex vtx(float x,float y,int index) {
+    return {x,y,
+        palette[(index&255)*3+0]/255.f,
+        palette[(index&255)*3+1]/255.f,
+        palette[(index&255)*3+2]/255.f,1.f};
+}
+static bool initGL(){
+    if(graphicsReady)return true;
+    const char* tV="attribute vec2 p;attribute vec2 uv;"
+                   "varying vec2 t;void main(){t=uv;gl_Position=vec4(p,0.,1.);}";
+    const char* tF="precision mediump float;varying vec2 t;"
+                   "uniform sampler2D pic;void main(){gl_FragColor=texture2D(pic,t);}";
+    const char* pV="attribute vec2 p;attribute vec4 color;"
+                   "varying vec4 col;void main(){col=color;gl_Position=vec4(p,0.,1.);}";
+    const char* pF="precision mediump float;varying vec4 col;"
+                   "void main(){gl_FragColor=col;}";
+    texProg=makeProgram(tV,tF,"p","uv");
+    polyProg=makeProgram(pV,pF,"p","color");
+    if(!texProg||!polyProg)return false;
+    static const GLfloat quad[]={-1,1,0,0, -1,-1,0,1,
+                                  1,1,1,0, 1,-1,1,1};
+    glGenBuffers(1,&quadVbo);
+    glBindBuffer(GL_ARRAY_BUFFER,quadVbo);
+    glBufferData(GL_ARRAY_BUFFER,sizeof(quad),quad,GL_STATIC_DRAW);
+    glGenBuffers(1,&triVbo);
+    glGenTextures(1,&backgroundTexture);
+    glGenTextures(1,&uiTexture);
+    for(GLuint tex:{backgroundTexture,uiTexture}){
+        glBindTexture(GL_TEXTURE_2D,tex);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+        glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,320,200,0,GL_RGBA,
+                      GL_UNSIGNED_BYTE,nullptr);
+    }
+    graphicsReady=true;
+    SDL_Log("FITD-GLES2: initialised real engine osystem backend");
+    return true;
+}
+} // namespace
+
+int initBgfxGlue(int,char**) {
+    // Retain upstream function signature; no BGFX object is created.
+    const char* v=reinterpret_cast<const char*>(glGetString(GL_VERSION));
+    SDL_Log("FITD-GLES2: original game renderer using GLES2, version=%s",
+            v?v:"unknown");
+    return initGL()?1:0;
+}
+void deleteBgfxGlue() {
+    if(quadVbo)glDeleteBuffers(1,&quadVbo);
+    if(triVbo)glDeleteBuffers(1,&triVbo);
+    if(backgroundTexture)glDeleteTextures(1,&backgroundTexture);
+    if(uiTexture)glDeleteTextures(1,&uiTexture);
+    if(texProg)glDeleteProgram(texProg);
+    if(polyProg)glDeleteProgram(polyProg);
+    graphicsReady=false;
+}
+void StartFrame() {
+    if(!graphicsReady)return;
+    updateViewport();
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_SCISSOR_TEST);
+    glClearColor(0.f,0.f,0.f,1.f);
+    glViewport(0,0,targetWidth,targetHeight);
+    glClear(GL_COLOR_BUFFER_BIT);
+    updateViewport();
+}
+void EndFrame() {
+    if(gWindowBGFX)SDL_GL_SwapWindow(gWindowBGFX);
+}
+void renderGameWindow(){}
+void osystem_preinigGL(){}
+void osystem_initGL(int width,int height) {
+    g_screenWidth=width;g_screenHeight=height;
+}
+void osystem_initBuffer() {
+    memset(frontBuffer,0,sizeof(frontBuffer));
+    memset(physicalScreen,0,sizeof(physicalScreen));
+}
+void osystem_setPalette(u8* p) {
+    if(p)memcpy(palette,p,sizeof(palette));
+}
+void osystem_setPalette(palette_t* p) {
+    if(!p)return;
+    for(int k=0;k<256;k++)
+        for(int c=0;c<3;c++)palette[k*3+c]=(*p)[k][c];
+}
+void osystem_setPalette320x200(byte* p) {
+    osystem_setPalette(reinterpret_cast<u8*>(p));
+}
+void osystem_setColor(byte index,byte r,byte g,byte b) {
+    int i=(uint8_t)index;
+    palette[i*3]=r;palette[i*3+1]=g;palette[i*3+2]=b;
+}
+void osystem_CopyBlockPhys(unsigned char* buffer,int l,int t,int r,int b) {
+    if(!buffer)return;
+    l=std::max(0,std::min(320,l));
+    r=std::max(l,std::min(320,r));
+    t=std::max(0,std::min(200,t));
+    b=std::max(t,std::min(200,b));
+    for(int row=t;row<b;row++)
+        memcpy(physicalScreen+row*320+l,buffer+row*320+l,r-l);
+}
+void osystem_draw320x200BufferToScreen(unsigned char* buffer) {
+    if(buffer) {
+        memcpy(physicalScreen,buffer,320*200);
+        osystem_drawBackground();
+    }
+}
+void osystem_initVideoBuffer(char* buffer,int w,int h){
+    (void)buffer;(void)w;(void)h;
+}
+void osystem_putpixel(int x,int y,int index){
+    if(x>=0&&x<320&&y>=0&&y<200)
+        physicalScreen[y*320+x]=(uint8_t)index;
+}
+void osystem_refreshFrontTextureBuffer(){}
+void osystem_drawBackground() {drawTexture(backgroundTexture,physicalScreen,false);}
+void osystem_drawUILayer() {drawTexture(uiTexture,uiLayer.data(),true);}
+void osystem_startFrame() {
+    if(!graphicsReady && !initGL())return;
+    queuedFaces.clear();
+    queuedLines.clear();
+    osystem_drawBackground();
+}
+void osystem_stopFrame(){}
+void osystem_cleanScreenKeepZBuffer(){
+    // Background redraw restores a clean image for the original actor pass.
+    osystem_drawBackground();
+}
+void osystem_setClip(float left,float top,float right,float bottom){
+    clipEnabled=true;
+    clipCoords[0]=left;clipCoords[1]=top;
+    clipCoords[2]=right;clipCoords[3]=bottom;
+    const int x=std::max(0,(int)(left*viewportW/320.f));
+    const int y=std::max(0,(int)((200.f-bottom)*viewportH/200.f));
+    const int w=std::max(0,(int)((right-left)*viewportW/320.f));
+    const int h=std::max(0,(int)((bottom-top)*viewportH/200.f));
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(viewportX+x,viewportY+y,w,h);
+}
+void osystem_clearClip(){clipEnabled=false;glDisable(GL_SCISSOR_TEST);}
+void osystem_fillPoly(float* points,int count,unsigned char color,u8 type){
+    (void)type; // shading permutations to be ported after initial gameplay.
+    if(!points||count<3||count>80)return;
+    QueuedFace face;
+    face.depth=0.f;
+    for(int n=0;n<count;n++)face.depth+=points[3*n+2];
+    face.depth/=count;
+    face.verts.reserve((count-2)*3);
+    for(int n=1;n<count-1;n++){
+        for(int idx:{0,n,n+1})
+            face.verts.push_back(vtx(points[3*idx],points[3*idx+1],color));
+    }
+    queuedFaces.push_back(std::move(face));
+}
+void osystem_draw3dLine(float x1,float y1,float,float x2,float y2,float,
+                         unsigned char color){
+    queuedLines.push_back(vtx(x1,y1,color));
+    queuedLines.push_back(vtx(x2,y2,color));
+}
+void osystem_draw3dQuad(float x1,float y1,float z1,float x2,float y2,float z2,
+                        float x3,float y3,float z3,float x4,float y4,float z4,
+                        unsigned char color,int transparency){
+    (void)transparency;
+    osystem_draw3dLine(x1,y1,z1,x2,y2,z2,color);
+    osystem_draw3dLine(x2,y2,z2,x3,y3,z3,color);
+    osystem_draw3dLine(x3,y3,z3,x4,y4,z4,color);
+    osystem_draw3dLine(x4,y4,z4,x1,y1,z1,color);
+}
+void osystem_drawPoint(float x,float y,float,u8 color,u8,float size){
+    const float h=std::max(1.f,std::min(10.f,size/5.f));
+    const float pts[]={x-h,y-h,0,x+h,y-h,0,x+h,y+h,0,x-h,y+h,0};
+    osystem_fillPoly(const_cast<float*>(pts),4,color,0);
+}
+void osystem_drawSphere(float x,float y,float z,u8 color,u8 material,float size){
+    osystem_drawPoint(x,y,z,color,material,size);
+}
+void osystem_flushPendingPrimitives(){
+    std::stable_sort(queuedFaces.begin(),queuedFaces.end(),
+        [](const QueuedFace&a,const QueuedFace&b){return a.depth>b.depth;});
+    std::vector<Vertex> triangles;
+    size_t n=0;for(const QueuedFace& f:queuedFaces)n+=f.verts.size();
+    triangles.reserve(n);
+    for(const QueuedFace& f:queuedFaces)
+        triangles.insert(triangles.end(),f.verts.begin(),f.verts.end());
+    drawVertices(GL_TRIANGLES,triangles);
+    drawVertices(GL_LINES,queuedLines);
+    queuedFaces.clear();queuedLines.clear();
+}
+void osystem_flip(unsigned char* buffer){
+    if(buffer)osystem_draw320x200BufferToScreen(buffer);
+    osystem_flushPendingPrimitives();
+}
+void osystem_createMask(const std::array<u8,320*200>&,
+                        int,int,int,int,int,int){
+    // Occlusion masks require depth-aware overlay ordering; deferred.
+}
+void osystem_drawMask(int,int){}
+void osystem_startBgPoly(){}
+void osystem_endBgPoly(){}
+void osystem_addBgPolyPoint(int,int){}
+void osystem_drawLine(int x1,int x2,int y1,int y2,unsigned char color,
+                      unsigned char*){
+    osystem_draw3dLine(x1,y1,0,x2,y2,0,color);
+}
