@@ -146,7 +146,7 @@ jobs:
       - name: Validate native executable and no proprietary data
         run: |
           set -euo pipefail
-          apk=dist/FITD-Android-ARMv7-REAL-GAME-EXPERIMENTAL-API19.apk
+          apk=dist/FITD-Android-ARMv7-TEST10-60FPS-GLES2-API19.apk
           "$ANDROID_HOME/build-tools/34.0.0/aapt" dump badging "$apk" | tee /tmp/fitd-realgame-badging.txt
           grep -Fq "sdkVersion:'19'" /tmp/fitd-realgame-badging.txt
           grep -Fq "native-code: 'armeabi-v7a'" /tmp/fitd-realgame-badging.txt
