@@ -69,5 +69,5 @@ void readKeyboard(void){
     fitd_android::applyGameplayInput(fitdController,
                                      reinterpret_cast<unsigned char&>(JoyD),
                                      Click,key);
-    debuggerVar_fastForward=false;
+    // Debug-only fast-forward flag is absent in release builds.
 }
