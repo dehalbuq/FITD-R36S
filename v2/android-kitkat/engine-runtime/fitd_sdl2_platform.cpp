@@ -43,6 +43,14 @@ extern "C" void fitdAndroidRequestExit(void) {
 }
 bool bFirst = true;
 static uint32_t engineTickTimestamp = 0;
+extern "C" void fitdAndroidQuitNow(void){
+    SDL_Log("FITD-RUNTIME: USER_EXIT selected; terminating app");
+    fflush(nullptr);
+    // Explicit user-initiated abandon while engine is in its own SDL worker.
+    // The original FitdMain is not cancellable; never destroy the EGL context
+    // while its worker is running. Android can restart the app normally.
+    std::_Exit(0);
+}
 static FILE* externalRuntimeLog=nullptr;
 static void fitdRuntimeLogCallback(void*,int category,
                                    SDL_LogPriority priority,
