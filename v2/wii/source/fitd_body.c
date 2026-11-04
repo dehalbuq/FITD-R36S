@@ -115,7 +115,8 @@ int fitd_body_parse(const uint8_t *bytes,size_t size,FitdBody *out){
             }
             if(r.error || start<0 || (start%6)!=0 ||
                base<0 || (base%6)!=0 || node->count<0 ||
-               node->first>count || node->count>count-node->first)
+               (unsigned)node->first>count ||
+               (unsigned)node->count>count-(unsigned)node->first)
                 return -6;
         }
     }
