@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <app version="1">
-  <name>FITD Wii Teste 07</name>
+  <name>FITD Wii Teste 07.1</name>
   <coder>dehalbuq / FITD-R36S contributors</coder>
-  <version>0.7.0</version>
+  <version>0.7.1</version>
   <release_date>20261105</release_date>
-  <short_description>Batch diagnostics + 8 automatic animation previews</short_description>
-  <long_description>One-pass diagnostics of original game animations, cameras, masks, collision and motion, with numeric on-screen indices for 8 short animation previews. All scene rendering and the stable 06.3.1 foreground masks remain. Not yet a complete game. Original game PAK assets required but never included.</long_description>
+  <short_description>Body variants, 5-second gallery pages, real motion offsets</short_description>
+  <long_description>Integrated original AITD1 asset testing with paged animation previews at a slower rate, safe switching of skeleton-compatible BODY models, explicit 287/288 checks on 18-group skeletons, and original animation root-motion diagnostics. Stable camera masks and articulated rest preserved. Not a fully playable game. Original game PAK files required and never bundled.</long_description>
   <ahb_access/>
 </app>
