@@ -800,28 +800,21 @@ int main(int argc,char **argv){
         /* B+A in actor mode cycles structurally compatible clips.
            After the final candidate, returns to BODY rest. */
         if(pressedA && actorSceneMode && bHeld){
+            if(gallery07)gallery07_stop("manual-override");
             const int next=actorCandidateSlot+1;
-            actorCandidateSlot=(unsigned)next<actorCandidateCount?next:-1;
-            fitd_anim_release(&actorCandidateAnimation);
-            actorCandidateTicks=0.0;
-            bool loaded=false;
-            if(actorCandidateSlot>=0){
-                loaded=fitd_anim_load(&actorCandidateAnimation,DATA_DIR,
-                    actorCandidates[actorCandidateSlot],diag);
-                if(!loaded ||
-                   actorCandidateAnimation.group_count!=originalBody.group_count ||
-                   !fitd_anim_can_apply(&actorCandidateAnimation,&originalBody)){
-                    fitd_anim_release(&actorCandidateAnimation);
-                    actorCandidateSlot=-1;
-                    loaded=false;
-                }
+            const bool loaded=(unsigned)next<actorCandidateCount?
+                actor_use_candidate(actorCandidates[next]):false;
+            if(!loaded){
+                fitd_anim_release(&actorCandidateAnimation);
+                actorCandidateSlot=-1;
+                actorCandidateTicks=0.0;
             }
             if(diag){
                 fprintf(diag,
-                  "FITD-WII-SCAN06-3 inspect=%s index=%u slot=%d/%u compatible=%d\n",
-                  actorCandidateSlot>=0?"CANDIDATE":"REST",
+                  "FITD-WII-GALLERY07 manual=%s index=%u slot=%d/%u\\n",
+                  loaded?"CANDIDATE":"REST",
                   loaded?actorCandidateAnimation.index:0u,
-                  actorCandidateSlot,actorCandidateCount,loaded?1:0);
+                  actorCandidateSlot,actorCandidateCount);
                 fflush(diag);
             }
         }else if(pressedA){
@@ -832,8 +825,10 @@ int main(int argc,char **argv){
                 fflush(diag);
             }
         }
-        if(actorSceneMode && actorCandidateSlot>=0 &&
-           animationPlaying && passedMs<=250u)
+        if(actorSceneMode && gallery07)
+            gallery07_step((unsigned)passedMs);
+        else if(actorSceneMode && actorCandidateSlot>=0 &&
+                animationPlaying && passedMs<=250u)
             actorCandidateTicks+=(double)passedMs*0.05;
         if(!actorSceneMode && showOriginalCamera && originalAnimation.valid){
             int direction=0;
@@ -860,7 +855,12 @@ int main(int argc,char **argv){
             const bool combo=((wpHeld&WPAD_BUTTON_B)!=0) ||
                              ((gcHeld&PAD_BUTTON_B)!=0);
             if((wpDown & WPAD_BUTTON_1)||(gcDown & PAD_BUTTON_Y)){
-                if(actorSceneMode){
+                if(actorSceneMode && combo){
+                    /* Single user action previews 8 distinct animations
+                       automatically, with visible original clip indices. */
+                    if(gallery07)gallery07_stop("user-stop");
+                    else gallery07_start();
+                }else if(actorSceneMode){
                     showStageMask=!showStageMask;
                     if(diag){
                         fprintf(diag,
@@ -1132,6 +1132,16 @@ int main(int argc,char **argv){
                 frameCount,fps,x,z,rotation);
             diagnostic_checkpoint();
         }
+    }
+    if(diag){
+        fprintf(diag,
+          "FITD-WII-SUITE07 FINAL clips_ok=%u clips_failed=%u cameras=%u "
+          "masks=%u sim_steps=%u sim_blocks=%u gallery_runs=%u gallery_ends=%u "
+          "gallery_bad=%u active=%d\\n",
+          suite07.clip_poses_ok,suite07.clip_pose_fail,suite07.cameras_ok,
+          suite07.masks_ok,suite07.movement_steps,suite07.movement_blocks,
+          gallery07Started,gallery07Finished,gallery07Bad,gallery07?1:0);
+        fflush(diag);
     }
     if(diag){
         fprintf(diag,"finish frames=%lu endianness_check=%s\n",frameCount,
