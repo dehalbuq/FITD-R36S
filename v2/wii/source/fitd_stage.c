@@ -313,9 +313,12 @@ int fitd_stage_raster_polygon(uint8_t *mask,size_t pixels,
     }
     return (int)filled;
 }
-int fitd_stage_masks_selected(const FitdStage *stage,unsigned camera_index,
-                              int room_index,int selected_mask,
-                              FitdStageMask *out,FILE *log){
+static int fitd_stage_masks_ex(const FitdStage *stage,unsigned camera_index,
+                               int room_index,int selected_mask,
+                               const int *actor_bounds,
+                               FitdStageMask *out,FILE *log,
+                               unsigned *active_masks){
+    if(active_masks)*active_masks=0;
     if(!out)return -1;
     memset(out,0,sizeof(*out));
     if(!stage || !stage->valid)return -2;
@@ -348,9 +351,26 @@ int fitd_stage_masks_selected(const FitdStage *stage,unsigned camera_index,
         if(!fits(end,rec,4))return -8;
         const unsigned rects=u16(d,rec);
         const unsigned poly_offset=u16(d,rec+2);
-        const bool include=(selected_mask<0 || (unsigned)selected_mask==m);
+        bool include=(selected_mask<0 || (unsigned)selected_mask==m);
         if(rects>128 || !fits(end,rec+4,(size_t)rects*8u))
             return -9;
+        if(actor_bounds){
+            /* Original FITD isBgOverlayRequired: the actor ZV rectangle
+               is entirely inside at least one mask test rectangle.
+               The ZV and rect coordinates are in room units / 10. */
+            include=false;
+            for(unsigned q=0;q<rects;q++){
+                const size_t t=rec+4+(size_t)q*8u;
+                int rx1=s16(d,t),rz1=s16(d,t+2);
+                int rx2=s16(d,t+4),rz2=s16(d,t+6);
+                if(actor_bounds[0]>=rx1 && actor_bounds[1]<=rx2 &&
+                   actor_bounds[2]>=rz1 && actor_bounds[3]<=rz2){
+                    include=true;
+                    break;
+                }
+            }
+            if(include && active_masks)(*active_masks)++;
+        }
         const size_t poly_base=base+poly_offset;
         if(poly_base<base || !fits(end,poly_base,2))return -10;
         size_t p=poly_base;
@@ -380,16 +400,106 @@ int fitd_stage_masks_selected(const FitdStage *stage,unsigned camera_index,
     out->valid=true;
     if(log){
         fprintf(log,"FITD-WII-MASK05 OK camera=%u room=%d "
-                "masks=%u polygons=%u covered_pixels=%u selected=%d\n",
+                "masks=%u polygons=%u covered_pixels=%u selected=%d "
+                "auto=%d active=%u\n",
                 camera_index,out->viewed_room,out->masks,
-                out->polygons,out->covered_pixels,selected_mask);
+                out->polygons,out->covered_pixels,selected_mask,
+                actor_bounds?1:0,active_masks?*active_masks:0);
         fflush(log);
     }
     return 0;
 }
 
+int fitd_stage_masks_selected(const FitdStage *stage,unsigned camera_index,
+                              int room_index,int selected_mask,
+                              FitdStageMask *out,FILE *log){
+    return fitd_stage_masks_ex(stage,camera_index,room_index,
+                               selected_mask,NULL,out,log,NULL);
+}
 int fitd_stage_masks(const FitdStage *stage,unsigned camera_index,
                      int room_index,FitdStageMask *out,FILE *log){
     return fitd_stage_masks_selected(stage,camera_index,room_index,
                                      -1,out,log);
+}
+int fitd_stage_masks_actor(const FitdStage *stage,unsigned camera_index,
+                           int room_index,int x1,int x2,int z1,int z2,
+                           FitdStageMask *out,FILE *log,
+                           unsigned *active_masks){
+    const int bounds[4]={x1/10,x2/10,z1/10,z2/10};
+    return fitd_stage_masks_ex(stage,camera_index,room_index,-1,
+                               bounds,out,log,active_masks);
+}
+static bool point_in_polygon(int px,int pz,const uint8_t *data,
+                             size_t offset,unsigned n){
+    /* Ray-crossing test with 64-bit products to avoid overflow; the
+       original AITD1 uses crossing horizontal rays through each polygon. */
+    bool inside=false;
+    int16_t prev_x=s16(data,offset+(size_t)(n-1)*4u);
+    int16_t prev_z=s16(data,offset+(size_t)(n-1)*4u+2);
+    for(unsigned i=0;i<n;i++){
+        int16_t cx=s16(data,offset+(size_t)i*4u);
+        int16_t cz=s16(data,offset+(size_t)i*4u+2);
+        if((cz>pz)!=(prev_z>pz)){
+            const int64_t den=(int64_t)prev_z-cz;
+            const int64_t numerator=(int64_t)(prev_x-cx)*(pz-cz);
+            const int64_t crossing=(int64_t)cx+numerator/den;
+            if((int64_t)px<crossing)inside=!inside;
+        }
+        prev_x=cx;prev_z=cz;
+    }
+    return inside;
+}
+bool fitd_stage_camera_covers(const FitdStage *stage,unsigned camera_index,
+                              unsigned room_index,int x,int z){
+    if(!stage || !stage->valid)return false;
+    FitdStageCamera cam={0};
+    if(fitd_stage_camera(stage,camera_index,&cam)!=0)return false;
+    const uint8_t *d=stage->cameras;
+    for(unsigned v=0;v<cam.viewed_count;v++){
+        const FitdStageCameraView *view=&cam.viewed[v];
+        if(view->room_index!=room_index || view->cover_offset==0)continue;
+        size_t p=cam.raw_offset+view->cover_offset;
+        if(p<cam.raw_offset || !fits(cam.raw_limit,p,2))continue;
+        unsigned polys=u16(d,p);p+=2;
+        if(polys>128)continue;
+        for(unsigned poly=0;poly<polys;poly++){
+            if(!fits(cam.raw_limit,p,2))break;
+            unsigned n=u16(d,p);p+=2;
+            if(n<3 || n>64 || !fits(cam.raw_limit,p,(size_t)n*4u))break;
+            const bool inside=point_in_polygon(x/10,z/10,d,p,n);
+            p+=(size_t)n*4u;
+            if(inside)return true;
+        }
+    }
+    return false;
+}
+int fitd_stage_camera_auto(const FitdStage *stage,const FitdStageRoom *room,
+                           int x,int z,int previous_camera){
+    if(!stage || !stage->valid || !room || !room->valid)return -1;
+    if(previous_camera>=0 && (unsigned)previous_camera<stage->camera_count &&
+       fitd_stage_camera_covers(stage,(unsigned)previous_camera,
+                                room->index,x,z))
+        return previous_camera; /* preserve camera while in its cover zone */
+    for(unsigned c=0;c<room->camera_count;c++){
+        const unsigned index=room->camera_ids[c];
+        if(index<stage->camera_count &&
+           fitd_stage_camera_covers(stage,index,room->index,x,z))
+            return (int)index;
+    }
+    return previous_camera; /* no match: stable last known camera */
+}
+bool fitd_stage_collision_box(const FitdStageRoom *room,
+                              int x1,int x2,int y1,int y2,int z1,int z2,
+                              unsigned *index){
+    if(!room || !room->valid || x1>=x2 || y1>=y2 || z1>=z2)return false;
+    for(unsigned i=0;i<room->hard_count;i++){
+        const FitdStageZone *box=&room->hard[i];
+        if(x1<box->x2 && box->x1<x2 &&
+           y1<box->y2 && box->y1<y2 &&
+           z1<box->z2 && box->z1<z2){
+            if(index)*index=i;
+            return true;
+        }
+    }
+    return false;
 }
