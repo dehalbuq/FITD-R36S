@@ -77,6 +77,20 @@ int fitd_stage_masks_selected(const FitdStage *stage,unsigned camera_index,
                               FitdStageMask *out,FILE *log);
 int fitd_stage_masks(const FitdStage *stage,unsigned camera_index,
                      int room_index,FitdStageMask *out,FILE *log);
+/* Original game cover-zone tests (2D polygons in room coordinates/10). */
+bool fitd_stage_camera_covers(const FitdStage *stage,unsigned camera_index,
+                              unsigned room_index,int x,int z);
+int fitd_stage_camera_auto(const FitdStage *stage,const FitdStageRoom *room,
+                           int x,int z,int previous_camera);
+/* Original AITD1 isBgOverlayRequired test: actor ZV / 10 contained in
+   an XZ mask test rectangle. Only matching polygons are rasterized. */
+int fitd_stage_masks_actor(const FitdStage *stage,unsigned camera_index,
+                           int room_index,int x1,int x2,int z1,int z2,
+                           FitdStageMask *out,FILE *log,
+                           unsigned *active_masks);
+bool fitd_stage_collision_box(const FitdStageRoom *room,
+                              int x1,int x2,int y1,int y2,int z1,int z2,
+                              unsigned *index);
 bool fitd_stage_collision_xz(const FitdStageRoom *room,
                              int x,int y,int z,unsigned *index);
 #endif
