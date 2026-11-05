@@ -1,3 +1,91 @@
+# FITD Wii Teste 06.1 - correção da animação 3D torta
+
+Esta versão é uma correção dedicada ao problema relatado após testar
+o Wii Teste 06 no hardware real: o personagem masculino aparecia
+com os membros / animações deformados ("todos tortos").
+
+## O que foi corrigido
+
+- Estados de LISTANIM.PAK agora são aplicados aos grupos físicos do
+  LISTBODY.PAK pelo seu índice real, NÃO pelo índice de ordenação
+  de desenho. Essa diferença associava movimentos de um braço/perna
+  a outro grupo do modelo.
+- Rotações do grupo-pai agora alcançam seus grupos filhos conforme
+  as relações de parentesco do BODY, antes da composição dos pivôs.
+- Eixos de rotação corrigidos de Y-Z-X para Y-X-Z, como no FITD original.
+- No modo ator, a rotação global do primeiro grupo do modelo não é
+  duplicada: o ângulo do personagem já é aplicado pela câmera de jogo.
+- Novos testes automáticos de deformação detectam associação errada
+  entre grupo e animação, hierarquia de grupo-pai e grupo-filho,
+  ordem dos três eixos e a duplicação do giro do ator.
+- Diagnóstico de largura/altura/profundidade da pose para identificar
+  alongamentos extremos em hardware.
+
+## O que não foi alterado
+
+O tamanho do personagem continua mudando quando ele se aproxima ou
+se afasta da câmera: este é o comportamento correto de perspectiva
+dos jogos clássicos Alone in the Dark. Não implementamos escala fixa
+artificial nem removemos a projeção cinematográfica.
+
+A troca automática de câmera, as máscaras condicionais de oclusão,
+as zonas de colisão e o modo de inspeção do Teste 05.3 foram mantidos.
+
+## Instalação e testes no Wii
+
+Extraia o ZIP na raiz do cartão SD e preserve os arquivos originais
+do jogo na pasta SD:/apps/fitd-wii/data/:
+CAMERA00.PAK, ETAGE00.PAK, LISTBODY.PAK, LISTANIM.PAK, ITD_RESS.PAK.
+
+Abra Homebrew Channel > FITD Wii Teste 06.1. Pressione A para iniciar.
+O teste carrega BODY 15 e ANIM 301 como no Teste 06.
+
+- Direcional: mover personagem em coordenadas da sala.
+- B: girar personagem.
+- 1: ligar/desligar oclusão automática.
+- 2: alternar modo ator / visualizador de modelos.
+- A: pausar/continuar animação depois da inicialização.
+- + / -: troca manual de câmera (modo diagnóstico).
+- HOME: encerrar e salvar diagnóstico.
+
+Primeiro observe o personagem parado, se tronco/pernas/braços continuam
+nas posições coerentes. Depois caminhe em direções diferentes, observe
+se a animação permanece sem torções e confirme que o tamanho muda
+suavemente conforme a distância da câmera, sem saltos artificiais.
+Se a articulação ainda parecer errada, informe o que está deformado
+(pernas, braços, tronco ou corpo inteiro); isso ajudará a validar
+as associações dos ossos no Wii físico.
+
+## Diagnóstico
+
+Principal: SD:/fitd-wii-test06-1-diagnostic.txt
+Cópia: SD:/apps/fitd-wii/wii-diagnostic.txt
+
+Novidade:
+FITD-WII-BONES06-1 actor_mode=1 pose=1 body=15 anim=301
+  group_count=20 root_yaw_suppressed=1
+  extent=X,Y,Z frame=... alpha=...
+
+O valor extent mede as dimensões do corpo em coordenadas LOCAIS do
+modelo (sem a distância da câmera). Mesmo com perspectiva variável,
+a extensão corporal deve variar apenas conforme a pose, e não por
+um bug de rotação hierárquica.
+
+## Limitações
+
+Esta ainda é a prévia técnica de ator e câmera do FITD, NÃO o motor
+jogável. Continua faltando estado original de atores e objetos,
+scripts, inventário, combate, áudio, salvamento e transições.
+A correção geométrica foi comparada com Free in the Dark e passou
+pelos testes sintéticos, mas PRECISA de confirmação visual no Wii.
+
+Créditos: yaz0r/FITD, dehalbuq/FITD-R36S e colaboradores,
+licença GPL-2.0 e demais licenças aplicáveis.
+Sem nenhum arquivo proprietário do jogo no pacote. Use os arquivos
+da sua cópia original. Nintendo não é afiliada ao projeto.
+
+---
+
 # FITD Wii Teste 06 - ator, câmera e máscara automática
 
 STATUS: PROTÓTIPO TÉCNICO NATIVO PARA NINTENDO WII, NÃO É O JOGO COMPLETO.
