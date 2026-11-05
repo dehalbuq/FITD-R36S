@@ -13,6 +13,7 @@
 #include "osystemAL.h"
 #include <SDL.h>
 #include <SDL_system.h>
+#include <SDL_opengles2.h>
 #include <SDL_thread.h>
 #include <SDL_mutex.h>
 #include <atomic>
