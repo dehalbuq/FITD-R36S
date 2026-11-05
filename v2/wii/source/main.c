@@ -1,5 +1,5 @@
 /*
- * FITD Wii GX original ETAGE actor articulated rest pose, seamless bilinear masks and clip inspection v0.6.3.1 -- Wii homebrew hardware/renderer validation.
+ * FITD Wii GX original ETAGE actor articulated rest pose, seamless bilinear masks and clip inspection v0.7.0 -- Wii homebrew hardware/renderer validation.
  *
  * This is NOT the FITD game engine yet. It exercises native PowerPC,
  * Hollywood GX 3D + Z-buffer, 480p/480i VI, Wii Remote/GameCube inputs,
@@ -40,7 +40,7 @@
 #define GX_FIFO_BYTES (256u*1024u)
 #define DATA_DIR "sd:/apps/fitd-wii/data"
 #define LOG_FILE "sd:/apps/fitd-wii/wii-diagnostic.txt"
-#define ROOT_LOG_FILE "sd:/fitd-wii-test06-3-1-diagnostic.txt"
+#define ROOT_LOG_FILE "sd:/fitd-wii-test07-batch-diagnostic.txt"
 
 static GXRModeObj *videoMode;
 static void *xfb[2]={NULL,NULL};
@@ -312,7 +312,7 @@ static void diagnostic_open(void){
         const char *path=candidates[i];
         FILE *f=fopen(path,"wb");
         if(!f){firstLogError=errno;continue;}
-        const int bad=fputs("FITD Wii Test06.3.1 - log created at boot\n",f)==EOF
+        const int bad=fputs("FITD Wii Test07 - log created at boot\n",f)==EOF
                     || fflush(f)!=0 || ferror(f);
         const int closed=fclose(f);
         if(bad || closed!=0){firstLogError=errno;continue;}
@@ -384,7 +384,7 @@ static void inspect_game_data(void){
     }
 }
 static void scan_hardware(void){
-    puts("FITD Wii / GX Teste 06.2 (idle and walk)");
+    puts("FITD Wii / GX Teste 07 (automatic hardware suite)");
     puts("----------------------------------------");
     puts("Native Wii Broadway PowerPC / libogc");
     printf("Framebuffer: %ux%u, EFB height: %u\n",
@@ -417,6 +417,10 @@ static void scan_hardware(void){
     puts("2 / GC X: toggle BODY; 1 / GC Y: GX demo");
     puts("+/- / GC R/L: switch camera; B: rotate model");
     puts("ACTOR MODE: D-pad move, B turn actor");
+    puts("TEST07: ALL 32 animations and cameras scanned at boot");
+    puts("B+1 (GC B+Y): auto gallery of 8 top moving clips");
+    puts("Big digits show original animation ID; bar is progress");
+    puts("B+A: choose any of 32 compatible clips manually");
     puts("Auto camera and masks using original ETAGE zones");
     puts("2 / GC X: switch ACTOR / Test05.3 inspector");
     puts("1 / GC Y: mask on/off in actor mode");
@@ -425,7 +429,7 @@ static void scan_hardware(void){
     puts("HOME / GC START: exit");
     puts("");
     puts("Press A. Without data: original GX demo.");
-    record("build","wii-etage-actor-camera-auto-test06-2-locomotion-state");
+    record("build","wii-integrated-hardware-suite-test07");
     record("gx_stage","waiting-input");
 }
 static void present_console(void){
@@ -558,6 +562,13 @@ static void render_gx(float x,float z,float rotation,float walk){
         if(showStageMask && stageOverlay.ready)
             fitd_mask_gx_draw(&stageOverlay,
                               videoMode->fbWidth,videoMode->efbHeight);
+        /* Numeric scene overlay identifies clips during the automated
+           run; suppressed during normal REST/movement gameplay. */
+        if(actorSceneMode && actorCandidateSlot>=0 &&
+           actorCandidateAnimation.valid)
+            fitd_hud_draw(actorCandidateAnimation.index,
+              gallery07?gallery07Slot:0u, gallery07?suite07.top_count:0u,
+              videoMode->fbWidth,videoMode->efbHeight,gallery07);
         GX_DrawDone();
         storedFrame^=1;
         GX_CopyDisp(xfb[storedFrame],GX_TRUE);
@@ -612,7 +623,7 @@ int main(int argc,char **argv){
     sdReady=fatInitDefault()?1:0;
     diagnostic_open();
     if(diag){
-        fprintf(diag,"FITD WII GX rest-pose and seamless bilinear masks v0.6.3.1\n");
+        fprintf(diag,"FITD WII GX rest-pose and seamless bilinear masks v0.7.0\n");
         fprintf(diag,"log_path=%s\n",activeLogPath);
         fprintf(diag,"native_ppc_endian=%s\n",fitd_is_big_endian()?"BE":"LE");
         fprintf(diag,"framebuffer=%ux%u efb=%u\n",
@@ -731,6 +742,14 @@ int main(int argc,char **argv){
                         }
                         if(fitd_mask_gx_init(&stageOverlay))
                             stage_refresh_camera();
+                        /* Automatically probe all matching clips, masks,
+                           cameras and collision movement on a COPY of
+                           the actor. This is a one-time SD asset test. */
+                        if(actorSceneMode)
+                            fitd_suite_run(DATA_DIR,&originalBody,
+                                &originalStage,&currentStageRoom,&sceneActor,
+                                actorCandidates,actorCandidateCount,
+                                &suite07,diag);
                         else if(diag)
                             fputs("FITD-WII-MASK05 GX_TEXTURE_OOM\n",diag);
                     }
@@ -747,6 +766,7 @@ int main(int argc,char **argv){
                                ((gcDown&PAD_BUTTON_X)!=0)) &&
                               !bHeld && originalStage.valid;
         if(modeToggle){
+            gallery07_stop("mode-change");
             actorSceneMode=!actorSceneMode;
             if(actorSceneMode){
                 fitd_motion_reset(&actorMotion);
