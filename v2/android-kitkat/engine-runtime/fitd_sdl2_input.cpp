@@ -9,6 +9,8 @@
 #include <SDL.h>
 
 extern "C" void fitdAndroidRequestExit();
+extern "C" void fitdAndroidOnForeground();
+extern "C" void fitdAndroidSetLifecyclePaused(int paused);
 static SDL_GameController* fitdController=nullptr;
 static SDL_JoystickID fitdControllerId=-1;
 static Uint32 lastGamepadScan=0;
@@ -42,6 +44,14 @@ void readKeyboard(void){
     SDL_Event event;
     while(SDL_PollEvent(&event)){
         switch(event.type){
+            case SDL_APP_WILLENTERBACKGROUND:
+            case SDL_APP_DIDENTERBACKGROUND:
+                fitdAndroidSetLifecyclePaused(1);
+                break;
+            case SDL_APP_DIDENTERFOREGROUND:
+                fitdAndroidOnForeground();
+                fitdAndroidSetLifecyclePaused(0);
+                break;
             case SDL_QUIT:
                 fitdAndroidRequestExit();
                 break;
