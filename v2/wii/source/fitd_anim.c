@@ -346,3 +346,114 @@ bool fitd_anim_pose_actor(const FitdAnimClip *a,const FitdBody *b,
                           FitdAnimSample *sample){
     return pose_impl(a,b,ticks,v,cap,sample,true);
 }
+
+
+/*
+ * Reconstruct the BODY's bind/rest state through the same physical group
+ * ordering, parent rotations and final base-vertex assembly as animation.
+ * Raw BODY vertices are GROUP-LOCAL and must not be rendered directly as
+ * the actor's idle pose; doing so collapsed Edward in Wii Test06.2.
+ * Zero game asset data is supplied by this program.
+ */
+bool fitd_anim_pose_rest_actor(const FitdBody *b,FitdPoseVertex *v,
+                               size_t cap,FitdAnimSample *sample){
+    if(sample)memset(sample,0,sizeof(*sample));
+    if(!b || !b->valid || !v || cap<b->vertex_count ||
+       b->group_count==0 || b->group_count>FITD_BODY_MAX_GROUPS)
+        return false;
+    FitdAnimFrame frame={0};
+    frame.duration=1;
+    FitdAnimGroupState groups[FITD_BODY_MAX_GROUPS]={0};
+    for(unsigned i=0;i<b->group_count;i++){
+        const FitdGroup *g=&b->groups[i];
+        if(g->kind<0 || g->kind>2)return false;
+        groups[i].type=g->kind;
+        groups[i].delta[0]=g->dx;
+        groups[i].delta[1]=g->dy;
+        groups[i].delta[2]=g->dz;
+        groups[i].rotate[0]=g->rx;
+        groups[i].rotate[1]=g->ry;
+        groups[i].rotate[2]=g->rz;
+    }
+    FitdAnimClip rest={0};
+    rest.valid=true;
+    rest.frame_count=1;
+    rest.group_count=b->group_count;
+    rest.total_ticks=1;
+    rest.optimized=(b->flags & OPTIMIZED_FLAG)!=0;
+    rest.frames=&frame;
+    rest.states=groups;
+    const bool result=fitd_anim_pose_actor(&rest,b,0.0,v,cap,sample);
+    if(sample){
+        sample->animated=false;
+        sample->compatible=result;
+    }
+    return result;
+}
+
+/* Read the user's original archive once and list structurally valid
+ * animations for this exact BODY (20 groups for Edward's BODY 15).
+ * This does not assign semantic labels like "walking" without visual proof.
+ * No archive data is modified or packed into the Wii release. */
+unsigned fitd_anim_scan_body(const char *directory,const FitdBody *b,
+                              unsigned *indices,unsigned capacity,FILE *log){
+    if(!directory || !b || !b->valid || !indices || capacity==0 ||
+       b->group_count==0)return 0;
+    char path[256];
+    snprintf(path,sizeof(path),"%s/LISTANIM.PAK",directory);
+    FILE *f=fopen(path,"rb");
+    if(!f){
+        if(log)fprintf(log,"FITD-WII-SCAN06-3 error=open\n");
+        return 0;
+    }
+    FitdPakDirectory dir={0};
+    const int directory_status=fitd_pak_directory(f,&dir);
+    if(directory_status){
+        if(log)fprintf(log,"FITD-WII-SCAN06-3 error=directory status=%d\n",directory_status);
+        fclose(f);
+        return 0;
+    }
+    const bool target_optimized=(b->flags & OPTIMIZED_FLAG)!=0;
+    unsigned valid=0,stored=0,invalid=0;
+    for(unsigned index=0;index<dir.count;index++){
+        FitdPakEntry entry={0};
+        if(fitd_pak_entry(f,&dir,index,&entry)!=0){invalid++;continue;}
+        uint8_t *raw=NULL;
+        size_t bytes=0;
+        if(fitd_pak_load(f,&entry,&raw,&bytes)!=0){
+            invalid++;
+            free(raw);
+            continue;
+        }
+        if(bytes>=4u){
+            const unsigned frames=fitd_read_le16(raw);
+            const unsigned groups=fitd_read_le16(raw+2);
+            const size_t expected=4u+(size_t)frames*
+                (8u+(size_t)groups*(target_optimized?16u:8u));
+            if(frames>0 && frames<=FITD_ANIM_MAX_FRAMES &&
+               groups==b->group_count && bytes==expected){
+                FitdAnimClip candidate={0};
+                if(fitd_anim_parse(raw,bytes,&candidate)==0 &&
+                   fitd_anim_can_apply(&candidate,b)){
+                    valid++;
+                    if(stored<capacity)indices[stored++]=index;
+                    if(log)fprintf(log,
+                        "FITD-WII-SCAN06-3 candidate=%u groups=%u frames=%u ticks=%lu optimized=%d\n",
+                        index,groups,frames,(unsigned long)candidate.total_ticks,
+                        candidate.optimized?1:0);
+                }else invalid++;
+                fitd_anim_release(&candidate);
+            }
+        }
+        free(raw);
+    }
+    fclose(f);
+    if(log){
+        fprintf(log,
+            "FITD-WII-SCAN06-3 summary entries=%lu valid=%u stored=%u invalid=%u body=%u groups=%u truncated=%d\n",
+            (unsigned long)dir.count,valid,stored,invalid,b->index,
+            b->group_count,valid>stored?1:0);
+        fflush(log);
+    }
+    return stored;
+}
