@@ -76,10 +76,102 @@ static int test_case(int optimized){
     fitd_anim_release(&a);
     return ok?0:1;
 }
+/*
+ * Regression for the deformation reported on physical Wii in Test06:
+ * physical BODY groups 0/1 do not have to match GROUP ORDER [1,0].
+ * The animation states are indexed by actual group number, while the
+ * order table only dictates which transform is applied first.
+ */
+static int test_physical_group_mapping(void){
+    FitdBody *b=(FitdBody*)calloc(1,sizeof(*b));
+    if(!b)return 1;
+    b->valid=true;b->flags=2;b->vertex_count=3;b->group_count=2;
+    b->group_order[0]=1;b->group_order[1]=0;
+    b->vertices[0].z=10;
+    b->vertices[1].x=100;
+    b->vertices[2].x=0;
+    b->groups[0].first=0;b->groups[0].count=1;b->groups[0].base=2;
+    b->groups[0].parent=-1;b->groups[0].group=1;
+    b->groups[1].first=1;b->groups[1].count=1;b->groups[1].base=2;
+    b->groups[1].parent=-1;b->groups[1].group=2;
+    FitdAnimFrame f={.duration=2};
+    FitdAnimGroupState states[2]={0};
+    states[0].type=0;states[0].delta[1]=256;
+    states[1].type=1;states[1].delta[0]=20;
+    FitdAnimClip a={0};
+    a.valid=true;a.group_count=2;a.frame_count=1;
+    a.total_ticks=2;a.frames=&f;a.states=states;
+    FitdPoseVertex out[3]={0};
+    FitdAnimSample sample={0};
+    int ok=fitd_anim_pose(&a,b,0,out,3,&sample) &&
+        fabsf(out[0].x+10.f)<0.01f &&
+        fabsf(out[0].z)<0.01f &&
+        fabsf(out[1].x-120.f)<0.01f;
+    if(!ok)printf("physical group index vs order table FAILED\n");
+    free(b);
+    return ok?0:1;
+}
+/*
+ * Hierarchy regression: root rotation must rotate a child vertex BEFORE
+ * the child's own local state and base vertex have been assembled.
+ * Actor mode must not double-apply BODY group-0 root yaw.
+ */
+static int test_child_rotation_and_actor_yaw(void){
+    FitdBody *b=(FitdBody*)calloc(1,sizeof(*b));
+    if(!b)return 1;
+    b->valid=true;b->flags=2;b->vertex_count=3;b->group_count=2;
+    b->group_order[0]=0;b->group_order[1]=1;
+    b->vertices[0].x=100;
+    b->vertices[1].z=10;
+    b->groups[0].first=0;b->groups[0].count=1;b->groups[0].base=2;
+    b->groups[0].parent=-1;b->groups[0].group=1;
+    b->groups[1].first=1;b->groups[1].count=1;b->groups[1].base=2;
+    b->groups[1].parent=1;b->groups[1].group=2;
+    FitdAnimFrame f={.duration=2};
+    FitdAnimGroupState states[2]={0};
+    states[0].type=0;states[0].delta[1]=256;
+    states[1].type=1;
+    FitdAnimClip a={0};
+    a.valid=true;a.group_count=2;a.frame_count=1;
+    a.total_ticks=2;a.frames=&f;a.states=states;
+    FitdPoseVertex out[3]={0};
+    FitdAnimSample sample={0};
+    int ok=fitd_anim_pose(&a,b,0,out,3,&sample) &&
+        fabsf(out[1].x+10.f)<0.01f && fabsf(out[1].z)<0.01f;
+    ok=ok && fitd_anim_pose_actor(&a,b,0,out,3,&sample) &&
+        fabsf(out[1].x)<0.01f && fabsf(out[1].z-10.f)<0.01f;
+    if(!ok)printf("child subtree rotation or actor root yaw FAILED\n");
+    free(b);
+    return ok?0:1;
+}
+static int test_rotation_axis_order(void){
+    FitdBody *b=(FitdBody*)calloc(1,sizeof(*b));
+    if(!b)return 1;
+    b->valid=true;b->flags=2;b->vertex_count=2;b->group_count=1;
+    b->vertices[0].x=10;
+    b->groups[0].first=0;b->groups[0].count=1;b->groups[0].base=1;
+    b->groups[0].parent=-1;b->groups[0].group=1;
+    FitdAnimFrame f={.duration=2};
+    FitdAnimGroupState state={0};
+    state.type=0;state.delta[0]=256;state.delta[1]=256;state.delta[2]=256;
+    FitdAnimClip a={0};
+    a.valid=true;a.group_count=1;a.frame_count=1;
+    a.total_ticks=2;a.frames=&f;a.states=&state;
+    FitdPoseVertex out[2]={0};
+    int ok=fitd_anim_pose(&a,b,0,out,2,NULL) &&
+           fabsf(out[0].x-10.f)<0.02f &&
+           fabsf(out[0].y)<0.02f && fabsf(out[0].z)<0.02f;
+    if(!ok)printf("original Y/X/Z Euler order FAILED (twisted geometry)\n");
+    free(b);
+    return ok?0:1;
+}
 int main(void){
     int failures=0;
     failures+=test_case(0);
     failures+=test_case(1);
+    failures+=test_physical_group_mapping();
+    failures+=test_child_rotation_and_actor_yaw();
+    failures+=test_rotation_axis_order();
     const Writer good=make_clip(0);
     FitdAnimClip empty={0};
     if(fitd_anim_parse(good.b,good.n-1,&empty)>=0)failures++;
