@@ -1,5 +1,5 @@
 /*
- * FITD Wii GX original ETAGE actor articulated rest pose, seamless bilinear masks and clip inspection v0.7.0 -- Wii homebrew hardware/renderer validation.
+ * FITD Wii GX original ETAGE actor articulated rest pose, seamless bilinear masks and clip inspection v0.7.1 -- Wii homebrew hardware/renderer validation.
  *
  * This is NOT the FITD game engine yet. It exercises native PowerPC,
  * Hollywood GX 3D + Z-buffer, 480p/480i VI, Wii Remote/GameCube inputs,
@@ -35,12 +35,13 @@
 #include "fitd_scene_gx.h"
 #include "fitd_motion.h"
 #include "fitd_suite.h"
+#include "fitd_body_catalog.h"
 #include "fitd_hud.h"
 
 #define GX_FIFO_BYTES (256u*1024u)
 #define DATA_DIR "sd:/apps/fitd-wii/data"
 #define LOG_FILE "sd:/apps/fitd-wii/wii-diagnostic.txt"
-#define ROOT_LOG_FILE "sd:/fitd-wii-test07-batch-diagnostic.txt"
+#define ROOT_LOG_FILE "sd:/fitd-wii-test07-1-body-gallery-diagnostic.txt"
 
 static GXRModeObj *videoMode;
 static void *xfb[2]={NULL,NULL};
@@ -85,10 +86,14 @@ static FitdStageCamera sceneCamera={0};
 static unsigned sceneProjected=0,sceneMaskSelected=0;
 static unsigned sceneCamChanges=0,sceneMaskChecks=0;
 /* Automated Test07 diagnostics do not modify the real actor or game assets. */
-#define GALLERY_PERIOD_MS 2200u
+#define GALLERY_PERIOD_MS 5200u
+#define GALLERY_PAGE_SIZE 8u
 static FitdSuiteReport suite07={0};
 static bool gallery07=false;
 static unsigned gallery07Slot=0,gallery07Elapsed=0;
+static unsigned gallery07Page=0, gallery07RunStart=0, gallery07RunCount=0;
+static FitdBodyCandidate bodyCatalog[FITD_BODY_CATALOG_CAP]={0};
+static unsigned bodyCatalogCount=0,bodyCatalogSlot=0;
 static unsigned gallery07Started=0,gallery07Finished=0,gallery07Bad=0;
 
 
@@ -123,29 +128,38 @@ static void gallery07_stop(const char *reason){
     if(was && diag){
         fprintf(diag,
           "FITD-WII-GALLERY07 finish reason=%s last_slot=%u "
-          "started=%u finished=%u errors=%u\\n",
+          "started=%u finished=%u errors=%u\n",
           reason?reason:"unknown",gallery07Slot,gallery07Started,
           gallery07Finished,gallery07Bad);
         fflush(diag);
     }
 }
 static void gallery07_start(void){
-    if(!actorSceneMode || suite07.top_count==0)return;
+    if(!actorSceneMode || actorCandidateCount==0u)return;
     gallery07_stop("restart");
+    const unsigned pageCount=(actorCandidateCount+GALLERY_PAGE_SIZE-1u)/
+                              GALLERY_PAGE_SIZE;
+    if(gallery07Page>=pageCount)gallery07Page=0u;
+    gallery07RunStart=gallery07Page*GALLERY_PAGE_SIZE;
+    const unsigned remaining=actorCandidateCount-gallery07RunStart;
+    gallery07RunCount=remaining<GALLERY_PAGE_SIZE?
+                      remaining:GALLERY_PAGE_SIZE;
+    const unsigned startingPage=gallery07Page+1u;
+    gallery07Page=(gallery07Page+1u)%pageCount;
     gallery07=true;
     gallery07Slot=0;
     gallery07Elapsed=0;
     gallery07Started++;
-    if(!actor_use_candidate(suite07.top_index[0])){
+    if(!actor_use_candidate(actorCandidates[gallery07RunStart])){
         gallery07Bad++;
         gallery07_stop("load-error");
         return;
     }
     if(diag){
-        fprintf(diag,"FITD-WII-GALLERY07 start count=%u ms_per_clip=%u "
-                     "index=%u score=%.1f\\n",
-                suite07.top_count,GALLERY_PERIOD_MS,
-                suite07.top_index[0],suite07.top_score[0]);
+        fprintf(diag,"FITD-WII-GALLERY07 start page=%u/%u count=%u ms_per_clip=%u "
+                     "index=%u source=SEQUENTIAL\n",
+                startingPage,pageCount,gallery07RunCount,GALLERY_PERIOD_MS,
+                actorCandidates[gallery07RunStart]);
         fflush(diag);
     }
 }
@@ -161,11 +175,11 @@ static void gallery07_step(unsigned delta){
     if(gallery07Elapsed<GALLERY_PERIOD_MS)return;
     gallery07Elapsed-=GALLERY_PERIOD_MS;
     gallery07Slot++;
-    if(gallery07Slot>=suite07.top_count){
+    if(gallery07Slot>=gallery07RunCount){
         gallery07_stop("complete");
         return;
     }
-    const unsigned index=suite07.top_index[gallery07Slot];
+    const unsigned index=actorCandidates[gallery07RunStart+gallery07Slot];
     if(!actor_use_candidate(index)){
         gallery07Bad++;
         gallery07_stop("invalid-clip");
@@ -173,9 +187,65 @@ static void gallery07_step(unsigned delta){
     }
     if(diag){
         fprintf(diag,
-          "FITD-WII-GALLERY07 show=%u/%u index=%u score=%.1f\\n",
-          gallery07Slot+1u,suite07.top_count,
-          index,suite07.top_score[gallery07Slot]);
+          "FITD-WII-GALLERY07 show=%u/%u index=%u score=%.1f\n",
+          gallery07Slot+1u,gallery07RunCount,
+          index,0.f);
+        fflush(diag);
+    }
+}
+
+/* Switch to a different BODY actually present on SD. The previous
+ * model remains if the new asset is malformed or skeletal rest fails. */
+static bool body07_select(unsigned index){
+    FitdBody *replacement=(FitdBody*)malloc(sizeof(FitdBody));
+    FitdPoseVertex *rest=(FitdPoseVertex*)malloc(
+        sizeof(FitdPoseVertex)*FITD_BODY_MAX_VERTICES);
+    if(!replacement || !rest){free(replacement);free(rest);return false;}
+    bool loaded=fitd_body_load(replacement,DATA_DIR,index,NULL);
+    bool ready=loaded && fitd_anim_pose_rest_actor(replacement,rest,
+                         FITD_BODY_MAX_VERTICES,NULL);
+    if(ready){
+        gallery07_stop("body-change");
+        fitd_body_release(&originalBody);
+        originalBody=*replacement;
+        actorRestReady=true;
+        actorCandidateCount=fitd_anim_scan_body(
+            DATA_DIR,&originalBody,actorCandidates,
+            BODY_CANDIDATE_CAP,diag);
+        actorCandidateSlot=-1;
+        actorCandidateTicks=0.0;
+        animationPlaying=true;
+        poseReady=false;
+        showOriginalBody=true;
+        if(diag)fprintf(diag,
+          "FITD-WII-BODYCAT07-1 SELECT body=%u groups=%u verts=%u "
+          "clips=%u rest=PASS\n",
+          originalBody.index,originalBody.group_count,
+          originalBody.vertex_count,actorCandidateCount);
+    }else if(diag){
+        fprintf(diag,
+          "FITD-WII-BODYCAT07-1 SELECT body=%u status=REJECTED\n",index);
+    }
+    free(rest);
+    free(replacement);
+    if(diag)fflush(diag);
+    return ready;
+}
+/* Preview source-backed 287/288 only if compatible with the selected
+ * model. A 20-bone rifle BODY must not receive an 18-bone animation. */
+static void body07_preview_clip(unsigned index){
+    if(gallery07)gallery07_stop("manual-clip");
+    const bool valid=actor_use_candidate(index);
+    if(!valid){
+        fitd_anim_release(&actorCandidateAnimation);
+        actorCandidateSlot=-1;
+        actorCandidateTicks=0.0;
+    }
+    if(diag){
+        fprintf(diag,"FITD-WII-BODYCAT07-1 TEST clip=%u body=%u "
+                     "groups=%u compatible=%d\n",
+                index,originalBody.index,originalBody.group_count,
+                valid?1:0);
         fflush(diag);
     }
 }
@@ -312,7 +382,7 @@ static void diagnostic_open(void){
         const char *path=candidates[i];
         FILE *f=fopen(path,"wb");
         if(!f){firstLogError=errno;continue;}
-        const int bad=fputs("FITD Wii Test07 - log created at boot\n",f)==EOF
+        const int bad=fputs("FITD Wii Test07.1 - log created at boot\n",f)==EOF
                     || fflush(f)!=0 || ferror(f);
         const int closed=fclose(f);
         if(bad || closed!=0){firstLogError=errno;continue;}
@@ -417,7 +487,10 @@ static void scan_hardware(void){
     puts("2 / GC X: toggle BODY; 1 / GC Y: GX demo");
     puts("+/- / GC R/L: switch camera; B: rotate model");
     puts("ACTOR MODE: D-pad move, B turn actor");
-    puts("TEST07: ALL 32 animations and cameras scanned at boot");
+    puts("TEST07.1: BODY variants and game camera/mask scan");
+    puts("B+UP: next BODY model; B+LEFT/RIGHT: anim 287/288");
+    puts("B+1: next page of 8 clips (5.2 sec/clip)");
+    puts("ALL 32 clips covered across 4 gallery pages");
     puts("B+1 (GC B+Y): auto gallery of 8 top moving clips");
     puts("Big digits show original animation ID; bar is progress");
     puts("B+A: choose any of 32 compatible clips manually");
@@ -429,7 +502,7 @@ static void scan_hardware(void){
     puts("HOME / GC START: exit");
     puts("");
     puts("Press A. Without data: original GX demo.");
-    record("build","wii-integrated-hardware-suite-test07");
+    record("build","wii-integrated-body-variant-gallery-test07-1");
     record("gx_stage","waiting-input");
 }
 static void present_console(void){
@@ -567,7 +640,7 @@ static void render_gx(float x,float z,float rotation,float walk){
         if(actorSceneMode && actorCandidateSlot>=0 &&
            actorCandidateAnimation.valid)
             fitd_hud_draw(actorCandidateAnimation.index,
-              gallery07?gallery07Slot:0u, gallery07?suite07.top_count:0u,
+              gallery07?gallery07Slot:0u, gallery07?gallery07RunCount:0u,
               videoMode->fbWidth,videoMode->efbHeight,gallery07);
         GX_DrawDone();
         storedFrame^=1;
@@ -623,7 +696,7 @@ int main(int argc,char **argv){
     sdReady=fatInitDefault()?1:0;
     diagnostic_open();
     if(diag){
-        fprintf(diag,"FITD WII GX rest-pose and seamless bilinear masks v0.7.0\n");
+        fprintf(diag,"FITD WII GX rest-pose and seamless bilinear masks v0.7.1\n");
         fprintf(diag,"log_path=%s\n",activeLogPath);
         fprintf(diag,"native_ppc_endian=%s\n",fitd_is_big_endian()?"BE":"LE");
         fprintf(diag,"framebuffer=%ux%u efb=%u\n",
@@ -750,6 +823,12 @@ int main(int argc,char **argv){
                                 &originalStage,&currentStageRoom,&sceneActor,
                                 actorCandidates,actorCandidateCount,
                                 &suite07,diag);
+                        bodyCatalogCount=fitd_body_catalog_scan(
+                            DATA_DIR,bodyCatalog,FITD_BODY_CATALOG_CAP,diag);
+                        for(unsigned k=0;k<bodyCatalogCount;k++)
+                            if(bodyCatalog[k].index==originalBody.index){
+                                bodyCatalogSlot=k;break;
+                            }
                         else if(diag)
                             fputs("FITD-WII-MASK05 GX_TEXTURE_OOM\n",diag);
                     }
@@ -788,6 +867,27 @@ int main(int argc,char **argv){
                 fflush(diag);
             }
         }
+        /* B + D-pad UP cycles candidate protagonist BODY variants.
+           B + LEFT/RIGHT previews documented 287/288 only with
+           skeletal compatibility, without moving the live actor. */
+        if(actorSceneMode && bHeld){
+            const bool nextBody=((wpDown&WPAD_BUTTON_UP)!=0) ||
+                                ((gcDown&PAD_BUTTON_UP)!=0);
+            const bool previousBody=((wpDown&WPAD_BUTTON_DOWN)!=0) ||
+                                    ((gcDown&PAD_BUTTON_DOWN)!=0);
+            const bool idle=((wpDown&WPAD_BUTTON_LEFT)!=0) ||
+                            ((gcDown&PAD_BUTTON_LEFT)!=0);
+            const bool walk=((wpDown&WPAD_BUTTON_RIGHT)!=0) ||
+                            ((gcDown&PAD_BUTTON_RIGHT)!=0);
+            if((nextBody||previousBody) && bodyCatalogCount>0u){
+                const unsigned old=bodyCatalogSlot;
+                const unsigned step=nextBody?1u:bodyCatalogCount-1u;
+                const unsigned next=(old+step)%bodyCatalogCount;
+                if(body07_select(bodyCatalog[next].index))
+                    bodyCatalogSlot=next;
+            }else if(idle)body07_preview_clip(287u);
+            else if(walk)body07_preview_clip(288u);
+        }
         const u64 nowAnimTime=gettime();
         const u64 passedMs=ticks_to_millisecs(nowAnimTime-previousAnimTime);
         previousAnimTime=nowAnimTime;
@@ -811,7 +911,7 @@ int main(int argc,char **argv){
             }
             if(diag){
                 fprintf(diag,
-                  "FITD-WII-GALLERY07 manual=%s index=%u slot=%d/%u\\n",
+                  "FITD-WII-GALLERY07 manual=%s index=%u slot=%d/%u\n",
                   loaded?"CANDIDATE":"REST",
                   loaded?actorCandidateAnimation.index:0u,
                   actorCandidateSlot,actorCandidateCount);
@@ -1137,7 +1237,7 @@ int main(int argc,char **argv){
         fprintf(diag,
           "FITD-WII-SUITE07 FINAL clips_ok=%u clips_failed=%u cameras=%u "
           "masks=%u sim_steps=%u sim_blocks=%u gallery_runs=%u gallery_ends=%u "
-          "gallery_bad=%u active=%d\\n",
+          "gallery_bad=%u active=%d\n",
           suite07.clip_poses_ok,suite07.clip_pose_fail,suite07.cameras_ok,
           suite07.masks_ok,suite07.movement_steps,suite07.movement_blocks,
           gallery07Started,gallery07Finished,gallery07Bad,gallery07?1:0);
