@@ -1,3 +1,53 @@
+# FITD Wii Teste 06.3 — pose articulada segura e bordas de máscaras
+
+**Experimento para hardware Wii físico. Não é o motor jogável completo.**
+O Teste 06.1 continua preservado na branch `fix/wii-test06-1-skeletal-hierarchy`.
+
+## Problemas corrigidos com base nos logs de 06.2
+
+- BODY masculino 15: **20 grupos**. As animações 287 e 288 tinham **18 grupos**, portanto nunca devem ser atribuídas automaticamente ao personagem.
+- Ao invés de exibir os vértices locais do BODY sem montagem (pose baixa/colapsada), o modo ator reconstrói o **repouso articulado** a partir das transformações iniciais, hierarquia, grupo-base e pivôs originais do BODY. Se essa montagem falhar, o ator não é desenhado de maneira inválida.
+- A seleção do estado parado/andando continua sendo calculada pelo deslocamento real, mas nenhuma animação desconhecida é ligada automaticamente. Ela depende de validação visual no Wii.
+- O carregamento faz uma busca em `LISTANIM.PAK` pela quantidade de grupos e formato adequados. Apenas candidatos com parsing válido entram no modo de inspeção.
+- As máscaras originais agora usam **GX_NEAR** para evitar interpolar pixels transparentes RGB preto, além de teste de alpha para descartar transparência nula. O resultado visual ainda precisa ser verificado em hardware.
+
+## Instalação
+
+Extraia o ZIP na raiz do cartão SD. Preserve os arquivos originais em
+`SD:/apps/fitd-wii/data/`: `CAMERA00.PAK`, `ETAGE00.PAK`,
+`ITD_RESS.PAK`, `LISTBODY.PAK` e `LISTANIM.PAK`.
+
+## Teste de hardware
+
+1. Abra no Homebrew Channel e aperte A. Observe se a postura do BODY 15 está naturalmente articulada e não mais colapsada. A pose padrão é **REST**, sem animação.
+2. Ande com o direcional e solte. O estado de movimento deve mudar entre WALK e IDLE, **mas ainda sem usar um clip de caminhada** até identificarmos o correto.
+3. Passe atrás dos elementos mascarados nas diferentes câmeras. Verifique se a borda escura desapareceu. A tecla **1** liga/desliga a oclusão.
+4. Opcionalmente, pressione **B + A** no modo ator para selecionar a próxima animação estruturalmente compatível. Repita para percorrer os candidatos; depois do último, volta para REST. Observe se alguma animação corresponde a repouso/caminhada; anote a ordem dos botões, pois o log fornece os índices correspondentes.
+5. Botão **2** alterna com o inspetor antigo, onde ANIM 301 permanece para reproduzir o Teste 06.1. **HOME** encerra o aplicativo.
+
+O botão A sozinho ainda pausa/retoma a animação e B sozinho gira o personagem.
+O controle GameCube usa X para 2, Y para 1, Start para HOME.
+
+## Arquivos de log
+
+- Principal: `SD:/fitd-wii-test06-3-diagnostic.txt`
+- Espelho: `SD:/apps/fitd-wii/wii-diagnostic.txt`
+
+Procure por `FITD-WII-REST06-3` (`ready=1`),
+`FITD-WII-SCAN06-3 candidate=...` (índices compatíveis),
+`FITD-WII-SCAN06-3 inspect=...` (índice selecionado),
+`FITD-WII-LOCOMOTION06-3` (estados de movimento) e
+`FITD-WII-BONES06-1` (`pose=1` no modo ator).
+
+O arquivo de log sozinho não prova que uma pose é anatomicamente
+correta nem que uma máscara está visualmente perfeita.
+
+Créditos: yaz0r/Free in the Dark (GPL-2.0) e dehalbuq/FITD-R36S,
+além de colaboradores. Nenhum arquivo comercial é distribuído.
+Nintendo não é afiliada ao projeto.
+
+---
+
 # FITD Wii Teste 06.2 - movimento e animações separados
 
 Este teste continua exatamente a versão 06.1: esqueleto original
