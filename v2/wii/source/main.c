@@ -637,9 +637,10 @@ static void render_gx(float x,float z,float rotation,float walk){
                               videoMode->fbWidth,videoMode->efbHeight);
         /* Numeric scene overlay identifies clips during the automated
            run; suppressed during normal REST/movement gameplay. */
-        if(actorSceneMode && actorCandidateSlot>=0 &&
-           actorCandidateAnimation.valid)
-            fitd_hud_draw(actorCandidateAnimation.index,
+        if(actorSceneMode && originalBody.valid)
+            fitd_hud_draw(actorCandidateSlot>=0 &&
+                    actorCandidateAnimation.valid?
+                       actorCandidateAnimation.index:originalBody.index,
               gallery07?gallery07Slot:0u, gallery07?gallery07RunCount:0u,
               videoMode->fbWidth,videoMode->efbHeight,gallery07);
         GX_DrawDone();
