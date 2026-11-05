@@ -1,5 +1,5 @@
 /*
- * FITD Wii GX original ETAGE camera occlusion mask inspector v0.5.3 -- Wii homebrew hardware/renderer validation.
+ * FITD Wii GX original ETAGE actor/camera automatic world-space prototype v0.6 -- Wii homebrew hardware/renderer validation.
  *
  * This is NOT the FITD game engine yet. It exercises native PowerPC,
  * Hollywood GX 3D + Z-buffer, 480p/480i VI, Wii Remote/GameCube inputs,
@@ -31,11 +31,13 @@
 #include "fitd_anim.h"
 #include "fitd_stage.h"
 #include "fitd_mask_gx.h"
+#include "fitd_scene.h"
+#include "fitd_scene_gx.h"
 
 #define GX_FIFO_BYTES (256u*1024u)
 #define DATA_DIR "sd:/apps/fitd-wii/data"
 #define LOG_FILE "sd:/apps/fitd-wii/wii-diagnostic.txt"
-#define ROOT_LOG_FILE "sd:/fitd-wii-test05-3-diagnostic.txt"
+#define ROOT_LOG_FILE "sd:/fitd-wii-test06-diagnostic.txt"
 
 static GXRModeObj *videoMode;
 static void *xfb[2]={NULL,NULL};
@@ -64,6 +66,11 @@ static bool showStageMask=false;
 static int selectedMaskIndex=-1; /* -1 means union for legacy inspection */
 static unsigned stageMaskRefreshes=0;
 static int stageMaskStatus=-1;
+static bool actorSceneMode=false;
+static FitdSceneActor sceneActor={0};
+static FitdStageCamera sceneCamera={0};
+static unsigned sceneProjected=0,sceneMaskSelected=0;
+static unsigned sceneCamChanges=0,sceneMaskChecks=0;
 
 static void stage_refresh_camera(void){
     stageOverlay.ready=false;
@@ -76,6 +83,7 @@ static void stage_refresh_camera(void){
           originalCamera.current);
         return;
     }
+    sceneCamera=cam;
     if(diag){
         fprintf(diag,
           "FITD-WII-CAMERA05 index=%u angle=%d,%d,%d "
@@ -86,12 +94,30 @@ static void stage_refresh_camera(void){
     }
     const int chosenRoom=currentStageRoom.valid?
                          (int)currentStageRoom.index:-1;
-    stageMaskStatus=fitd_stage_masks_selected(&originalStage,cam.index,
-                           chosenRoom,selectedMaskIndex,&stageMasks,diag);
-    if(stageMaskStatus==-4)
+    if(actorSceneMode && currentStageRoom.valid){
+        int x1=0,x2=0,z1=0,z2=0;
+        fitd_scene_bounds(&sceneActor,&x1,&x2,&z1,&z2);
+        stageMaskStatus=fitd_stage_masks_actor(&originalStage,cam.index,
+                            chosenRoom,x1,x2,z1,z2,
+                            &stageMasks,NULL,&sceneMaskSelected);
+        sceneMaskChecks++;
+    }else{
+        sceneMaskSelected=0;
         stageMaskStatus=fitd_stage_masks_selected(&originalStage,cam.index,
-                           -1,selectedMaskIndex,&stageMasks,diag);
-    if(stageMaskStatus==-15 && selectedMaskIndex>=0){
+                               chosenRoom,selectedMaskIndex,&stageMasks,diag);
+    }
+    if(stageMaskStatus==-4){
+        if(actorSceneMode){
+            int x1=0,x2=0,z1=0,z2=0;
+            fitd_scene_bounds(&sceneActor,&x1,&x2,&z1,&z2);
+            stageMaskStatus=fitd_stage_masks_actor(&originalStage,cam.index,
+                -1,x1,x2,z1,z2,&stageMasks,NULL,&sceneMaskSelected);
+        }else{
+            stageMaskStatus=fitd_stage_masks_selected(&originalStage,cam.index,
+                               -1,selectedMaskIndex,&stageMasks,diag);
+        }
+    }
+    if(!actorSceneMode && stageMaskStatus==-15 && selectedMaskIndex>=0){
         /* Another camera can have fewer masks. Fall back to the safe
            union view instead of keeping an invalid mask index. */
         selectedMaskIndex=-1;
@@ -104,7 +130,7 @@ static void stage_refresh_camera(void){
     if(stageMaskStatus==0){
         if(!fitd_mask_gx_update(&stageOverlay,&stageMasks,
                                 originalCamera.raw_pixels)){
-            stageMaskStatus=-20;
+            if(stageMasks.covered_pixels>0)stageMaskStatus=-20;
         }else{
             stageMaskRefreshes++;
         }
@@ -112,11 +138,12 @@ static void stage_refresh_camera(void){
     if(diag){
         fprintf(diag,
           "FITD-WII-MASK05 camera=%u room=%d status=%d "
-          "ready=%d masks=%u polys=%u pixels=%u selected=%d\n",
+          "ready=%d masks=%u polys=%u pixels=%u selected=%d "
+          "actor_auto=%d actor_matched=%u\n",
           originalCamera.current,stageMasks.viewed_room,
           stageMaskStatus,stageOverlay.ready?1:0,
           stageMasks.masks,stageMasks.polygons,stageMasks.covered_pixels,
-          selectedMaskIndex);
+          selectedMaskIndex,actorSceneMode?1:0,sceneMaskSelected);
         fflush(diag);
     }
 }
@@ -131,6 +158,11 @@ static void stage_change_room(int direction){
         FitdStageRoom next={0};
         if(fitd_stage_room(&originalStage,candidate,&next)!=0)continue;
         currentStageRoom=next;
+        if(actorSceneMode){
+            fitd_scene_choose_spawn(&sceneActor,&originalStage,
+                                    &currentStageRoom,
+                                    next.camera_ids[0],diag);
+        }
         if(diag){
             fprintf(diag,
               "FITD-WII-ROOM05 selected=%u cameras=%u "
@@ -172,7 +204,7 @@ static void diagnostic_open(void){
         const char *path=candidates[i];
         FILE *f=fopen(path,"wb");
         if(!f){firstLogError=errno;continue;}
-        const int bad=fputs("FITD Wii Test05.3 - log created at boot\n",f)==EOF
+        const int bad=fputs("FITD Wii Test06 - log created at boot\n",f)==EOF
                     || fflush(f)!=0 || ferror(f);
         const int closed=fclose(f);
         if(bad || closed!=0){firstLogError=errno;continue;}
@@ -244,7 +276,7 @@ static void inspect_game_data(void){
     }
 }
 static void scan_hardware(void){
-    puts("FITD Wii / GX Teste 05.3 (mask inspector)");
+    puts("FITD Wii / GX Teste 06 (actor + camera auto)");
     puts("----------------------------------------");
     puts("Native Wii Broadway PowerPC / libogc");
     printf("Framebuffer: %ux%u, EFB height: %u\n",
@@ -276,14 +308,16 @@ static void scan_hardware(void){
     puts("A: pause/resume keyframe animation (in GX)");
     puts("2 / GC X: toggle BODY; 1 / GC Y: GX demo");
     puts("+/- / GC R/L: switch camera; B: rotate model");
-    puts("Wii 1 / GC Y: cycle scene > mask > GX demo");
-    puts("Hold B + 1 / GC B+Y: direct mask on/off");
-    puts("Hold B + 2 / GC B+X: cycle individual masks");
-    puts("Hold B + +/- / GC B+R/L: browse ETAGE rooms");
+    puts("ACTOR MODE: D-pad move, B turn actor");
+    puts("Auto camera and masks using original ETAGE zones");
+    puts("2 / GC X: switch ACTOR / Test05.3 inspector");
+    puts("1 / GC Y: mask on/off in actor mode");
+    puts("Inspector: D-pad BODY/ANIM, +/- cameras");
+    puts("HOME / GC START: exit");
     puts("HOME / GC START: exit");
     puts("");
     puts("Press A. Without data: original GX demo.");
-    record("build","wii-etage-room-mask-test05-3-individual-mask-inspector");
+    record("build","wii-etage-actor-camera-auto-test06-0.6");
     record("gx_stage","waiting-input");
 }
 static void present_console(void){
@@ -376,10 +410,19 @@ static void render_gx(float x,float z,float rotation,float walk){
             poseReady=fitd_anim_pose(&originalAnimation,&originalBody,
                 animationTicks,animationPose,FITD_BODY_MAX_VERTICES,
                 &animationSample);
-            fitd_body_draw(&originalBody,cameraMatrix,projection,rotation,x,z,
-                           poseReady?animationPose:NULL);
+            if(actorSceneMode && sceneCamera.valid && currentStageRoom.valid){
+                fitd_scene_gx_draw(&originalBody,
+                    poseReady?animationPose:NULL,
+                    &currentStageRoom,&sceneCamera,&sceneActor,
+                    videoMode->fbWidth,videoMode->efbHeight,
+                    &sceneProjected);
+            }else{
+                fitd_body_draw(&originalBody,cameraMatrix,projection,rotation,
+                    x,z,poseReady?animationPose:NULL);
+            }
         }else{
             poseReady=false;
+            sceneProjected=0;
         }
         if(showStageMask && stageOverlay.ready)
             fitd_mask_gx_draw(&stageOverlay,
@@ -438,7 +481,7 @@ int main(int argc,char **argv){
     sdReady=fatInitDefault()?1:0;
     diagnostic_open();
     if(diag){
-        fprintf(diag,"FITD WII GX ETAGE per-mask inspector v0.5.3\n");
+        fprintf(diag,"FITD WII GX original room actor and auto camera/mask v0.6\n");
         fprintf(diag,"log_path=%s\n",activeLogPath);
         fprintf(diag,"native_ppc_endian=%s\n",fitd_is_big_endian()?"BE":"LE");
         fprintf(diag,"framebuffer=%ux%u efb=%u\n",
