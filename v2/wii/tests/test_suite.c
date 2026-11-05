@@ -14,8 +14,9 @@ int main(void){
        s.top_index[1]!=10||s.top_index[2]!=11)return 1;
     for(unsigned i=20;i<40;i++)
         fitd_suite_rank(&s,i,(float)(i-19));
-    if(s.top_count!=FITD_SUITE_TOP || s.top_index[0]!=39||
-       s.top_index[1]!=38 || s.top_score[0]<s.top_score[1]){
+    if(s.top_count!=FITD_SUITE_TOP || s.top_index[0]!=12||
+       s.top_index[1]!=39 || s.top_index[2]!=38 ||
+       s.top_score[0]<s.top_score[1]){
         puts("FAIL shortlist ranking");
         return 1;
     }
