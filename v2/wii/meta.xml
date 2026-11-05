@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <app version="1">
-  <name>FITD Wii Teste 06</name>
+  <name>FITD Wii Teste 06.1</name>
   <coder>dehalbuq / FITD-R36S contributors</coder>
-  <version>0.6.0</version>
+  <version>0.6.1</version>
   <release_date>20261104</release_date>
-  <short_description>Wii GX original room-space actor, automatic camera and mask test</short_description>
-  <long_description>Preliminary PowerPC/GX homebrew technical prototype for the classic Alone in the Dark engine. AITD1 original BODY actor in ETAGE room coordinates, game camera perspective, automatic mask tests, room collisions. Diagnostic prototype, NOT playable game. NOT a playable game. Original game files are not included.</long_description>
+  <short_description>Wii GX corrected AITD1 skeleton articulation and camera perspective</short_description>
+  <long_description>Preliminary PowerPC/GX homebrew technical prototype for the classic Alone in the Dark engine. Correct AITD1 BODY group animation mapping and bone hierarchy in original ETAGE camera perspective. Diagnostic prototype, NOT playable game. NOT a playable game. Original game files are not included.</long_description>
   <ahb_access/>
 </app>
