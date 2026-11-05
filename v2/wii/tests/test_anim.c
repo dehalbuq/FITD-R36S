@@ -165,6 +165,52 @@ static int test_rotation_axis_order(void){
     free(b);
     return ok?0:1;
 }
+/*
+ * Regression: no compatible idle/walk clip available on the real Wii.
+ * A BODY with group-local vertices must be assembled through base offsets;
+ * NULL pose would keep its lower body crushed at the origin.
+ */
+static int test_body_rest_pose_without_animation(void){
+    FitdBody *b=(FitdBody*)calloc(1,sizeof(*b));
+    if(!b)return 1;
+    b->valid=true;
+    b->flags=2;
+    b->vertex_count=3;
+    b->group_count=2;
+    b->group_order[0]=0;
+    b->group_order[1]=1;
+    b->vertices[0].x=5;
+    b->vertices[1].x=30;
+    b->vertices[2].x=100;
+    b->groups[0].first=0;
+    b->groups[0].count=1;
+    b->groups[0].base=2;
+    b->groups[0].kind=1;
+    b->groups[0].dx=10;
+    b->groups[0].parent=-1;
+    b->groups[0].group=1;
+    b->groups[1].first=1;
+    b->groups[1].count=1;
+    b->groups[1].base=2;
+    b->groups[1].kind=1;
+    b->groups[1].dx=20;
+    b->groups[1].parent=-1;
+    b->groups[1].group=2;
+    FitdPoseVertex out[3]={0};
+    FitdAnimSample sample={0};
+    int ok=fitd_anim_pose_rest_actor(b,out,3,&sample) &&
+        sample.compatible && !sample.animated &&
+        fabsf(out[0].x-115.f)<.01f &&
+        fabsf(out[1].x-150.f)<.01f;
+    b->groups[1].kind=3; /* malformed group must fail closed */
+    ok=ok && !fitd_anim_pose_rest_actor(b,out,3,&sample);
+    b->flags=0;
+    ok=ok && !fitd_anim_pose_rest_actor(b,out,3,&sample);
+    if(!ok)printf("BODY rest pose construction FAILED\\n");
+    free(b);
+    return ok?0:1;
+}
+
 int main(void){
     int failures=0;
     failures+=test_case(0);
@@ -172,6 +218,7 @@ int main(void){
     failures+=test_physical_group_mapping();
     failures+=test_child_rotation_and_actor_yaw();
     failures+=test_rotation_axis_order();
+    failures+=test_body_rest_pose_without_animation();
     const Writer good=make_clip(0);
     FitdAnimClip empty={0};
     if(fitd_anim_parse(good.b,good.n-1,&empty)>=0)failures++;
