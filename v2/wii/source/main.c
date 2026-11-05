@@ -34,6 +34,8 @@
 #include "fitd_scene.h"
 #include "fitd_scene_gx.h"
 #include "fitd_motion.h"
+#include "fitd_suite.h"
+#include "fitd_hud.h"
 
 #define GX_FIFO_BYTES (256u*1024u)
 #define DATA_DIR "sd:/apps/fitd-wii/data"
@@ -82,6 +84,101 @@ static FitdSceneActor sceneActor={0};
 static FitdStageCamera sceneCamera={0};
 static unsigned sceneProjected=0,sceneMaskSelected=0;
 static unsigned sceneCamChanges=0,sceneMaskChecks=0;
+/* Automated Test07 diagnostics do not modify the real actor or game assets. */
+#define GALLERY_PERIOD_MS 2200u
+static FitdSuiteReport suite07={0};
+static bool gallery07=false;
+static unsigned gallery07Slot=0,gallery07Elapsed=0;
+static unsigned gallery07Started=0,gallery07Finished=0,gallery07Bad=0;
+
+
+
+/* A gallery entry is always resolved against the 32 already validated
+ * animation indices for this BODY. No unknown clips are applied. */
+static bool actor_use_candidate(unsigned index){
+    fitd_anim_release(&actorCandidateAnimation);
+    actorCandidateSlot=-1;
+    actorCandidateTicks=0.0;
+    for(unsigned i=0;i<actorCandidateCount;i++){
+        if(actorCandidates[i]==index){actorCandidateSlot=(int)i;break;}
+    }
+    if(actorCandidateSlot<0)return false;
+    if(!fitd_anim_load(&actorCandidateAnimation,DATA_DIR,index,diag) ||
+       actorCandidateAnimation.group_count!=originalBody.group_count ||
+       !fitd_anim_can_apply(&actorCandidateAnimation,&originalBody)){
+        fitd_anim_release(&actorCandidateAnimation);
+        actorCandidateSlot=-1;
+        return false;
+    }
+    return true;
+}
+static void gallery07_stop(const char *reason){
+    const bool was=gallery07;
+    gallery07=false;
+    gallery07Elapsed=0;
+    if(was)gallery07Finished++;
+    fitd_anim_release(&actorCandidateAnimation);
+    actorCandidateSlot=-1;
+    actorCandidateTicks=0.0;
+    if(was && diag){
+        fprintf(diag,
+          "FITD-WII-GALLERY07 finish reason=%s last_slot=%u "
+          "started=%u finished=%u errors=%u\\n",
+          reason?reason:"unknown",gallery07Slot,gallery07Started,
+          gallery07Finished,gallery07Bad);
+        fflush(diag);
+    }
+}
+static void gallery07_start(void){
+    if(!actorSceneMode || suite07.top_count==0)return;
+    gallery07_stop("restart");
+    gallery07=true;
+    gallery07Slot=0;
+    gallery07Elapsed=0;
+    gallery07Started++;
+    if(!actor_use_candidate(suite07.top_index[0])){
+        gallery07Bad++;
+        gallery07_stop("load-error");
+        return;
+    }
+    if(diag){
+        fprintf(diag,"FITD-WII-GALLERY07 start count=%u ms_per_clip=%u "
+                     "index=%u score=%.1f\\n",
+                suite07.top_count,GALLERY_PERIOD_MS,
+                suite07.top_index[0],suite07.top_score[0]);
+        fflush(diag);
+    }
+}
+static void gallery07_step(unsigned delta){
+    if(!gallery07 || delta>250u)return;
+    gallery07Elapsed+=delta;
+    /* Scan a full animation cycle during each preview, instead of
+       requiring the user to wait for clips with long original durations.
+       This does not alter normal gameplay's 50Hz time. */
+    if(actorCandidateAnimation.valid)
+        actorCandidateTicks+=(double)actorCandidateAnimation.total_ticks*
+                             (double)delta/(double)GALLERY_PERIOD_MS;
+    if(gallery07Elapsed<GALLERY_PERIOD_MS)return;
+    gallery07Elapsed-=GALLERY_PERIOD_MS;
+    gallery07Slot++;
+    if(gallery07Slot>=suite07.top_count){
+        gallery07_stop("complete");
+        return;
+    }
+    const unsigned index=suite07.top_index[gallery07Slot];
+    if(!actor_use_candidate(index)){
+        gallery07Bad++;
+        gallery07_stop("invalid-clip");
+        return;
+    }
+    if(diag){
+        fprintf(diag,
+          "FITD-WII-GALLERY07 show=%u/%u index=%u score=%.1f\\n",
+          gallery07Slot+1u,suite07.top_count,
+          index,suite07.top_score[gallery07Slot]);
+        fflush(diag);
+    }
+}
 
 static void stage_refresh_camera(void){
     stageOverlay.ready=false;
