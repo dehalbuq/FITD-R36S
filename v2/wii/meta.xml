@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <app version="1">
-  <name>FITD Wii Teste 06.2</name>
+  <name>FITD Wii Teste 06.3</name>
   <coder>dehalbuq / FITD-R36S contributors</coder>
-  <version>0.6.2</version>
-  <release_date>20261104</release_date>
-  <short_description>Wii GX prototype idle/walk motion animation selection without damage loop</short_description>
-  <long_description>Preliminary PowerPC/GX homebrew technical prototype for the classic Alone in the Dark engine. Move-linked idle/walk animation candidates from original AITD1 PAKs; damage preview no longer loops on actor. Cinematic camera and masks retained. Diagnostic prototype, NOT playable game. NOT a playable game. Original game files are not included.</long_description>
+  <version>0.6.3</version>
+  <release_date>20261105</release_date>
+  <short_description>Native Wii GX: safe BODY rest pose and pixel-sharp occlusion masks</short_description>
+  <long_description>Experimental native PowerPC/GX technical prototype. Restores articulated BODY pose without an animation, scans original LISTANIM.PAK for skeleton-compatible clips and permits manual B+A inspection. Uses nearest-sampled, alpha-tested foreground masks to reduce black outlines. Not a complete playable game; user-owned original PAK files required and not bundled. Test06.1 remains the approved reference.</long_description>
   <ahb_access/>
 </app>
