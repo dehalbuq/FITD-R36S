@@ -133,6 +133,9 @@ bool fitd_camera_set(FitdCamera *c,const char *directory,
     DCFlushRange(c->tiled_pixels,CAMERA_PIXELS*2);
     GX_InitTexObj(&c->tex,c->tiled_pixels,CAMERA_W,CAMERA_H,
                   GX_TF_RGB565,GX_CLAMP,GX_CLAMP,GX_FALSE);
+    /* Match the RGBA8 mask texture sampling on the same screen quad.
+       Both layers use GX_LINEAR so the foreground is not oversharp. */
+    GX_InitTexObjFilterMode(&c->tex,GX_LINEAR,GX_LINEAR);
     c->current=frame;
     c->valid=true;
     log_info(log,"CAMERA00_LOADED",frame,0,&entry);
