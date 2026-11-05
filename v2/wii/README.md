@@ -1,3 +1,46 @@
+# FITD Wii Teste 06.3.1 — máscaras com suavização uniforme, sem borda preta
+
+Esta revisão corrige o último defeito visual relatado no Wii: na 06.3,
+a borda preta havia desaparecido, porém a máscara era mais nítida que
+a imagem de fundo. **A pose de repouso e o scanner de 32 candidatos
+da 06.3 foram preservados, sem alterações na lógica do personagem.**
+
+## Alterações
+
+- A textura de máscara usa o formato GX **RGBA8**, com cores RGB da
+  mesma paleta original do cenário em cada pixel, inclusive nos pixels
+  transparentes. A opacidade vem exclusivamente da seleção dos polígonos.
+- A textura do cenário e a máscara usam **GX_LINEAR**.
+- O contorno de alpha continua mesclado sobre o cenário; como as cores
+  transparentes também correspondem ao cenário, a interpolação não
+  produz um halo preto.
+- Memória de textura da máscara: 256 KB (320 x 200 x 4 bytes), adequada
+  ao Wii. Novos testes verificam o empacotamento em tiles AR/GB.
+
+O teste deve determinar se as máscaras agora têm suavidade e cores
+semelhantes às do fundo e se a borda preta continua ausente.
+
+## Instalação e teste
+
+Extraia o ZIP na raiz do cartão SD e mantenha os PAKs originais em
+`SD:/apps/fitd-wii/data/`. Use o Homebrew Channel e pressione A.
+Movimente o personagem atrás de objetos em diferentes câmeras, comparando
+a aparência com a versão 06.3.
+
+- Tecla **1**: alterna máscara do modo ator
+- **B + A**: visualiza o próximo candidato compatível (mesmo que na 06.3)
+- **2**: alterna modo ator/inspetor
+- **HOME**: fecha, salva o diagnóstico
+
+Logs:
+`SD:/fitd-wii-test06-3-1-diagnostic.txt` e
+`SD:/apps/fitd-wii/wii-diagnostic.txt`.
+
+Este é um protótipo, não o jogo completo. Não inclui arquivos comerciais.
+Versões de referência: 06.1 (articulação) e 06.3 (pose neutra confirmada).
+
+---
+
 # FITD Wii Teste 06.3 — pose articulada segura e bordas de máscaras
 
 **Experimento para hardware Wii físico. Não é o motor jogável completo.**
