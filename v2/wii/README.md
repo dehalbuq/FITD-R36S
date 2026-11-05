@@ -1,3 +1,91 @@
+# FITD Wii Teste 06.2 - movimento e animações separados
+
+Este teste continua exatamente a versão 06.1: esqueleto original
+com rotação hierárquica corrigida, câmera cinematográfica automática,
+máscaras de oclusão e colisões. O usuário confirmou o personagem
+articulado corretamente na 06.1, mas ele repetia uma animação de dano
+porque o teste anterior reproduzia LISTANIM index 301 permanentemente.
+
+## O que mudou no Teste 06.2
+
+- O BODY masculino 15 continua, sem modificar seu parser nem os ossos.
+- A animação 301 foi removida do modo ator normal. Ela fica disponível
+  apenas no modo antigo de inspeção, para reproduzir o Teste 06.1.
+- Carregamento dos **candidatos** LISTANIM 287 (parado/idle) e
+  LISTANIM 288 (andar/walk), associados em referências da comunidade
+  aos movimentos de Edward em determinadas transições.
+- Compatibilidade verificada no momento do carregamento: exatamente
+  20 grupos para o BODY 15, mesma variante de formato e dados válidos.
+  Se um arquivo for incompatível, o ator será exibido sem animação
+  em vez de executar a animação de dano ou distorcer os ossos.
+- Estado IDLE enquanto o personagem não se desloca.
+- Estado WALK enquanto o deslocamento real é aceito pelas colisões.
+- A animação reinicia somente quando ocorre uma mudança entre esses
+  estados; não é reiniciada a cada quadro de movimento.
+- As animações continuam a 50 ticks por segundo, sem depender
+  dos aproximadamente 60 FPS da GPU.
+
+**Importante:** 287 e 288 são candidatos fundamentados em referências
+dos scripts do jogo, mas ainda precisam ser validados VISUALMENTE no
+seu BODY 15 original. O programa não conclui que um movimento é
+correto apenas porque a estrutura binária é compatível. Se o seu
+asset usa outros índices, os novos logs indicarão claramente.
+
+## Instalação
+
+Extraia o ZIP na raiz do SD, sem apagar os arquivos originais do jogo
+na pasta SD:/apps/fitd-wii/data/:
+
+CAMERA00.PAK, ETAGE00.PAK, ITD_RESS.PAK, LISTBODY.PAK, LISTANIM.PAK.
+
+## Teste no Wii
+
+1. Inicie pelo Homebrew Channel, aperte A.
+2. OBSERVE o personagem parado: ele não deve mais repetir o movimento
+   de dano do Teste 06.1. Veja se está com os braços relaxados.
+3. Caminhe com o direcional. A animação de caminhada deve aparecer
+   somente quando o personagem realmente mudar de posição.
+4. Solte o direcional. O personagem deve voltar à pose de repouso
+   sem repetir o movimento de dano ou caminhar parado.
+5. Ande contra uma parede: quando a colisão bloquear o personagem,
+   a animação deverá retornar ao estado de repouso.
+6. Alternativamente aperte 2 para abrir o modo de inspeção antigo
+   (onde o clip 301 de dano continua acessível apenas para diagnóstico).
+7. Saia com HOME, envie o arquivo de log.
+
+## Diagnóstico
+
+Principal: SD:/fitd-wii-test06-2-diagnostic.txt
+
+Exemplos de novos registros:
+
+FITD-WII-LOCOMOTION06-2 idle=287 loaded=1 compatible=1 ...
+  walk=288 loaded=1 compatible=1 ...
+FITD-WII-LOCOMOTION06-2 transition=WALK index=288 compatible=1 ...
+FITD-WII-LOCOMOTION06-2 transition=IDLE index=287 compatible=1 ...
+FITD-WII-LOCOMOTION06-2 state=IDLE anim=287 ...
+FITD-WII-BONES06-1 actor_mode=1 pose=1 body=15 anim=287 ...
+
+O resultado precisa ser confirmado no Wii físico: a compatibilidade
+estrutural não garante que a animação escolhida pareça a marcha
+correta, especialmente quando BODYs específicos trocam de roupa,
+item ou pose nos scripts originais.
+
+## Estado do projeto
+
+A versão 06.1 aprovada continua intacta na branch
+fix/wii-test06-1-skeletal-hierarchy.
+O Teste 06.2 é uma nova branch experimental. Ainda faltam as
+máquinas de estado do jogo completo, a execução de LIFE 549/550
+(ANIM_MOVE), inventário, combate, áudio, save/load, transições de
+sala e demais subsistemas. Sem distribuição de assets comerciais.
+
+Base legal: Free in the Dark (yaz0r/FITD, GPL-2.0),
+dehalbuq/FITD-R36S e demais autores e licenças aplicáveis.
+Use dados da sua cópia original do jogo. Nintendo não é afiliada.
+
+---
+
 # FITD Wii Teste 06.1 - correção da animação 3D torta
 
 Esta versão é uma correção dedicada ao problema relatado após testar
