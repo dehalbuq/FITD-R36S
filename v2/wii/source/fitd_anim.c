@@ -149,22 +149,65 @@ static float interpolate_angle(float a,float b,float t){
     while(d< -512.f)d+=1024.f;
     return a+d*t;
 }
+/*
+ * The original renderer rotates Y, then X, then Z. The old Wii preview
+ * used Y/Z/X, which bent joints with two or three simultaneous rotations.
+ * FITD uses 1024 angle units per revolution; no bone-length scaling.
+ */
 static void rotate_angles(float *x,float *y,float *z,
                           float ax,float ay,float az){
     const float sx=sinf(ax*TAU_OVER_1024),cx=cosf(ax*TAU_OVER_1024);
     const float sy=sinf(ay*TAU_OVER_1024),cy=cosf(ay*TAU_OVER_1024);
     const float sz=sinf(az*TAU_OVER_1024),cz=cosf(az*TAU_OVER_1024);
-    /* Order of rotation Y/Z/X used by legacy FITD geometry. */
     float X=*x,Y=*y,Z=*z;
     float t=X;
-    X=cy*X-sy*Z;Z=sy*t+cy*Z;
-    t=X;X=cz*X-sz*Y;Y=sz*t+cz*Y;
-    t=Y;Y=cx*Y-sx*Z;Z=sx*t+cx*Z;
+    X=cy*X-sy*Z;Z=sy*t+cy*Z; /* yaw */
+    t=Y;
+    Y=cx*Y-sx*Z;Z=sx*t+cx*Z; /* pitch */
+    t=X;
+    X=cz*X-sz*Y;Y=sz*t+cz*Y; /* roll */
     *x=X;*y=Y;*z=Z;
 }
-bool fitd_anim_pose(const FitdAnimClip *a,const FitdBody *b,
-                    double ticks,FitdPoseVertex *v,size_t cap,
-                    FitdAnimSample *sample){
+static bool group_range_valid(const FitdBody *body,unsigned idx){
+    if(idx>=body->group_count)return false;
+    const FitdGroup *group=&body->groups[idx];
+    return group->first>=0 && group->count>=0 &&
+           (unsigned)group->first<=body->vertex_count &&
+           (unsigned)group->count<=body->vertex_count-(unsigned)group->first;
+}
+static void rotate_group_points(const FitdGroup *g,FitdPoseVertex *v,
+                                const float r[3]){
+    if(r[0]==0.f && r[1]==0.f && r[2]==0.f)return;
+    for(unsigned j=0;j<(unsigned)g->count;j++){
+        FitdPoseVertex *p=&v[(unsigned)g->first+j];
+        rotate_angles(&p->x,&p->y,&p->z,r[0],r[1],r[2]);
+    }
+}
+/*
+ * AITD1 RotateGroupe() rotates the chosen group AND descendants whose
+ * m_orgGroup points to the parent's m_numGroup. The original searches
+ * only later group records. Descendants must rotate before their own
+ * keyframe state is applied, while vertices are still group-local.
+ *
+ * Iterate forward only: malformed parent IDs cannot introduce cycles.
+ * A group is visited at most once per ancestor, and depth is bounded.
+ */
+static void rotate_group_tree(const FitdBody *b,unsigned index,
+                              FitdPoseVertex *v,const float r[3],
+                              unsigned depth){
+    if(depth>=b->group_count || !group_range_valid(b,index))return;
+    const FitdGroup *parent=&b->groups[index];
+    rotate_group_points(parent,v,r);
+    for(unsigned child=index+1;child<b->group_count;child++){
+        const FitdGroup *next=&b->groups[child];
+        if(next->parent==parent->group && next->group!=parent->group &&
+           group_range_valid(b,child))
+            rotate_group_tree(b,child,v,r,depth+1u);
+    }
+}
+static bool pose_impl(const FitdAnimClip *a,const FitdBody *b,
+                      double ticks,FitdPoseVertex *v,size_t cap,
+                      FitdAnimSample *sample,bool actor_root){
     if(sample)memset(sample,0,sizeof(*sample));
     if(!b || !v || !fitd_anim_can_apply(a,b) ||
        cap<b->vertex_count || !a->total_ticks)return false;
@@ -173,26 +216,26 @@ bool fitd_anim_pose(const FitdAnimClip *a,const FitdBody *b,
         v[i].y=(float)b->vertices[i].y;
         v[i].z=(float)b->vertices[i].z;
     }
-    if(ticks<0.0)ticks=0;
+    if(!isfinite(ticks) || ticks<0.0)ticks=0.0;
     double phase=fmod(ticks,(double)a->total_ticks);
     if(phase<0.0)phase=0.0;
     unsigned to=0;
-    double beginning=0;
+    double beginning=0.0;
     for(;to+1<a->frame_count;to++){
-        unsigned duration=a->frames[to].duration?
-                          a->frames[to].duration:1u;
+        const unsigned duration=a->frames[to].duration?
+                                a->frames[to].duration:1u;
         if(phase<beginning+duration)break;
         beginning+=duration;
     }
-    const unsigned from=(to==0)?((unsigned)a->frame_count-1u):(to-1u);
+    const unsigned from=(to==0u)?((unsigned)a->frame_count-1u):(to-1u);
     const unsigned duration=a->frames[to].duration?
                             a->frames[to].duration:1u;
-    float t=(float)((phase-beginning)/duration);
+    float t=(float)((phase-beginning)/(double)duration);
     if(t<0.f)t=0.f;
     if(t>1.f)t=1.f;
     if(sample){
-        sample->from_frame=from;
-        sample->to_frame=to;
+        sample->from_frame=(uint16_t)from;
+        sample->to_frame=(uint16_t)to;
         sample->fraction=t;
         sample->compatible=true;
         sample->animated=true;
@@ -202,63 +245,104 @@ bool fitd_anim_pose(const FitdAnimClip *a,const FitdBody *b,
     }
 
     /*
-     * Per-group interpolated rotations/translations from genuine LISTANIM.
-     * This is a first-pass skeletal PREVIEW: child hierarchy, actor positioning
-     * and movement semantics still need integration with the real engine.
-     * Crucially, it does not replay a canned animation or change FPS timing.
+     * KEY FIX: SetAnimObjet/SetInterAnimObjet write animation state
+     * directly into m_groups[i]. The order table ONLY determines the
+     * order those group states are APPLIED to vertices by AnimNuage.
+     *
+     * Previous Wii code indexed a->states[g] but transformed
+     * b->groups[b->group_order[g]], mismatching limbs and rotations.
      */
-    for(unsigned g=0;g<a->group_count;g++){
-        if(b->group_order[g]>=b->group_count)return false;
-        const FitdGroup *group=&b->groups[b->group_order[g]];
-        if(group->first<0 || group->count<0 ||
-           (unsigned)group->first+(unsigned)group->count>b->vertex_count)
-            return false;
-        const FitdAnimGroupState *before=
-            &a->states[(size_t)from*a->group_count+g];
-        const FitdAnimGroupState *after=
-            &a->states[(size_t)to*a->group_count+g];
-        const int type=after->type;
-        float transform[3];
-        for(unsigned k=0;k<3;k++){
-            transform[k]=(type==0)?
-                interpolate_angle((float)before->delta[k],
-                                  (float)after->delta[k],t):
-                linear((float)before->delta[k],
-                       (float)after->delta[k],t);
-        }
-        float rot[3]={0,0,0};
-        if(a->optimized){
-            for(unsigned k=0;k<3;k++)
-                rot[k]=interpolate_angle((float)before->rotate[k],
-                                         (float)after->rotate[k],t);
-        }else if(type==0){
-            for(unsigned k=0;k<3;k++)rot[k]=transform[k];
-        }
-        for(unsigned j=0;j<(unsigned)group->count;j++){
-            const unsigned i=(unsigned)group->first+j;
-            float x=v[i].x,y=v[i].y,z=v[i].z;
-            if(type==1){
-                x+=transform[0];y+=transform[1];z+=transform[2];
-            }else if(type==2){
-                x*=1.f+transform[0]/256.f;
-                y*=1.f+transform[1]/256.f;
-                z*=1.f+transform[2]/256.f;
+    for(unsigned slot=0;slot<b->group_count;slot++){
+        const unsigned index=b->group_order[slot];
+        if(!group_range_valid(b,index))return false;
+        const FitdGroup *group=&b->groups[index];
+        const bool has_anim=index<a->group_count;
+        const FitdAnimGroupState *before=has_anim?
+            &a->states[(size_t)from*a->group_count+index]:NULL;
+        const FitdAnimGroupState *after=has_anim?
+            &a->states[(size_t)to*a->group_count+index]:NULL;
+        const int type=has_anim?after->type:group->kind;
+        if(type<0 || type>2)return false;
+        float delta[3]={0,0,0},rot[3]={0,0,0};
+        const int16_t defaults[3]={group->dx,group->dy,group->dz};
+        const int16_t default_rot[3]={group->rx,group->ry,group->rz};
+        for(unsigned axis=0;axis<3;axis++){
+            const float old=has_anim?(float)before->delta[axis]:
+                                       (float)defaults[axis];
+            const float target=has_anim?(float)after->delta[axis]:
+                                          (float)defaults[axis];
+            delta[axis]=(type==0)?
+                interpolate_angle(old,target,t):linear(old,target,t);
+            if(a->optimized){
+                const float rold=has_anim?(float)before->rotate[axis]:
+                                            (float)default_rot[axis];
+                const float rtarget=has_anim?(float)after->rotate[axis]:
+                                               (float)default_rot[axis];
+                rot[axis]=interpolate_angle(rold,rtarget,t);
+            }else if(type==0){
+                rot[axis]=delta[axis];
             }
-            if(type==0 || a->optimized)
-                rotate_angles(&x,&y,&z,rot[0],rot[1],rot[2]);
-            v[i].x=x;v[i].y=y;v[i].z=z;
+        }
+        if(actor_root && index==0u && type==0){
+            /* Original AnimNuage overwrites non-optimized BODY group zero
+               with actor alpha/beta/gamma. Actor yaw is already applied
+               by fitd_scene_project, so don't rotate it again here. */
+            rot[0]=0.f;rot[1]=0.f;rot[2]=0.f;
+        }
+        switch(type){
+        case 0:
+            if(a->optimized)
+                rotate_group_points(group,v,rot);
+            else
+                rotate_group_tree(b,index,v,rot,0u);
+            break;
+        case 1:
+            for(unsigned j=0;j<(unsigned)group->count;j++){
+                FitdPoseVertex *p=&v[(unsigned)group->first+j];
+                p->x+=delta[0];p->y+=delta[1];p->z+=delta[2];
+            }
+            if(a->optimized)rotate_group_points(group,v,rot);
+            break;
+        case 2:
+            for(unsigned j=0;j<(unsigned)group->count;j++){
+                FitdPoseVertex *p=&v[(unsigned)group->first+j];
+                p->x*=(delta[0]+256.f)/256.f;
+                p->y*=(delta[1]+256.f)/256.f;
+                p->z*=(delta[2]+256.f)/256.f;
+            }
+            if(a->optimized)rotate_group_points(group,v,rot);
+            break;
         }
     }
-    /* Base vertices compose hierarchical BODY positions in the engine.
-       Add base offset after local group deltas, as in AnimNuage(). */
-    for(unsigned g=0;g<b->group_count;g++){
-        const FitdGroup *group=&b->groups[g];
-        if(group->base<0 || group->base>=b->vertex_count)return false;
-        const float x=v[group->base].x,y=v[group->base].y,z=v[group->base].z;
-        for(unsigned j=0;j<(unsigned)group->count;j++){
-            FitdPoseVertex *p=&v[(unsigned)group->first+j];
-            p->x+=x;p->y+=y;p->z+=z;
+    /*
+     * FITD's AnimNuage applies base vertex offsets in physical BODY
+     * group order AFTER applying each local skeletal transformation.
+     * This is essential: a limb's parent position has been transformed
+     * by its ancestors before the final world-relative assembly.
+     */
+    for(unsigned i=0;i<b->group_count;i++){
+        const FitdGroup *g=&b->groups[i];
+        if(!group_range_valid(b,i) || g->base<0 ||
+           (unsigned)g->base>=b->vertex_count)return false;
+        const FitdPoseVertex base=v[g->base];
+        for(unsigned j=0;j<(unsigned)g->count;j++){
+            FitdPoseVertex *p=&v[(unsigned)g->first+j];
+            p->x+=base.x;p->y+=base.y;p->z+=base.z;
         }
+    }
+    for(unsigned i=0;i<b->vertex_count;i++){
+        if(!isfinite(v[i].x)||!isfinite(v[i].y)||!isfinite(v[i].z))
+            return false;
     }
     return true;
+}
+bool fitd_anim_pose(const FitdAnimClip *a,const FitdBody *b,
+                    double ticks,FitdPoseVertex *v,size_t cap,
+                    FitdAnimSample *sample){
+    return pose_impl(a,b,ticks,v,cap,sample,false);
+}
+bool fitd_anim_pose_actor(const FitdAnimClip *a,const FitdBody *b,
+                          double ticks,FitdPoseVertex *v,size_t cap,
+                          FitdAnimSample *sample){
+    return pose_impl(a,b,ticks,v,cap,sample,true);
 }
