@@ -1,5 +1,5 @@
 /*
- * FITD Wii GX original ETAGE actor/camera automatic world-space prototype v0.6 -- Wii homebrew hardware/renderer validation.
+ * FITD Wii GX original ETAGE actor/camera original skeletal hierarchy repair v0.6.1 -- Wii homebrew hardware/renderer validation.
  *
  * This is NOT the FITD game engine yet. It exercises native PowerPC,
  * Hollywood GX 3D + Z-buffer, 480p/480i VI, Wii Remote/GameCube inputs,
@@ -37,7 +37,7 @@
 #define GX_FIFO_BYTES (256u*1024u)
 #define DATA_DIR "sd:/apps/fitd-wii/data"
 #define LOG_FILE "sd:/apps/fitd-wii/wii-diagnostic.txt"
-#define ROOT_LOG_FILE "sd:/fitd-wii-test06-diagnostic.txt"
+#define ROOT_LOG_FILE "sd:/fitd-wii-test06-1-diagnostic.txt"
 
 static GXRModeObj *videoMode;
 static void *xfb[2]={NULL,NULL};
@@ -204,7 +204,7 @@ static void diagnostic_open(void){
         const char *path=candidates[i];
         FILE *f=fopen(path,"wb");
         if(!f){firstLogError=errno;continue;}
-        const int bad=fputs("FITD Wii Test06 - log created at boot\n",f)==EOF
+        const int bad=fputs("FITD Wii Test06.1 - log created at boot\n",f)==EOF
                     || fflush(f)!=0 || ferror(f);
         const int closed=fclose(f);
         if(bad || closed!=0){firstLogError=errno;continue;}
@@ -276,7 +276,7 @@ static void inspect_game_data(void){
     }
 }
 static void scan_hardware(void){
-    puts("FITD Wii / GX Teste 06 (actor + camera auto)");
+    puts("FITD Wii / GX Teste 06.1 (bones repaired)");
     puts("----------------------------------------");
     puts("Native Wii Broadway PowerPC / libogc");
     printf("Framebuffer: %ux%u, EFB height: %u\n",
@@ -317,7 +317,7 @@ static void scan_hardware(void){
     puts("HOME / GC START: exit");
     puts("");
     puts("Press A. Without data: original GX demo.");
-    record("build","wii-etage-actor-camera-auto-test06-0.6");
+    record("build","wii-etage-actor-camera-auto-test06-1-skeletal-hierarchy");
     record("gx_stage","waiting-input");
 }
 static void present_console(void){
@@ -407,9 +407,14 @@ static void render_gx(float x,float z,float rotation,float walk){
     if(showOriginalCamera && originalCamera.valid){
         fitd_camera_draw(&originalCamera,videoMode->fbWidth,videoMode->efbHeight);
         if(showOriginalBody && originalBody.valid){
-            poseReady=fitd_anim_pose(&originalAnimation,&originalBody,
-                animationTicks,animationPose,FITD_BODY_MAX_VERTICES,
-                &animationSample);
+            if(actorSceneMode)
+                poseReady=fitd_anim_pose_actor(&originalAnimation,&originalBody,
+                    animationTicks,animationPose,FITD_BODY_MAX_VERTICES,
+                    &animationSample);
+            else
+                poseReady=fitd_anim_pose(&originalAnimation,&originalBody,
+                    animationTicks,animationPose,FITD_BODY_MAX_VERTICES,
+                    &animationSample);
             if(actorSceneMode && sceneCamera.valid && currentStageRoom.valid){
                 fitd_scene_gx_draw(&originalBody,
                     poseReady?animationPose:NULL,
@@ -481,7 +486,7 @@ int main(int argc,char **argv){
     sdReady=fatInitDefault()?1:0;
     diagnostic_open();
     if(diag){
-        fprintf(diag,"FITD WII GX original room actor and auto camera/mask v0.6\n");
+        fprintf(diag,"FITD WII GX corrected AITD1 skeletal hierarchy v0.6.1\n");
         fprintf(diag,"log_path=%s\n",activeLogPath);
         fprintf(diag,"native_ppc_endian=%s\n",fitd_is_big_endian()?"BE":"LE");
         fprintf(diag,"framebuffer=%ux%u efb=%u\n",
@@ -823,6 +828,33 @@ int main(int argc,char **argv){
         render_gx(x,z,rotation,walk);
         ++frameCount;
         if(diag && frameCount%300==0){
+            /* A projected vertex count cannot reveal a deformed skeleton.
+               Log local skeletal extents to catch implausible stretching,
+               independently of expected distance-based perspective size. */
+            if(originalBody.valid){
+                float lo[3]={1e9f,1e9f,1e9f};
+                float hi[3]={-1e9f,-1e9f,-1e9f};
+                for(unsigned vi=0;vi<originalBody.vertex_count;vi++){
+                    const float xyz[3]={
+                        poseReady?animationPose[vi].x:(float)originalBody.vertices[vi].x,
+                        poseReady?animationPose[vi].y:(float)originalBody.vertices[vi].y,
+                        poseReady?animationPose[vi].z:(float)originalBody.vertices[vi].z};
+                    for(unsigned axis=0;axis<3;axis++){
+                        if(xyz[axis]<lo[axis])lo[axis]=xyz[axis];
+                        if(xyz[axis]>hi[axis])hi[axis]=xyz[axis];
+                    }
+                }
+                fprintf(diag,
+                  "FITD-WII-BONES06-1 actor_mode=%d pose=%d body=%u "
+                  "anim=%u group_count=%u root_yaw_suppressed=%d "
+                  "extent=%.1f,%.1f,%.1f frame=%u->%u alpha=%.3f\n",
+                  actorSceneMode?1:0,poseReady?1:0,originalBody.index,
+                  originalAnimation.index,originalBody.group_count,
+                  actorSceneMode?1:0,
+                  hi[0]-lo[0],hi[1]-lo[1],hi[2]-lo[2],
+                  animationSample.from_frame,animationSample.to_frame,
+                  animationSample.fraction);
+            }
             FitdSceneScreenPoint center={0};
             const bool projected=fitd_scene_project(&sceneCamera,
                 &currentStageRoom,&sceneActor,0.f,0.f,0.f,&center);
