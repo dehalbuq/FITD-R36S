@@ -1,5 +1,5 @@
 /*
- * FITD Wii GX original ETAGE actor articulated rest pose, mask filtering and clip inspection v0.6.3 -- Wii homebrew hardware/renderer validation.
+ * FITD Wii GX original ETAGE actor articulated rest pose, seamless bilinear masks and clip inspection v0.6.3.1 -- Wii homebrew hardware/renderer validation.
  *
  * This is NOT the FITD game engine yet. It exercises native PowerPC,
  * Hollywood GX 3D + Z-buffer, 480p/480i VI, Wii Remote/GameCube inputs,
@@ -38,7 +38,7 @@
 #define GX_FIFO_BYTES (256u*1024u)
 #define DATA_DIR "sd:/apps/fitd-wii/data"
 #define LOG_FILE "sd:/apps/fitd-wii/wii-diagnostic.txt"
-#define ROOT_LOG_FILE "sd:/fitd-wii-test06-3-diagnostic.txt"
+#define ROOT_LOG_FILE "sd:/fitd-wii-test06-3-1-diagnostic.txt"
 
 static GXRModeObj *videoMode;
 static void *xfb[2]={NULL,NULL};
@@ -215,7 +215,7 @@ static void diagnostic_open(void){
         const char *path=candidates[i];
         FILE *f=fopen(path,"wb");
         if(!f){firstLogError=errno;continue;}
-        const int bad=fputs("FITD Wii Test06.3 - log created at boot\n",f)==EOF
+        const int bad=fputs("FITD Wii Test06.3.1 - log created at boot\n",f)==EOF
                     || fflush(f)!=0 || ferror(f);
         const int closed=fclose(f);
         if(bad || closed!=0){firstLogError=errno;continue;}
@@ -515,7 +515,7 @@ int main(int argc,char **argv){
     sdReady=fatInitDefault()?1:0;
     diagnostic_open();
     if(diag){
-        fprintf(diag,"FITD WII GX rest-pose and mask-edge filtering v0.6.3\n");
+        fprintf(diag,"FITD WII GX rest-pose and seamless bilinear masks v0.6.3.1\n");
         fprintf(diag,"log_path=%s\n",activeLogPath);
         fprintf(diag,"native_ppc_endian=%s\n",fitd_is_big_endian()?"BE":"LE");
         fprintf(diag,"framebuffer=%ux%u efb=%u\n",
