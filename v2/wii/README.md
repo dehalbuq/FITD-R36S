@@ -19,7 +19,7 @@ este teste permite comparar outros modelos originais sem alterar assets.
    testar a mesma página várias vezes.
 4. **B + direcional CIMA** muda para o próximo BODY compatível;
    **B + direcional BAIXO** retorna ao anterior. Observe qual BODY
-   não possui o rifle e informe o número do log `SELECT body=`.
+   não possui o rifle: **quando o personagem está em repouso, os três\n   dígitos no canto indicam o BODY atual**. Informe esse número.\n   Durante a reprodução de uma animação, indicam o índice ANIM.
    Ao selecionar novo modelo, sua pose de repouso é remontada e
    a lista de clipes compatíveis é recalculada.
 5. Para um BODY com 18 grupos, **B + direcional ESQUERDA** testa
