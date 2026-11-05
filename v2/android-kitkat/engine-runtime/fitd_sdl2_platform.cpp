@@ -23,6 +23,12 @@
 #include <unistd.h>
 #include <android/log.h>
 
+// SDL2's Android pause event can block SDL_PollEvent before the game thread
+// releases its EGL context. Keep the event pump alive and coordinate explicitly.
+extern "C" void fitdAndroidSetLifecyclePaused(int paused);
+extern "C" bool fitdAndroidRecoverGraphicsIfNeeded();
+
+
 // Presentation may run between 25 Hz logic ticks on the same GLES2 worker.
 extern "C" bool fitdAndroidPresentCachedFrame();
 extern "C" void fitdAndroidCaptureFrame();
@@ -92,6 +98,70 @@ static std::atomic<bool> engineExitRequested{false};
 struct FitdAndroidStopEngine {};
 static std::atomic<bool> engineWorkerExited{false};
 static std::atomic<int> engineWorkerResult{-1};
+static std::atomic<bool> appInBackground{false};
+static std::atomic<bool> workerContextDetached{false};
+static std::atomic<bool> pendingGpuReset{false};
+
+static int SDLCALL fitdLifecycleEventFilter(void*,SDL_Event* event) {
+    if(event->type==SDL_APP_WILLENTERBACKGROUND) {
+        appInBackground.store(true,std::memory_order_release);
+        SDL_Log("FITD-LIFECYCLE: WILL_ENTER_BACKGROUND worker_detached=%d",
+                workerContextDetached.load()?1:0);
+    } else if(event->type==SDL_APP_DIDENTERFOREGROUND) {
+        SDL_Log("FITD-LIFECYCLE: DID_ENTER_FOREGROUND (await main event pump)");
+    } else if(event->type==SDL_RENDER_DEVICE_RESET) {
+        pendingGpuReset.store(true);
+        SDL_Log("FITD-LIFECYCLE: SDL_RENDER_DEVICE_RESET received");
+    }
+    return 1;
+}
+
+extern "C" void fitdAndroidOnForeground() {
+    // SDL2 may temporarily make the restored context current on SDL_main.
+    // The worker must be its sole long-lived EGL owner.
+    if(workerContextDetached.load(std::memory_order_acquire)) {
+        if(SDL_GL_MakeCurrent(engineWindow,nullptr)!=0)
+            SDL_Log("FITD-LIFECYCLE: main GL detach: %s",SDL_GetError());
+    }
+    appInBackground.store(false,std::memory_order_release);
+    SDL_Log("FITD-LIFECYCLE: foreground resume requested");
+}
+
+static void fitdWaitIfBackground() {
+    if(!appInBackground.load(std::memory_order_acquire))return;
+    if(!workerContextDetached.load(std::memory_order_acquire)) {
+        SDL_Log("FITD-LIFECYCLE: worker entering background; releasing EGL");
+        glFlush();
+        if(SDL_GL_MakeCurrent(engineWindow,nullptr)!=0)
+            SDL_Log("FITD-LIFECYCLE: worker GL detach: %s",SDL_GetError());
+        workerContextDetached.store(true,std::memory_order_release);
+    }
+    while(appInBackground.load(std::memory_order_acquire) &&
+          !engineExitRequested.load())SDL_Delay(10);
+    if(engineExitRequested.load())throw FitdAndroidStopEngine{};
+    SDL_Log("FITD-LIFECYCLE: worker reacquiring EGL");
+    if(SDL_GL_MakeCurrent(engineWindow,engineContext)!=0) {
+        SDL_Log("FITD-LIFECYCLE: EGL_REATTACH_FAILED %s",SDL_GetError());
+        engineExitRequested.store(true);
+        throw FitdAndroidStopEngine{};
+    }
+    workerContextDetached.store(false,std::memory_order_release);
+    if(!fitdAndroidRecoverGraphicsIfNeeded()) {
+        SDL_Log("FITD-LIFECYCLE: GPU_RECOVERY_FAILED");
+        engineExitRequested.store(true);
+        throw FitdAndroidStopEngine{};
+    }
+    if(pendingGpuReset.exchange(false))
+        SDL_Log("FITD-LIFECYCLE: device reset event acknowledged");
+    // Do not 'catch up' with an hour of frames after unlocking the screen.
+    presentDeadline=0;
+    presentPeriod=0;
+    presentationWindowStart=0;
+    renderedPresentations=0;
+    lastReportedLogicCounter=realLogicCounter.load();
+    SDL_Log("FITD-LIFECYCLE: RESUMED; EGL state checked");
+}
+
 extern "C" void fitdAndroidRequestExit(void) {
     engineExitRequested.store(true);
 }
@@ -191,6 +261,7 @@ void osystem_init() {
 
 int FitdInit(int argc,char* argv[]) {
     (void)argc;(void)argv;
+    SDL_SetHint(SDL_HINT_ANDROID_BLOCK_ON_PAUSE,"0");
     if(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_JOYSTICK|
                 SDL_INIT_GAMECONTROLLER|SDL_INIT_AUDIO)!=0) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
@@ -198,6 +269,8 @@ int FitdInit(int argc,char* argv[]) {
         return 10;
     }
     openRuntimeLog();
+    SDL_SetEventFilter(fitdLifecycleEventFilter,nullptr);
+    SDL_Log("FITD-LIFECYCLE: nonblocking SDL2 Android pause handling enabled");
     const char* storage=SDL_AndroidGetInternalStoragePath();
     if(!storage || strlen(storage)+2>=sizeof(homePath)) {
         SDL_Log("FITD-RUNTIME: E_PRIVATE_STORAGE");
@@ -273,6 +346,11 @@ int FitdInit(int argc,char* argv[]) {
     while(!engineExitRequested.load()) {
         readKeyboard();
         if(engineExitRequested.load())break;
+        if(appInBackground.load(std::memory_order_acquire)) {
+            nextLogic=SDL_GetPerformanceCounter();
+            SDL_Delay(10);
+            continue;
+        }
         const Uint64 now=SDL_GetPerformanceCounter();
         if(now<nextLogic) {
             if(nextLogic-now>frequency/500u)SDL_Delay(1);
@@ -324,6 +402,7 @@ u32 osystem_startOfFrame() {
     const Uint32 waitStarted=SDL_GetTicks();
     for(;;) {
         if(engineExitRequested.load())throw FitdAndroidStopEngine{};
+        fitdWaitIfBackground();
         presentOnFixedClock();
         const int waitResult=SDL_SemWaitTimeout(startOfRender,1);
         if(waitResult==0)break;
@@ -350,6 +429,7 @@ u32 osystem_startOfFrame() {
     return 1u;
 }
 void osystem_endOfFrame() {
+    fitdWaitIfBackground();
     osystem_flushPendingPrimitives();
     osystem_drawUILayer();
     renderGameWindow();
