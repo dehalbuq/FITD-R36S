@@ -44,4 +44,10 @@ bool fitd_anim_can_apply(const FitdAnimClip *anim,const FitdBody *body);
 bool fitd_anim_pose(const FitdAnimClip *anim,const FitdBody *body,
                     double ticks,FitdPoseVertex *vertices,size_t capacity,
                     FitdAnimSample *sample);
+/* AITD1's AnimNuage overrides BODY group zero with the actor angles.
+   Test06.1 applies yaw in cinematic projection instead, so suppress the
+   animated root rotation to avoid double-rotating the skeleton. */
+bool fitd_anim_pose_actor(const FitdAnimClip *anim,const FitdBody *body,
+                          double ticks,FitdPoseVertex *vertices,
+                          size_t capacity,FitdAnimSample *sample);
 #endif
