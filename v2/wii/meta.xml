@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <app version="1">
-  <name>FITD Wii Teste 06.3.1</name>
+  <name>FITD Wii Teste 07</name>
   <coder>dehalbuq / FITD-R36S contributors</coder>
-  <version>0.6.3.1</version>
+  <version>0.7.0</version>
   <release_date>20261105</release_date>
-  <short_description>Native Wii GX: safe BODY rest pose and smooth seamless occlusion masks</short_description>
-  <long_description>Experimental native PowerPC/GX technical prototype. Restores articulated BODY pose without an animation, scans original LISTANIM.PAK for skeleton-compatible clips and permits manual B+A inspection. Uses bilinear RGBA8 foreground masks with camera RGB retained in transparent texels for soft, black-halo-free compositing. Not a complete playable game; user-owned original PAK files required and not bundled. Test06.1 remains the approved reference.</long_description>
+  <short_description>Batch diagnostics + 8 automatic animation previews</short_description>
+  <long_description>One-pass diagnostics of original game animations, cameras, masks, collision and motion, with numeric on-screen indices for 8 short animation previews. All scene rendering and the stable 06.3.1 foreground masks remain. Not yet a complete game. Original game PAK assets required but never included.</long_description>
   <ahb_access/>
 </app>
