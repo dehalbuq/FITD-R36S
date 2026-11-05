@@ -592,8 +592,10 @@ int main(int argc,char **argv){
                         const bool walkLoaded=
                             fitd_anim_load(&actorWalkAnimation,DATA_DIR,288,diag);
                         actorIdleCompatible=idleLoaded &&
+                            actorIdleAnimation.group_count==originalBody.group_count &&
                             fitd_anim_can_apply(&actorIdleAnimation,&originalBody);
                         actorWalkCompatible=walkLoaded &&
+                            actorWalkAnimation.group_count==originalBody.group_count &&
                             fitd_anim_can_apply(&actorWalkAnimation,&originalBody);
                         fitd_motion_reset(&actorMotion);
                         actorSceneMode=originalCamera.valid &&
