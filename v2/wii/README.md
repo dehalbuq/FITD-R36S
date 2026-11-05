@@ -1,3 +1,95 @@
+# FITD Wii Teste 06 - ator, câmera e máscara automática
+
+STATUS: PROTÓTIPO TÉCNICO NATIVO PARA NINTENDO WII, NÃO É O JOGO COMPLETO.
+
+Este teste parte do Wii 05.3, cuja oclusão foi confirmada visualmente
+em hardware. O código anterior não foi alterado: Teste 05.3,
+Android Teste 19 e R36S ARM64 permanecem preservados.
+
+Novidades do 06:
+- BODY 15 e ANIM 301, modelo e animação originais da cópia do usuário,
+  carregados juntos para representar o ator de teste.
+- Modelo 3D projetado nos fundos CAMERA00 usando as posições,
+  ângulos e valores de perspectiva vindos do ETAGE00.
+- Ator movido nas coordenadas reais da sala, com bloqueio básico
+  pelas zonas hard do ETAGE (volume aproximado para o ator).
+- Troca automática de câmera ao entrar em polígonos de cobertura
+  presentes no ETAGE, mantendo a atual se nenhuma for apropriada.
+- Seleção automática das máscaras conforme as condições originais
+  de retângulos X/Z de cada máscara: não usamos a união inteira.
+- A prévia 05.3 ainda está disponível, permitindo comparação.
+
+Importante: isto NÃO implementa o jogador real dos scripts do FITD.
+A posição inicial é estimada em um polígono de câmera livre de colisões
+(com fallback na origem); não é posição de um save original.
+O volume do ator é provisório e a câmera ainda não foi testada no Wii
+com os modelos em coordenadas de jogo. Precisamos validar isso antes de
+dizer que a projeção está visualmente perfeita.
+
+## Instalação
+
+Extraia o ZIP na raiz do cartão SD, preservando seus arquivos de jogo:
+
+SD:/apps/fitd-wii/data/
+  CAMERA00.PAK
+  ITD_RESS.PAK
+  LISTBODY.PAK
+  LISTANIM.PAK
+  ETAGE00.PAK
+
+Abra o FITD Wii Teste 06 no Homebrew Channel e pressione A.
+
+## Controles
+
+| Botão | Modo ator (padrão) | Visualizador 05.3 |
+|---|---|---|
+| Direcional | Mover ator nas coordenadas da sala | Trocar BODY / ANIM |
+| Segurar B | Girar ator | Girar modelo |
+| 1 | Liga/desliga máscaras automáticas | Ciclo cena/máscara/GX |
+| 2 | Trocar para visualizador 05.3 | Voltar ao ator |
+| A | Pausar/retomar animação | Pausar/retomar animação |
+| + / - | Mudar câmera manualmente | Mudar câmera manualmente |
+| B + / - | Trocar sala ETAGE | Trocar sala ETAGE |
+| HOME | Sair | Sair |
+
+No controle GameCube: X=2, Y=1, R/L=+/- e START=HOME.
+
+## Diagnóstico
+
+Principal: SD:/fitd-wii-test06-diagnostic.txt
+Cópia: SD:/apps/fitd-wii/wii-diagnostic.txt
+
+Procure:
+- FITD-WII-ACTOR06 enabled=1 body=15 anim=301 ...
+- FITD-WII-ACTOR06 spawn=... polygon_match=...
+- FITD-WII-ACTOR06 active=1 ... projected=... origin_screen=...
+- FITD-WII-ACTOR06 camera_auto=... pos=...
+- FITD-WII-ACTOR06 occlusion=1 ... matched=...
+- FITD-WII-MASK05 ... actor_auto=1 actor_matched=...
+- GX frames=... fps=...
+- finish ... endianness_check=PASS
+
+Se projected=0, informe a câmera em uso e o log; pode ser calibração
+da projeção ou o ator fora de quadro. Se active_masks=0, não havia
+máscara aplicável à posição do ator.
+
+## Pendente para uma versão jogável
+
+- Importar o estado de atores, objetos e scripts do jogo completo.
+- Sincronizar colisões e animação de movimento com o ZV real.
+- Transições de sala/andar, inventário, IA, luta, áudio, save/load.
+- Integrar as correções completas das versões R36S/Android ao executável
+  Wii: elas continuam preservadas no repositório, mas ainda não estão
+  rodando nesta prévia técnica.
+
+Créditos: Free in the Dark (yaz0r/FITD, GPL-2.0),
+dehalbuq/FITD-R36S, Cyril VOILA e Mark Adler e demais colaboradores.
+Sem arquivos comerciais de Alone in the Dark; o usuário fornece
+os dados de sua própria cópia legitimamente adquirida.
+Nintendo não é afiliada ao projeto.
+
+---
+
 # FITD Wii — Teste 05.3: inspeção visual das máscaras de oclusão
 
 ## Por que este teste existe?
