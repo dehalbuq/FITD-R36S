@@ -25,6 +25,9 @@ bool fitd_mask_gx_init(FitdMaskOverlay *layer){
     DCFlushRange(layer->tiled_pixels,MASK_W*MASK_H*2u);
     GX_InitTexObj(&layer->texture,layer->tiled_pixels,MASK_W,MASK_H,
                   GX_TF_RGB5A3,GX_CLAMP,GX_CLAMP,GX_FALSE);
+    /* Never interpolate transparent black texels against opaque pixels:
+       it caused a dark fringe along original AITD foreground masks. */
+    GX_InitTexObjFilterMode(&layer->texture,GX_NEAR,GX_NEAR);
     return true;
 }
 bool fitd_mask_gx_update(FitdMaskOverlay *layer,
@@ -68,6 +71,9 @@ void fitd_mask_gx_draw(FitdMaskOverlay *layer,unsigned width,unsigned height){
     GX_LoadProjectionMtx(ortho,GX_ORTHOGRAPHIC);
     GX_SetZMode(GX_FALSE,GX_ALWAYS,GX_FALSE);
     GX_SetBlendMode(GX_BM_BLEND,GX_BL_SRCALPHA,GX_BL_INVSRCALPHA,GX_LO_CLEAR);
+    /* Binary cutout alpha; transparent texels do not touch the EFB. */
+    GX_SetAlphaCompare(GX_GREATER,0,GX_AOP_AND,GX_ALWAYS,0);
+    GX_SetNumTevStages(1);
     GX_SetNumChans(0);
     GX_SetNumTexGens(1);
     GX_SetTexCoordGen(GX_TEXCOORD0,GX_TG_MTX2x4,GX_TG_TEX0,GX_IDENTITY);
@@ -85,6 +91,7 @@ void fitd_mask_gx_draw(FitdMaskOverlay *layer,unsigned width,unsigned height){
       GX_Position3f32((float)width,(float)height,0);GX_TexCoord2f32(1,1);
       GX_Position3f32(0,(float)height,0);GX_TexCoord2f32(0,1);
     GX_End();
+    GX_SetAlphaCompare(GX_ALWAYS,0,GX_AOP_AND,GX_ALWAYS,0);
     GX_SetBlendMode(GX_BM_NONE,GX_BL_ONE,GX_BL_ZERO,GX_LO_CLEAR);
     GX_SetNumChans(1);
     GX_SetNumTexGens(0);
