@@ -112,13 +112,13 @@ jobs:
           cp v2/wii/COMPAT_TEST19.md dist/apps/fitd-wii/COMPAT_TEST19.md
           printf 'Copy ETAGE00.PAK, CAMERA00.PAK, ITD_RESS.PAK, LISTBODY.PAK and LISTANIM.PAK from your own original game. Test05 previews ETAGE rooms, camera/mask polygons, 3D models and animation. Game assets are NOT included.\n' > dist/apps/fitd-wii/data/PUT_GAME_FILES_HERE.txt
           (cd dist && zip -q -r ../FITD-WII-GX-TEST06-3-1-SEAMLESS-MASK.zip apps)
-          test -s FITD-WII-GX-TEST06-3-REST-MASK-CORRIGIDO.zip
-          unzip -t FITD-WII-GX-TEST06-3-REST-MASK-CORRIGIDO.zip | tail -n 2
-          ls -lh FITD-WII-GX-TEST06-3-REST-MASK-CORRIGIDO.zip
+          test -s FITD-WII-GX-TEST06-3-1-SEAMLESS-MASK.zip
+          unzip -t FITD-WII-GX-TEST06-3-1-SEAMLESS-MASK.zip | tail -n 2
+          ls -lh FITD-WII-GX-TEST06-3-1-SEAMLESS-MASK.zip
 
       - name: Upload Wii Homebrew boot.dol ZIP
         uses: actions/upload-artifact@v4
         with:
           name: FITD-WII-TEST06-3-1-SEAMLESS-MASK-POWERPC
-          path: FITD-WII-GX-TEST06-3-REST-MASK-CORRIGIDO.zip
+          path: FITD-WII-GX-TEST06-3-1-SEAMLESS-MASK.zip
           if-no-files-found: error
