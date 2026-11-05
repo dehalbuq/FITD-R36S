@@ -551,6 +551,31 @@ int main(int argc,char **argv){
                                 fflush(diag);
                             }
                         }
+                        /* This BODY/ANIM pair was validated in the Test04 Wii log.
+                           Still a manual prototype actor, not the game spawn. */
+                        const bool actorBody=
+                            fitd_body_load(&originalBody,DATA_DIR,15,diag);
+                        const bool actorAnim=
+                            fitd_anim_load(&originalAnimation,DATA_DIR,301,diag);
+                        actorSceneMode=originalCamera.valid &&
+                            currentStageRoom.valid && actorBody && actorAnim;
+                        if(actorSceneMode){
+                            fitd_scene_choose_spawn(&sceneActor,&originalStage,
+                                &currentStageRoom,originalCamera.current,diag);
+                            animationTicks=0.0;
+                            showOriginalBody=true;
+                            showOriginalCamera=true;
+                            showStageMask=true;
+                            if(diag){
+                                fprintf(diag,
+                                  "FITD-WII-ACTOR06 enabled=1 body=%u "
+                                  "anim=%u compatible=%d mask_auto=1\n",
+                                  originalBody.index,originalAnimation.index,
+                                  fitd_anim_can_apply(&originalAnimation,
+                                                     &originalBody)?1:0);
+                                fflush(diag);
+                            }
+                        }
                         if(fitd_mask_gx_init(&stageOverlay))
                             stage_refresh_camera();
                         else if(diag)
@@ -563,6 +588,29 @@ int main(int argc,char **argv){
             continue;
         }
         const u32 wpHeld=WPAD_ButtonsHeld(0), gcHeld=PAD_ButtonsHeld(0);
+        const bool bHeld=((wpHeld&WPAD_BUTTON_B)!=0) ||
+                         ((gcHeld&PAD_BUTTON_B)!=0);
+        const bool modeToggle=(((wpDown&WPAD_BUTTON_2)!=0) ||
+                               ((gcDown&PAD_BUTTON_X)!=0)) &&
+                              !bHeld && originalStage.valid;
+        if(modeToggle){
+            actorSceneMode=!actorSceneMode;
+            if(actorSceneMode){
+                showOriginalCamera=true;
+                showOriginalBody=true;
+                showStageMask=true;
+            }else{
+                showStageMask=false;
+            }
+            stage_refresh_camera();
+            if(diag){
+                fprintf(diag,
+                    "FITD-WII-ACTOR06 mode=%s camera=%u x=%.0f z=%.0f\n",
+                    actorSceneMode?"ACTOR":"INSPECTOR",
+                    originalCamera.current,sceneActor.x,sceneActor.z);
+                fflush(diag);
+            }
+        }
         const u64 nowAnimTime=gettime();
         const u64 passedMs=ticks_to_millisecs(nowAnimTime-previousAnimTime);
         previousAnimTime=nowAnimTime;
@@ -578,7 +626,7 @@ int main(int argc,char **argv){
                 fflush(diag);
             }
         }
-        if(showOriginalCamera && originalAnimation.valid){
+        if(!actorSceneMode && showOriginalCamera && originalAnimation.valid){
             int direction=0;
             if((wpDown&WPAD_BUTTON_UP)||(gcDown&PAD_BUTTON_UP))direction=1;
             if((wpDown&WPAD_BUTTON_DOWN)||(gcDown&PAD_BUTTON_DOWN))direction=-1;
@@ -603,7 +651,17 @@ int main(int argc,char **argv){
             const bool combo=((wpHeld&WPAD_BUTTON_B)!=0) ||
                              ((gcHeld&PAD_BUTTON_B)!=0);
             if((wpDown & WPAD_BUTTON_1)||(gcDown & PAD_BUTTON_Y)){
-                if(combo){
+                if(actorSceneMode){
+                    showStageMask=!showStageMask;
+                    if(diag){
+                        fprintf(diag,
+                          "FITD-WII-ACTOR06 occlusion=%d camera=%u "
+                          "matched=%u pixels=%u\n",
+                          showStageMask?1:0,originalCamera.current,
+                          sceneMaskSelected,stageMasks.covered_pixels);
+                        fflush(diag);
+                    }
+                }else if(combo){
                     showStageMask=!showStageMask;
                     if(diag){
                         fprintf(diag,
@@ -682,14 +740,14 @@ int main(int argc,char **argv){
                       stageOverlay.ready?1:0);
                     fflush(diag);
                 }
-            }else if(originalBody.valid){
+            }else if(!modeToggle && originalBody.valid){
                 showOriginalBody=!showOriginalBody;
                 if(diag)fprintf(diag,"FITD-WII-BODY overlay=%d\n",
                                 showOriginalBody?1:0);
             }
         }
         if(originalBody.valid){
-            if(showOriginalCamera && ((wpDown&(WPAD_BUTTON_LEFT|WPAD_BUTTON_RIGHT)) ||
+            if(!actorSceneMode && showOriginalCamera && ((wpDown&(WPAD_BUTTON_LEFT|WPAD_BUTTON_RIGHT)) ||
                                       (gcDown&(PAD_BUTTON_LEFT|PAD_BUTTON_RIGHT)))){
                 const bool forward=((wpDown&WPAD_BUTTON_RIGHT) ||
                                     (gcDown&PAD_BUTTON_RIGHT))!=0;
@@ -701,7 +759,53 @@ int main(int argc,char **argv){
                     showOriginalBody=true;
             }
         }
-        const bool browsingBodies=showOriginalCamera && originalBody.valid;
+        /* Real room units, tested against ETAGE hard collision boxes.
+           Recompute polygons at most five times per second while walking
+           to avoid SD/log overhead on Wii. */
+        if(actorSceneMode && currentStageRoom.valid && originalCamera.valid){
+            float dx=0.f,dz=0.f;
+            const float units=35.f;
+            if((wpHeld&WPAD_BUTTON_LEFT)||(gcHeld&PAD_BUTTON_LEFT))
+                dx-=units;
+            if((wpHeld&WPAD_BUTTON_RIGHT)||(gcHeld&PAD_BUTTON_RIGHT))
+                dx+=units;
+            if((wpHeld&WPAD_BUTTON_UP)||(gcHeld&PAD_BUTTON_UP))
+                dz-=units;
+            if((wpHeld&WPAD_BUTTON_DOWN)||(gcHeld&PAD_BUTTON_DOWN))
+                dz+=units;
+            if(bHeld){
+                sceneActor.yaw=(sceneActor.yaw+6u)&1023u;
+                dx=0;dz=0;
+            }
+            if(dx!=0 || dz!=0){
+                const bool moved=fitd_scene_move(&sceneActor,
+                                                &currentStageRoom,dx,dz);
+                if(moved){
+                    const int next=fitd_stage_camera_auto(&originalStage,
+                        &currentStageRoom,(int)sceneActor.x,(int)sceneActor.z,
+                        (int)originalCamera.current);
+                    if(next>=0 && (unsigned)next!=originalCamera.current &&
+                       (unsigned)next<originalCamera.frames &&
+                       fitd_camera_set(&originalCamera,DATA_DIR,
+                                       (unsigned)next,diag)){
+                        sceneCamChanges++;
+                        stage_refresh_camera();
+                        if(diag){
+                            fprintf(diag,
+                                "FITD-WII-ACTOR06 camera_auto=%d "
+                                "pos=%.0f,%.0f yaw=%u\n",
+                                next,sceneActor.x,sceneActor.z,
+                                sceneActor.yaw);
+                            fflush(diag);
+                        }
+                    }else if(frameCount%12u==0u){
+                        stage_refresh_camera();
+                    }
+                }
+            }
+        }
+        const bool browsingBodies=(showOriginalCamera && originalBody.valid) ||
+                                  actorSceneMode;
         bool walking=false;
         // D-pad LEFT/RIGHT selects models while previewing a camera.
         // Do not also translate the actor out of the visible scene.
@@ -709,7 +813,7 @@ int main(int argc,char **argv){
         if(!browsingBodies && ((wpHeld&WPAD_BUTTON_RIGHT)||(gcHeld&PAD_BUTTON_RIGHT))){x+=0.045f;walking=true;}
         if(!browsingBodies && ((wpHeld&WPAD_BUTTON_UP)||(gcHeld&PAD_BUTTON_UP))){z-=0.045f;walking=true;}
         if(!browsingBodies && ((wpHeld&WPAD_BUTTON_DOWN)||(gcHeld&PAD_BUTTON_DOWN))){z+=0.045f;walking=true;}
-        if((wpHeld&WPAD_BUTTON_B)||(gcHeld&PAD_BUTTON_B))rotation+=1.65f;
+        if(!actorSceneMode && bHeld)rotation+=1.65f;
         if(x>3.5f)x=3.5f;
         if(x< -3.5f)x=-3.5f;
         if(z>2.f)z=2.f;
@@ -719,6 +823,18 @@ int main(int argc,char **argv){
         render_gx(x,z,rotation,walk);
         ++frameCount;
         if(diag && frameCount%300==0){
+            FitdSceneScreenPoint center={0};
+            const bool projected=fitd_scene_project(&sceneCamera,
+                &currentStageRoom,&sceneActor,0.f,0.f,0.f,&center);
+            fprintf(diag,
+              "FITD-WII-ACTOR06 active=%d x=%.0f y=%.0f z=%.0f "
+              "yaw=%u projected=%u origin_screen=%.1f,%.1f "
+              "origin_valid=%d active_masks=%u collision_blocks=%u "
+              "steps=%u auto_cameras=%u mask_checks=%u\n",
+              actorSceneMode?1:0,sceneActor.x,sceneActor.y,sceneActor.z,
+              sceneActor.yaw,sceneProjected,center.x,center.y,
+              projected?1:0,sceneMaskSelected,sceneActor.collisions,
+              sceneActor.steps,sceneCamChanges,sceneMaskChecks);
             fprintf(diag,
               "FITD-WII-STAGE05 available=%d floor=%u room=%u "
               "camera=%u mask_preview=%d mask_ready=%d "
