@@ -1,5 +1,5 @@
 /*
- * FITD Wii GX original ETAGE actor idle and walk state controlled by actual movement v0.6.2 -- Wii homebrew hardware/renderer validation.
+ * FITD Wii GX original ETAGE actor articulated rest pose, mask filtering and clip inspection v0.6.3 -- Wii homebrew hardware/renderer validation.
  *
  * This is NOT the FITD game engine yet. It exercises native PowerPC,
  * Hollywood GX 3D + Z-buffer, 480p/480i VI, Wii Remote/GameCube inputs,
@@ -38,7 +38,7 @@
 #define GX_FIFO_BYTES (256u*1024u)
 #define DATA_DIR "sd:/apps/fitd-wii/data"
 #define LOG_FILE "sd:/apps/fitd-wii/wii-diagnostic.txt"
-#define ROOT_LOG_FILE "sd:/fitd-wii-test06-2-diagnostic.txt"
+#define ROOT_LOG_FILE "sd:/fitd-wii-test06-3-diagnostic.txt"
 
 static GXRModeObj *videoMode;
 static void *xfb[2]={NULL,NULL};
@@ -52,11 +52,16 @@ static FitdBody originalBody={0};
 static FitdAnimInfo animMetadata={0};
 static bool showOriginalBody=false;
 static FitdAnimClip originalAnimation={0};
-static FitdAnimClip actorIdleAnimation={0};
-static FitdAnimClip actorWalkAnimation={0};
+/* Only animations matching BODY 15 can be previewed on command. */
+#define BODY_CANDIDATE_CAP 128u
+static unsigned actorCandidates[BODY_CANDIDATE_CAP]={0};
+static unsigned actorCandidateCount=0;
+static int actorCandidateSlot=-1; /* -1 = articulated BODY rest pose */
+static FitdAnimClip actorCandidateAnimation={0};
+static bool actorRestReady=false;
+static double actorCandidateTicks=0.0;
 static FitdMotionController actorMotion={0};
 static unsigned displayedAnim=0;
-static bool actorIdleCompatible=false,actorWalkCompatible=false;
 static FitdPoseVertex animationPose[FITD_BODY_MAX_VERTICES];
 static FitdAnimSample animationSample={0};
 static bool animationPlaying=true;
@@ -210,7 +215,7 @@ static void diagnostic_open(void){
         const char *path=candidates[i];
         FILE *f=fopen(path,"wb");
         if(!f){firstLogError=errno;continue;}
-        const int bad=fputs("FITD Wii Test06.2 - log created at boot\n",f)==EOF
+        const int bad=fputs("FITD Wii Test06.3 - log created at boot\n",f)==EOF
                     || fflush(f)!=0 || ferror(f);
         const int closed=fclose(f);
         if(bad || closed!=0){firstLogError=errno;continue;}
@@ -414,28 +419,32 @@ static void render_gx(float x,float z,float rotation,float walk){
         fitd_camera_draw(&originalCamera,videoMode->fbWidth,videoMode->efbHeight);
         if(showOriginalBody && originalBody.valid){
             if(actorSceneMode){
-                /* ANIM 301 was an injury animation used in Test06.1 to
-                   validate the skeleton. Never repeat it as locomotion.
-                   LIFE 549/550's ANIM_MOVE uses separate idle/walk clips;
-                   this prototype binds documented 287/288 candidates
-                   after verifying compatibility with the user's BODY. */
-                const FitdAnimClip *motionClip=
-                    actorMotion.kind==FITD_MOTION_WALK
-                        ?&actorWalkAnimation:&actorIdleAnimation;
-                const bool compatible=actorMotion.kind==FITD_MOTION_WALK
-                    ?actorWalkCompatible:actorIdleCompatible;
-                poseReady=compatible &&
-                    fitd_anim_pose_actor(motionClip,&originalBody,
-                        actorMotion.ticks,animationPose,
+                /* Test06.2: 287/288 have 18 groups; BODY 15 has 20.
+                   Never apply incompatible clips or raw BODY vertices. */
+                const bool canPreview=actorCandidateSlot>=0 &&
+                    actorCandidateAnimation.valid &&
+                    actorCandidateAnimation.group_count==originalBody.group_count &&
+                    fitd_anim_can_apply(&actorCandidateAnimation,&originalBody);
+                poseReady=canPreview &&
+                    fitd_anim_pose_actor(&actorCandidateAnimation,&originalBody,
+                        actorCandidateTicks,animationPose,
                         FITD_BODY_MAX_VERTICES,&animationSample);
-                displayedAnim=poseReady?motionClip->index:0u;
+                displayedAnim=poseReady?actorCandidateAnimation.index:0u;
+                if(!poseReady && actorRestReady){
+                    poseReady=fitd_anim_pose_rest_actor(&originalBody,
+                        animationPose,FITD_BODY_MAX_VERTICES,&animationSample);
+                    displayedAnim=0u;
+                }
             }else{
                 poseReady=fitd_anim_pose(&originalAnimation,&originalBody,
                     animationTicks,animationPose,FITD_BODY_MAX_VERTICES,
                     &animationSample);
                 displayedAnim=poseReady?originalAnimation.index:0u;
             }
-            if(actorSceneMode && sceneCamera.valid && currentStageRoom.valid){
+            if(actorSceneMode && !poseReady){
+                /* Fail closed: never draw deformed, unassembled local points. */
+                sceneProjected=0;
+            }else if(actorSceneMode && sceneCamera.valid && currentStageRoom.valid){
                 fitd_scene_gx_draw(&originalBody,
                     poseReady?animationPose:NULL,
                     &currentStageRoom,&sceneCamera,&sceneActor,
@@ -506,7 +515,7 @@ int main(int argc,char **argv){
     sdReady=fatInitDefault()?1:0;
     diagnostic_open();
     if(diag){
-        fprintf(diag,"FITD WII GX idle/walk movement-driven animation v0.6.2\n");
+        fprintf(diag,"FITD WII GX rest-pose and mask-edge filtering v0.6.3\n");
         fprintf(diag,"log_path=%s\n",activeLogPath);
         fprintf(diag,"native_ppc_endian=%s\n",fitd_is_big_endian()?"BE":"LE");
         fprintf(diag,"framebuffer=%ux%u efb=%u\n",
@@ -580,38 +589,30 @@ int main(int argc,char **argv){
                            Still a manual prototype actor, not the game spawn. */
                         const bool actorBody=
                             fitd_body_load(&originalBody,DATA_DIR,15,diag);
-                        /* The 301 injury clip is preserved only in the
-                           inspector, so Test06.1 remains reproducible.
-                           These AITD1 indices are candidates inferred
-                           from documented original game transitions;
-                           compatibility is verified on real user PAKs. */
+                        /* Test06.1's injury clip remains inspector-only.
+                           No unverified idle or walk is assigned. */
                         const bool injuryPreview=
                             fitd_anim_load(&originalAnimation,DATA_DIR,301,diag);
-                        const bool idleLoaded=
-                            fitd_anim_load(&actorIdleAnimation,DATA_DIR,287,diag);
-                        const bool walkLoaded=
-                            fitd_anim_load(&actorWalkAnimation,DATA_DIR,288,diag);
-                        actorIdleCompatible=idleLoaded &&
-                            actorIdleAnimation.group_count==originalBody.group_count &&
-                            fitd_anim_can_apply(&actorIdleAnimation,&originalBody);
-                        actorWalkCompatible=walkLoaded &&
-                            actorWalkAnimation.group_count==originalBody.group_count &&
-                            fitd_anim_can_apply(&actorWalkAnimation,&originalBody);
+                        actorRestReady=actorBody &&
+                            fitd_anim_pose_rest_actor(&originalBody,
+                                animationPose,FITD_BODY_MAX_VERTICES,
+                                &animationSample);
+                        actorCandidateCount=actorBody?
+                            fitd_anim_scan_body(DATA_DIR,&originalBody,
+                                actorCandidates,BODY_CANDIDATE_CAP,diag):0u;
+                        actorCandidateSlot=-1;
+                        actorCandidateTicks=0.0;
+                        fitd_anim_release(&actorCandidateAnimation);
                         fitd_motion_reset(&actorMotion);
                         actorSceneMode=originalCamera.valid &&
                             currentStageRoom.valid && actorBody;
                         if(diag){
                             fprintf(diag,
-                              "FITD-WII-LOCOMOTION06-2 idle=287 loaded=%d "
-                              "compatible=%d frames=%u "
-                              "walk=288 loaded=%d compatible=%d frames=%u "
-                              "injury_preview=301 loaded=%d body=%u groups=%u\n",
-                              idleLoaded?1:0,actorIdleCompatible?1:0,
-                              actorIdleAnimation.frame_count,
-                              walkLoaded?1:0,actorWalkCompatible?1:0,
-                              actorWalkAnimation.frame_count,
-                              injuryPreview?1:0,
-                              originalBody.index,originalBody.group_count);
+                              "FITD-WII-REST06-3 ready=%d body=%u groups=%u "
+                              "candidates=%u animation301=%d rejected287_288=1\n",
+                              actorRestReady?1:0,originalBody.index,
+                              originalBody.group_count,actorCandidateCount,
+                              injuryPreview?1:0);
                             fflush(diag);
                         }
                         if(actorSceneMode){
@@ -624,12 +625,10 @@ int main(int argc,char **argv){
                             if(diag){
                                 fprintf(diag,
                                   "FITD-WII-ACTOR06 enabled=1 body=%u "
-                                  "idle=%u valid=%d walk=%u valid=%d "
+                                  "rest_ready=%d scan_candidates=%u "
                                   "injury_preview=%u mask_auto=1\n",
-                                  originalBody.index,actorIdleAnimation.index,
-                                  actorIdleCompatible?1:0,actorWalkAnimation.index,
-                                  actorWalkCompatible?1:0,
-                                  originalAnimation.index);
+                                  originalBody.index,actorRestReady?1:0,
+                                  actorCandidateCount,originalAnimation.index);
                                 fflush(diag);
                             }
                         }
@@ -654,6 +653,9 @@ int main(int argc,char **argv){
             actorSceneMode=!actorSceneMode;
             if(actorSceneMode){
                 fitd_motion_reset(&actorMotion);
+                actorCandidateSlot=-1;
+                actorCandidateTicks=0.0;
+                fitd_anim_release(&actorCandidateAnimation);
                 showOriginalCamera=true;
                 showOriginalBody=true;
                 showStageMask=true;
@@ -676,7 +678,36 @@ int main(int argc,char **argv){
            No speed-up or animation dependence on the display FPS. */
         if(animationPlaying && passedMs<=250)
             animationTicks+=(double)passedMs*0.050;
-        if((wpDown&WPAD_BUTTON_A)||(gcDown&PAD_BUTTON_A)){
+        const bool pressedA=((wpDown&WPAD_BUTTON_A)!=0) ||
+                            ((gcDown&PAD_BUTTON_A)!=0);
+        /* B+A in actor mode cycles structurally compatible clips.
+           After the final candidate, returns to BODY rest. */
+        if(pressedA && actorSceneMode && bHeld){
+            const int next=actorCandidateSlot+1;
+            actorCandidateSlot=(unsigned)next<actorCandidateCount?next:-1;
+            fitd_anim_release(&actorCandidateAnimation);
+            actorCandidateTicks=0.0;
+            bool loaded=false;
+            if(actorCandidateSlot>=0){
+                loaded=fitd_anim_load(&actorCandidateAnimation,DATA_DIR,
+                    actorCandidates[actorCandidateSlot],diag);
+                if(!loaded ||
+                   actorCandidateAnimation.group_count!=originalBody.group_count ||
+                   !fitd_anim_can_apply(&actorCandidateAnimation,&originalBody)){
+                    fitd_anim_release(&actorCandidateAnimation);
+                    actorCandidateSlot=-1;
+                    loaded=false;
+                }
+            }
+            if(diag){
+                fprintf(diag,
+                  "FITD-WII-SCAN06-3 inspect=%s index=%u slot=%d/%u compatible=%d\n",
+                  actorCandidateSlot>=0?"CANDIDATE":"REST",
+                  loaded?actorCandidateAnimation.index:0u,
+                  actorCandidateSlot,actorCandidateCount,loaded?1:0);
+                fflush(diag);
+            }
+        }else if(pressedA){
             animationPlaying=!animationPlaying;
             if(diag){
                 fprintf(diag,"FITD-WII-ANIM04 playing=%d ticks=%.2f\n",
@@ -684,6 +715,9 @@ int main(int argc,char **argv){
                 fflush(diag);
             }
         }
+        if(actorSceneMode && actorCandidateSlot>=0 &&
+           animationPlaying && passedMs<=250u)
+            actorCandidateTicks+=(double)passedMs*0.05;
         if(!actorSceneMode && showOriginalCamera && originalAnimation.valid){
             int direction=0;
             if((wpDown&WPAD_BUTTON_UP)||(gcDown&PAD_BUTTON_UP))direction=1;
@@ -870,13 +904,12 @@ int main(int argc,char **argv){
                              passedMs,animationPlaying);
             if(oldMotion!=actorMotion.kind && diag){
                 fprintf(diag,
-                  "FITD-WII-LOCOMOTION06-2 transition=%s index=%u "
-                  "compatible=%d actor=%.0f,%.0f ticks=%.2f "
+                  "FITD-WII-LOCOMOTION06-3 transition=%s "
+                  "clip_source=%s index=%u actor=%.0f,%.0f ticks=%.2f "
                   "changes=%u\n",
                   actorMotion.kind==FITD_MOTION_WALK?"WALK":"IDLE",
-                  actorMotion.kind==FITD_MOTION_WALK?288u:287u,
-                  actorMotion.kind==FITD_MOTION_WALK
-                      ?(actorWalkCompatible?1:0):(actorIdleCompatible?1:0),
+                  actorCandidateSlot>=0?"MANUAL_PREVIEW":"REST",
+                  actorCandidateSlot>=0?actorCandidateAnimation.index:0u,
                   sceneActor.x,sceneActor.z,actorMotion.ticks,
                   actorMotion.transitions);
                 fflush(diag);
@@ -941,13 +974,12 @@ int main(int argc,char **argv){
               projected?1:0,sceneMaskSelected,sceneActor.collisions,
               sceneActor.steps,sceneCamChanges,sceneMaskChecks);
             fprintf(diag,
-              "FITD-WII-LOCOMOTION06-2 state=%s anim=%u "
+              "FITD-WII-LOCOMOTION06-3 state=%s anim=%u "
               "compatible=%d ticks=%.2f transitions=%u "
               "walk_updates=%u active=%d\n",
               actorMotion.kind==FITD_MOTION_WALK?"WALK":"IDLE",
               displayedAnim,
-              actorSceneMode?(actorMotion.kind==FITD_MOTION_WALK
-                      ?(actorWalkCompatible?1:0):(actorIdleCompatible?1:0)):0,
+              actorSceneMode?(actorCandidateSlot>=0?1:actorRestReady?1:0):0,
               actorMotion.ticks,actorMotion.transitions,
               actorMotion.walking_updates,actorSceneMode?1:0);
             fprintf(diag,
@@ -996,8 +1028,8 @@ int main(int argc,char **argv){
     fitd_stage_release(&originalStage);
     fitd_camera_release(&originalCamera);
     fitd_body_release(&originalBody);
-    fitd_anim_release(&actorIdleAnimation);
-    fitd_anim_release(&actorWalkAnimation);
+    
+    fitd_anim_release(&actorCandidateAnimation);
     fitd_anim_release(&originalAnimation);
     if(gxFifo)free(gxFifo);
     return 0;
