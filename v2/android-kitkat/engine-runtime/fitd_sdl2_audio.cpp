@@ -134,3 +134,8 @@ extern "C" void fitdAndroidSetAudioEnabled(int music,int effects){
     SDL_Log("FITD-OPTIONS: music=%s effects=%s",
             music?"ON":"OFF",effects?"ON":"OFF");
 }
+
+extern "C" void fitdAndroidSetLifecyclePaused(int paused) {
+    if(device)SDL_PauseAudioDevice(device,paused?1:0);
+    SDL_Log("FITD-LIFECYCLE: audio %s",paused?"PAUSED":"RESUMED");
+}
