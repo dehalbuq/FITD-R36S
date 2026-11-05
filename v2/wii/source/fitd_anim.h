@@ -50,4 +50,13 @@ bool fitd_anim_pose(const FitdAnimClip *anim,const FitdBody *body,
 bool fitd_anim_pose_actor(const FitdAnimClip *anim,const FitdBody *body,
                           double ticks,FitdPoseVertex *vertices,
                           size_t capacity,FitdAnimSample *sample);
+/* Assemble the original BODY's default articulated pose with no animation.
+   Used instead of drawing unassembled local vertices when a clip is missing. */
+bool fitd_anim_pose_rest_actor(const FitdBody *body,
+                               FitdPoseVertex *vertices,size_t capacity,
+                               FitdAnimSample *sample);
+/* Examine the user's LISTANIM.PAK on SD without assuming animation IDs.
+   Returns count stored (up to capacity); log records all structural matches. */
+unsigned fitd_anim_scan_body(const char *directory,const FitdBody *body,
+                              unsigned *indices,unsigned capacity,FILE *log);
 #endif
