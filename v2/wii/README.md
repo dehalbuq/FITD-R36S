@@ -1,3 +1,69 @@
+# FITD Wii Teste 07 — diagnóstico integrado (um teste, vários subsistemas)
+
+**A versão 06.3.1 já foi validada visualmente para fundo/máscaras e é preservada.**
+Esta branch de teste adiciona apenas uma bateria de diagnósticos e uma
+galeria automática das animações. Ainda não é o jogo completo.
+
+## Como testar uma só vez no Wii
+
+1. Copie o ZIP para a raiz do SD, mantendo os arquivos originais do jogo na pasta
+   `SD:/apps/fitd-wii/data/`.
+2. Abra no Homebrew Channel e pressione **A**. Na primeira entrada ele testa
+   automaticamente **todas as animações estruturalmente compatíveis** encontradas,
+   todas as câmeras do ETAGE00, a leitura das máscaras, a projeção e simulações
+   de deslocamento e colisão, **sem alterar a posição do personagem em jogo**.
+   Os resultados são registrados em `FITD-WII-SUITE07`.
+3. Com o personagem na cena, segure **B e aperte 1** (controle GameCube: **B + Y**).
+   A galeria exibirá automaticamente **até 8 animações diferentes**, selecionadas
+   por quantidade de movimento geométrico. Cada animação percorre um ciclo
+   completo, de maneira acelerada, em cerca de **2,2 segundos**. A galeria leva
+   aproximadamente **18 segundos** no total, caso existam oito candidatos.
+4. Um número grande no alto da tela identifica o índice exato do
+   `LISTANIM.PAK` em exibição, e a barra mostra o andamento da galeria.
+   Observe quais índices parecem **caminhada**, **repouso**, **dano** etc.
+   **O ranking não identifica caminhada sozinho**; clipes de ação podem
+   ter alto movimento e acabar entre os oito mostrados.
+5. Depois da galeria o ator retorna automaticamente à pose de repouso.
+   Você pode andar, mudar de câmera e verificar a oclusão normalmente.
+   Pressionar **B + 1** novamente cancela uma galeria em andamento.
+   **B + A** continua disponível para percorrer as 32 animações manualmente,
+   quando for necessário investigar além dos oito candidatos.
+6. Encerre com **HOME** (GameCube: Start). **Um único log é suficiente**.
+
+## O que é verificado automaticamente
+
+- Integridade estrutural da pose de repouso e de cada animação candidata;
+  quatro momentos por clipe, coordenadas finitas e dimensões plausíveis
+- Decodificação das câmeras do ETAGE00; máscaras e quantidade de polígonos
+- Projeção do personagem em cada câmera
+- Oito trajetórias de movimento simuladas, com passos aceitos/bloqueados e
+  seleção de câmera, sem modificar o ator real
+- Seleção das animações com movimento geométrico mais acentuado
+- Renderização habitual a ~60 FPS, com logs de posição, esqueleto,
+  máscara ativa, câmera automática e colisões reais
+
+O teste automático **não prova** que a animação representa caminhada,
+que as máscaras estão visualmente perfeitas ou que há compatibilidade
+com todos os cenários; a observação no Wii continua sendo necessária
+nesses pontos específicos.
+
+## Diagnóstico
+
+`SD:/fitd-wii-test07-batch-diagnostic.txt`
+
+Cópia: `SD:/apps/fitd-wii/wii-diagnostic.txt`
+
+Busque por `FITD-WII-SUITE07 SUMMARY` e `FITD-WII-SUITE07 FINAL`
+para o resumo, `FITD-WII-SUITE07 shortlist=` para candidatos
+classificados por movimento e `FITD-WII-GALLERY07` para o ensaio visual.
+O índice exibido na tela corresponde ao mesmo índice no log.
+
+O pacote não inclui dados comerciais. Projeto GPL-2.0 ou posterior,
+créditos a Free in the Dark/yaz0r e contribuidores de FITD-R36S.
+Não afiliado à Nintendo.
+
+---
+
 # FITD Wii Teste 06.3.1 — máscaras com suavização uniforme, sem borda preta
 
 Esta revisão corrige o último defeito visual relatado no Wii: na 06.3,
