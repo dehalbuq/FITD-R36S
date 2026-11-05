@@ -41,6 +41,8 @@ namespace {
 static unsigned char palette[256*3]={};
 static GLuint texProg=0,polyProg=0,maskProg=0,temporalProg=0,backgroundTexture=0,uiTexture=0;
 static std::map<std::pair<int,int>,GLuint> maskTextures;
+// Preserve transient masks to restore textures if Android destroys the EGL context.
+static std::map<std::pair<int,int>,std::array<u8,320*200>> maskCpuCopies;
 static unsigned maskRendered=0;
 static GLuint quadVbo=0,triVbo=0,cachedQuadVbo=0,cachedFrameTexture=0,historyFrameTexture=0;
 static GLuint cachedFrameFbo=0,historyFrameFbo=0;
@@ -831,8 +833,11 @@ void osystem_flip(unsigned char* buffer){
 }
 void osystem_createMask(const std::array<u8,320*200>& mask,
                         int roomId,int maskId,int,int,int,int){
-    if(!graphicsReady||roomId<0||roomId>255||maskId<0||maskId>255)return;
+    if(roomId<0||roomId>255||maskId<0||maskId>255)return;
     auto id=std::make_pair(roomId,maskId);
+    if(maskCpuCopies.size()<512 || maskCpuCopies.count(id))
+        maskCpuCopies[id]=mask;
+    if(!graphicsReady)return;
     auto existing=maskTextures.find(id);
     if(existing!=maskTextures.end()){
         GLuint oldTex=existing->second;
@@ -902,4 +907,36 @@ extern "C" void fitdAndroidSetHighDetail(int enabled) {
     highDetail.store(enabled!=0,std::memory_order_relaxed);
     SDL_Log("FITD-OPTIONS: graphics detail=%s (GLES2, native 320x200 palette)",
             enabled?"HIGH":"LOW");
+}
+
+/* Only the EGL-owning engine thread may run this after Android resume. */
+extern "C" bool fitdAndroidRecoverGraphicsIfNeeded() {
+    if(graphicsReady && glIsProgram(texProg)==GL_TRUE &&
+       glIsBuffer(quadVbo)==GL_TRUE)return true;
+    SDL_Log("FITD-LIFECYCLE: EGL context lost; rebuilding GLES2 shaders, FBO and room masks");
+    texProg=polyProg=maskProg=temporalProg=0;
+    backgroundTexture=uiTexture=0;
+    quadVbo=triVbo=cachedQuadVbo=0;
+    cachedFrameTexture=historyFrameTexture=0;
+    cachedFrameFbo=historyFrameFbo=0;
+    cachedDepthRb=historyDepthRb=0;
+    maskTextures.clear();
+    graphicsReady=false;
+    offscreenReady=false;
+    cachedFrameReady=false;
+    priorFrameReady=false;
+    recordingDrawCommands=false;
+    replayingDrawCommands=false;
+    meshInterpolationAvailable=false;
+    composingCommands.clear();
+    sceneCommands.clear();
+    priorSceneCommands.clear();
+    if(!initGL())return false;
+    unsigned restored=0;
+    for(const auto& entry:maskCpuCopies) {
+        osystem_createMask(entry.second,entry.first.first,entry.first.second,0,0,0,0);
+        ++restored;
+    }
+    SDL_Log("FITD-LIFECYCLE: GPU_RESTORED masks=%u",restored);
+    return true;
 }
