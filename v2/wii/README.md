@@ -1,3 +1,64 @@
+# FITD Wii Teste 07.1 — galeria paginada, BODYs e movimentos reais
+
+**Nova rodada integrada; preserva a 06.3.1 validada visualmente para máscaras.**
+BODY 15 mostrou um rifle na mão mesmo na pose neutra; pode ser a
+geometria desta variante, e não uma animação. Sem mexer nas texturas,
+este teste permite comparar outros modelos originais sem alterar assets.
+
+## ÚNICA rodada recomendada
+
+1. Extraia o ZIP na raiz do SD, preservando os arquivos originais em
+   `SD:/apps/fitd-wii/data/`. No Homebrew Channel, pressione **A**.
+2. A inicialização analisa 32 animações compatíveis com BODY 15,
+   5 câmeras, máscaras, 8 trajetórias de colisão e até 64 modelos
+   iniciais de LISTBODY, filtrando os articulados com 18 ou 20 grupos.
+3. **B + 1** inicia uma galeria de 8 animações por página. Agora cada
+   animação fica na tela **5,2 segundos**. Ao terminar, **B + 1
+   novamente mostra a página seguinte**, até percorrer todos os clipes.
+   O número grande no canto é a entrada do LISTANIM.PAK. Não precisa
+   testar a mesma página várias vezes.
+4. **B + direcional CIMA** muda para o próximo BODY compatível;
+   **B + direcional BAIXO** retorna ao anterior. Observe qual BODY
+   não possui o rifle e informe o número do log `SELECT body=`.
+   Ao selecionar novo modelo, sua pose de repouso é remontada e
+   a lista de clipes compatíveis é recalculada.
+5. Para um BODY com 18 grupos, **B + direcional ESQUERDA** testa
+   a animação original 287 e **B + direcional DIREITA** testa 288.
+   Se não for compatível, o teste registra a rejeição e conserva a
+   pose segura. Estas animações não são atribuídas à caminhada
+   automaticamente.
+6. Você também pode caminhar, mudar de câmera, observar máscaras
+   ou usar **B + A** para ir ao próximo candidato manualmente.
+   **HOME** encerra e grava o relatório consolidado.
+
+No controle GameCube, Y corresponde ao botão 1, X ao botão 2
+e Start encerra.
+
+## Como interpretar
+
+- `FITD-WII-BODYCAT07-1 candidate=`: BODYs alternativos articulados;
+- `FITD-WII-BODYCAT07-1 SELECT body=`: modelo apresentado na tela;
+- `FITD-WII-BODYCAT07-1 TEST clip=287/288`: teste de compatibilidade;
+- `FITD-WII-GALLERY07 start page=2/4`: avanço para uma página nova;
+- `FITD-WII-SUITE07 anim=...` agora inclui `move_forward` e
+  `move_x`: deslocamentos originais por ciclo de animação.
+
+Não há garantia de que todo BODY com 18 grupos seja o personagem
+desarmado ou que 287/288 correspondam à caminhada daquele modelo.
+Isso precisa de confirmação visual e da integração futura de LIFE 549/550.
+Também não muda os arquivos originais.
+
+## Log a enviar
+
+`SD:/fitd-wii-test07-1-body-gallery-diagnostic.txt`
+
+Cópia: `SD:/apps/fitd-wii/wii-diagnostic.txt`
+
+Créditos: yaz0r/Free in the Dark, dehalbuq/FITD-R36S e colaboradores.
+Motor/protótipo GPL. Sem ativos comerciais, não afiliado à Nintendo.
+
+---
+
 # FITD Wii Teste 07 — diagnóstico integrado (um teste, vários subsistemas)
 
 **A versão 06.3.1 já foi validada visualmente para fundo/máscaras e é preservada.**
