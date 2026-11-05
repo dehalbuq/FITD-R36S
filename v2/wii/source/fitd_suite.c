@@ -52,6 +52,11 @@ void fitd_suite_run(const char *directory,const FitdBody *body,
         out->clips_decoded++;
         bool good=true;
         double motion=0.0;
+        int32_t forward=0,lateral=0;
+        for(unsigned frame=0;frame<clip.frame_count;frame++){
+            forward+=clip.frames[frame].step[2];
+            lateral+=clip.frames[frame].step[0];
+        }
         /* Four different phases, tested against the rest pose. */
         for(unsigned f=0;f<4;f++){
             double tick=(double)clip.total_ticks*(double)f/4.0;
@@ -84,10 +89,12 @@ void fitd_suite_run(const char *directory,const FitdBody *body,
             }
         }else out->clip_pose_fail++;
         if(log)fprintf(log,
-           "FITD-WII-SUITE07 anim=%u frames=%u ticks=%lu pose=%s delta=%.1f\n",
+           "FITD-WII-SUITE07 anim=%u frames=%u ticks=%lu pose=%s "
+           "delta=%.1f move_x=%ld move_forward=%ld\n",
            index,clip.frame_count,(unsigned long)clip.total_ticks,
            good?"PASS":"FAIL",
-           good?(float)sqrt(motion/(4.0*(double)body->vertex_count)):0.f);
+           good?(float)sqrt(motion/(4.0*(double)body->vertex_count)):0.f,
+           (long)lateral,(long)forward);
         fitd_anim_release(&clip);
     }
     for(unsigned i=0;i<stage->camera_count;i++){
