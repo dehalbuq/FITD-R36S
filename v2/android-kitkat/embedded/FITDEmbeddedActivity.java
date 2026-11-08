@@ -162,7 +162,7 @@ public final class FITDEmbeddedActivity extends Activity {
         root.setPadding(22,22,22,22);
         root.setBackgroundColor(Color.rgb(13,16,31));
         TextView title=new TextView(this);
-        title.setText("ALONE IN THE DARK\\nFITD ARMv7 - TESTE 20");
+        title.setText("ALONE IN THE DARK\\nFITD ANDROID TV - TESTE 20");
         title.setTextColor(Color.WHITE);
         title.setTextSize(22);
         title.setGravity(Gravity.CENTER);
@@ -177,7 +177,10 @@ public final class FITDEmbeddedActivity extends Activity {
         retry.setText("TENTAR NOVAMENTE");
         retry.setOnClickListener(v->begin());
         root.addView(retry);
+        retry.setFocusable(true);
+        retry.setFocusableInTouchMode(true);
         setContentView(root);
+        retry.requestFocus();
         show("Preparando dados incorporados...");
         begin();
     }
