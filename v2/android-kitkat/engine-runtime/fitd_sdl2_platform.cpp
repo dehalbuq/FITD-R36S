@@ -99,6 +99,14 @@ static std::atomic<bool> engineExitRequested{false};
 struct FitdAndroidStopEngine {};
 static std::atomic<bool> engineWorkerExited{false};
 static std::atomic<int> engineWorkerResult{-1};
+static std::atomic<bool> touchHardwareAvailable{false};
+extern "C" void fitdAndroidSetTouchHardware(int enabled) {
+    touchHardwareAvailable.store(enabled!=0,std::memory_order_release);
+    SDL_Log("FITD-TOUCH: control overlay %s",enabled?"ENABLED":"DISABLED");
+}
+extern "C" int fitdAndroidTouchEnabled(){
+    return touchHardwareAvailable.load(std::memory_order_acquire)?1:0;
+}
 static std::atomic<bool> appInBackground{false};
 static std::atomic<bool> workerContextDetached{false};
 static std::atomic<bool> pendingGpuReset{false};
@@ -191,7 +199,7 @@ static void openRuntimeLog() {
     const char* root=SDL_AndroidGetExternalStoragePath();
     if(root && strlen(root)<440) {
         char path[512]={};
-        snprintf(path,sizeof(path),"%s/fitd-androidtv-test20-runtime.txt",root);
+        snprintf(path,sizeof(path),"%s/fitd-androidtv-test21-runtime.txt",root);
         externalRuntimeLog=fopen(path,"w");
         if(externalRuntimeLog){
             // Preserve upstream printf()/fprintf(stderr) checkpoints in TXT
@@ -263,6 +271,7 @@ void osystem_init() {
 int FitdInit(int argc,char* argv[]) {
     (void)argc;(void)argv;
     SDL_SetHint(SDL_HINT_ANDROID_BLOCK_ON_PAUSE,"0");
+    SDL_SetHint(SDL_HINT_ORIENTATIONS,"LandscapeLeft LandscapeRight Portrait PortraitUpsideDown");
     if(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_JOYSTICK|
                 SDL_INIT_GAMECONTROLLER|SDL_INIT_AUDIO)!=0) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
