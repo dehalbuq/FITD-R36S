@@ -11,13 +11,31 @@
 #include "fitd_touch_layout.h"
 #include <map>
 #include <utility>
+#include <atomic>
 
 extern "C" void fitdAndroidRequestExit();
 extern "C" void fitdAndroidOnForeground();
 extern "C" void fitdAndroidSetLifecyclePaused(int paused);
 extern "C" int fitdAndroidTouchEnabled();
+extern "C" void fitdAndroidSetGamepadConnected(int connected);
 extern SDL_Window* gWindowBGFX;
 static std::map<SDL_FingerID,std::pair<float,float>> touchFingers;
+static SDL_FingerID stickFinger=-1;
+static float currentStickX=0.f,currentStickY=0.f;
+static std::atomic<float> publishedStickX{0.f},publishedStickY{0.f};
+extern "C" float fitdAndroidTouchStickX(){return publishedStickX.load(std::memory_order_acquire);}
+extern "C" float fitdAndroidTouchStickY(){return publishedStickY.load(std::memory_order_acquire);}
+static void clearTouch(){
+    touchFingers.clear();
+    stickFinger=-1;
+    currentStickX=currentStickY=0.f;
+    publishedStickX.store(0.f,std::memory_order_release);
+    publishedStickY.store(0.f,std::memory_order_release);
+}
+static void windowSize(int& width,int& height){
+    width=640;height=480;
+    if(gWindowBGFX)SDL_GetWindowSize(gWindowBGFX,&width,&height);
+}
 
 static SDL_GameController* fitdController=nullptr;
 static SDL_Joystick* fitdRawJoystick=nullptr;
@@ -34,6 +52,7 @@ static void closeController(){
     fitdRawJoystick=nullptr;
     fitdControllerId=-1;
     wantsNewController=true;
+    fitdAndroidSetGamepadConnected(0);
 }
 static void findController(){
     if(fitdController || fitdRawJoystick)return;
@@ -96,22 +115,53 @@ void readKeyboard(void){
                 fitdAndroidSetLifecyclePaused(1);
                 break;
             case SDL_APP_DIDENTERFOREGROUND:
-                touchFingers.clear();
+                clearTouch();
                 fitdAndroidOnForeground();
                 fitdAndroidSetLifecyclePaused(0);
                 wantsNewController=true;
                 break;
             case SDL_FINGERDOWN:
+                if(fitdAndroidTouchEnabled()){
+                    int width,height;
+                    windowSize(width,height);
+                    const auto id=event.tfinger.fingerId;
+                    if(stickFinger==-1 &&
+                       fitd_touch::isStickStart(width,height,
+                                    event.tfinger.x,event.tfinger.y)){
+                        stickFinger=id;
+                        currentStickX=event.tfinger.x;
+                        currentStickY=event.tfinger.y;
+                    }else{
+                        touchFingers[id]=
+                            std::make_pair(event.tfinger.x,event.tfinger.y);
+                    }
+                }
+                break;
             case SDL_FINGERMOTION:
-                if(fitdAndroidTouchEnabled())
-                    touchFingers[event.tfinger.fingerId]=
-                        std::make_pair(event.tfinger.x,event.tfinger.y);
+                if(fitdAndroidTouchEnabled()){
+                    if(event.tfinger.fingerId==stickFinger){
+                        currentStickX=event.tfinger.x;
+                        currentStickY=event.tfinger.y;
+                    }else if(touchFingers.count(event.tfinger.fingerId)){
+                        touchFingers[event.tfinger.fingerId]=
+                            std::make_pair(event.tfinger.x,event.tfinger.y);
+                    }
+                }
                 break;
             case SDL_FINGERUP:
+                if(event.tfinger.fingerId==stickFinger){
+                    stickFinger=-1;
+                    currentStickX=currentStickY=0.f;
+                }
                 touchFingers.erase(event.tfinger.fingerId);
                 break;
+            case SDL_WINDOWEVENT:
+                if(event.window.event==SDL_WINDOWEVENT_SIZE_CHANGED ||
+                   event.window.event==SDL_WINDOWEVENT_RESIZED)
+                    clearTouch();
+                break;
             case SDL_QUIT:
-                touchFingers.clear();
+                clearTouch();
                 fitdAndroidRequestExit();
                 break;
             case SDL_KEYDOWN:
@@ -133,19 +183,40 @@ void readKeyboard(void){
             default:break;
         }
     }
+    // Re-evaluate hotplug and attachment every SDL pump. Closing a dropped
+    // gamepad reactivates touch controls without requiring app restart.
+    if(fitdController && !SDL_GameControllerGetAttached(fitdController))
+        closeController();
+    if(fitdRawJoystick && !SDL_JoystickGetAttached(fitdRawJoystick))
+        closeController();
     findController();
+    const bool padAttached=(fitdController && SDL_GameControllerGetAttached(fitdController)) ||
+        (fitdRawJoystick && SDL_JoystickGetAttached(fitdRawJoystick));
+    fitdAndroidSetGamepadConnected(padAttached?1:0);
     fitd_android::FitdInputState state=fitd_android::readGameplayInput(fitdController);
     readRawJoystick(state);
-    if(fitdAndroidTouchEnabled() && !touchFingers.empty()){
-        int width=640,height=480;
-        if(gWindowBGFX)SDL_GetWindowSize(gWindowBGFX,&width,&height);
+    if(!fitdAndroidTouchEnabled())clearTouch();
+    if(fitdAndroidTouchEnabled()){
+        int width,height;
+        windowSize(width,height);
+        float sx=0.f,sy=0.f;
+        if(stickFinger!=-1){
+            fitd_touch::stickAxes(width,height,currentStickX,currentStickY,sx,sy);
+            // Digital FITD input repeats every engine tick while held.
+            // Moving the analog knob toward UP continuously keeps UP pressed,
+            // rather than emitting a one-off tap (important for running).
+            const float threshold=.24f;
+            if(sy < -threshold)state.joyD|=1;
+            if(sy > threshold)state.joyD|=2;
+            if(sx < -threshold)state.joyD|=4;
+            if(sx > threshold)state.joyD|=8;
+        }
+        publishedStickX.store(sx,std::memory_order_release);
+        publishedStickY.store(sy,std::memory_order_release);
         for(const auto& contact:touchFingers){
-            const int btn=fitd_touch::hit(width,height,contact.second.first,contact.second.second);
+            const int btn=fitd_touch::buttonHit(width,height,
+                                     contact.second.first,contact.second.second);
             switch(btn){
-                case fitd_touch::UP:state.joyD|=1;break;
-                case fitd_touch::DOWN:state.joyD|=2;break;
-                case fitd_touch::LEFT:state.joyD|=4;break;
-                case fitd_touch::RIGHT:state.joyD|=8;break;
                 case fitd_touch::ACTION:state.click=1;break;
                 case fitd_touch::CONFIRM:state.key=0x1C;break;
                 case fitd_touch::BACK:
