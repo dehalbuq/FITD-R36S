@@ -1,8 +1,8 @@
-name: FITD Android TV ARMv7 TEST22 analog autorotation autohide
+name: FITD Android TV ARMv7 TEST23 doubletap run resize and clean relaunch
 
 on:
   push:
-    branches: ["port/android-kitkat-api19", "fix/android-armv7-test11-60fps-gles2", "fix/android-armv7-test11-fps-font-save-3d", "fix/android-armv7-test19-60hz-options-slots", "fix/android-armv7-test19-vsync-gles2-cache", "fix/android-armv7-test19-fbo-60fps", "fix/android-armv7-test19-dynamic-gles2-fbo", "fix/android-armv7-test19-60hz-present-loop", "fix/android-armv7-test19-model-interpolation", "fix/android-armv7-test19-engine-60hz", "fix/android-armv7-test19-arm64-rehaunted-ai", "fix/android-armv7-test20-lifecycle-resume", "port/android-tv-armv7-test20", "feat/android-tv-test21-touch-portrait-confirm-exit", "feat/android-tv-test22-analog-autorotate-autohide"]
+    branches: ["port/android-kitkat-api19", "fix/android-armv7-test11-60fps-gles2", "fix/android-armv7-test11-fps-font-save-3d", "fix/android-armv7-test19-60hz-options-slots", "fix/android-armv7-test19-vsync-gles2-cache", "fix/android-armv7-test19-fbo-60fps", "fix/android-armv7-test19-dynamic-gles2-fbo", "fix/android-armv7-test19-60hz-present-loop", "fix/android-armv7-test19-model-interpolation", "fix/android-armv7-test19-engine-60hz", "fix/android-armv7-test19-arm64-rehaunted-ai", "fix/android-armv7-test20-lifecycle-resume", "port/android-tv-armv7-test20", "feat/android-tv-test21-touch-portrait-confirm-exit", "feat/android-tv-test22-analog-autorotate-autohide", "feat/android-tv-test23-run-rotation-relaunch-icon"]
     paths:
       - "v2/android-kitkat/engine-runtime/**"
       - "v2/android-kitkat/embedded/**"
@@ -149,9 +149,9 @@ jobs:
           s=gradle.read_text()
           old="io.github.dehalbuq.fitdkitkatprobe"
           assert s.count(old)==1
-          s=s.replace(old,"io.github.dehalbuq.fitdandroidtv22")
-          s=s.replace("versionCode 1","versionCode 22")
-          s=s.replace("versionName '0.1'","versionName '0.22.0-analog-autohide'")
+          s=s.replace(old,"io.github.dehalbuq.fitdandroidtv23")
+          s=s.replace("versionCode 1","versionCode 23")
+          s=s.replace("versionName '0.1'","versionName '0.23.0-run-rotation-relaunch'")
           gradle.write_text(s)
           m=app/"src/main/AndroidManifest.xml"
           v=m.read_text()
@@ -168,7 +168,7 @@ jobs:
             '    </application>')
           m.write_text(v)
           label=app/"src/main/res/values/strings.xml"
-          label.write_text(label.read_text().replace("FITD GLES2 Test","FITD Android TV TEST22"))
+          label.write_text(label.read_text().replace("FITD GLES2 Test","FITD Android TV TEST23"))
           PY
           # TV launchers require both an icon and a 320x180 banner. Generate
           # original programmatic artwork; no commercial game assets in CI.
@@ -203,17 +203,18 @@ jobs:
           unzip -q /tmp/gradle.zip -d /tmp
           (cd work/fitd-realgame && /tmp/gradle-8.1.1/bin/gradle --no-daemon :app:assembleDebug)
           mkdir -p dist
-          cp work/fitd-realgame/app/build/outputs/apk/debug/app-debug.apk dist/FITD-Android-ARMv7-TV-TEST22-ANALOG-GLES2-API19.apk
+          cp work/fitd-realgame/app/build/outputs/apk/debug/app-debug.apk dist/FITD-Android-ARMv7-TV-TEST23-RUN-ROTATION-GLES2-API19.apk
 
       - name: Validate native executable and no proprietary data
         run: |
           set -euo pipefail
-          apk=dist/FITD-Android-ARMv7-TV-TEST22-ANALOG-GLES2-API19.apk
+          apk=dist/FITD-Android-ARMv7-TV-TEST23-RUN-ROTATION-GLES2-API19.apk
           "$ANDROID_HOME/build-tools/34.0.0/aapt" dump badging "$apk" | tee /tmp/fitd-realgame-badging.txt
           grep -Fq "sdkVersion:'19'" /tmp/fitd-realgame-badging.txt
           grep -Fq "native-code: 'armeabi-v7a'" /tmp/fitd-realgame-badging.txt
           grep -Eq "uses-gl-es: '0x0*20000'" /tmp/fitd-realgame-badging.txt
           "$ANDROID_HOME/build-tools/34.0.0/aapt" dump xmltree "$apk" AndroidManifest.xml | grep -Fq LEANBACK_LAUNCHER
+          "$ANDROID_HOME/build-tools/34.0.0/aapt" dump badging "$apk" | grep -Fq 'io.github.dehalbuq.fitdandroidtv23'
           unzip -Z1 "$apk" | grep -Fq 'res/drawable-nodpi'
           unzip -Z1 "$apk" | grep -E '^lib/armeabi-v7a/lib(SDL2|main).so$'
           if unzip -Z1 "$apk" | grep -Ei '\.(PAK|ITD|TAT|CC1|BBS)$'; then
@@ -225,6 +226,6 @@ jobs:
       - name: Upload real engine experimental APK (no original game files)
         uses: actions/upload-artifact@v4
         with:
-          name: FITD-ANDROID-TV-ARMV7-TEST22-ANALOG-NO-ASSETS
+          name: FITD-ANDROID-TV-ARMV7-TEST23-RUN-NO-ASSETS
           path: dist/*
           if-no-files-found: error
