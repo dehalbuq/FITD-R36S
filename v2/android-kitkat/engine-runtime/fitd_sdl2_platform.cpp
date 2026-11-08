@@ -100,12 +100,21 @@ struct FitdAndroidStopEngine {};
 static std::atomic<bool> engineWorkerExited{false};
 static std::atomic<int> engineWorkerResult{-1};
 static std::atomic<bool> touchHardwareAvailable{false};
+static std::atomic<bool> physicalControllerPresent{false};
 extern "C" void fitdAndroidSetTouchHardware(int enabled) {
     touchHardwareAvailable.store(enabled!=0,std::memory_order_release);
-    SDL_Log("FITD-TOUCH: control overlay %s",enabled?"ENABLED":"DISABLED");
+    SDL_Log("FITD-TOUCH: hardware %s",enabled?"PRESENT":"ABSENT");
+}
+extern "C" void fitdAndroidSetGamepadConnected(int connected) {
+    const bool old=physicalControllerPresent.exchange(connected!=0,std::memory_order_acq_rel);
+    if(old!=(connected!=0))
+        SDL_Log("FITD-TOUCH: physical gamepad %s; virtual controls %s",
+                connected?"CONNECTED":"DISCONNECTED",
+                connected?"HIDDEN":"AUTO");
 }
 extern "C" int fitdAndroidTouchEnabled(){
-    return touchHardwareAvailable.load(std::memory_order_acquire)?1:0;
+    return touchHardwareAvailable.load(std::memory_order_acquire) &&
+           !physicalControllerPresent.load(std::memory_order_acquire) ? 1 : 0;
 }
 static std::atomic<bool> appInBackground{false};
 static std::atomic<bool> workerContextDetached{false};
@@ -199,7 +208,7 @@ static void openRuntimeLog() {
     const char* root=SDL_AndroidGetExternalStoragePath();
     if(root && strlen(root)<440) {
         char path[512]={};
-        snprintf(path,sizeof(path),"%s/fitd-androidtv-test21-runtime.txt",root);
+        snprintf(path,sizeof(path),"%s/fitd-androidtv-test22-runtime.txt",root);
         externalRuntimeLog=fopen(path,"w");
         if(externalRuntimeLog){
             // Preserve upstream printf()/fprintf(stderr) checkpoints in TXT
