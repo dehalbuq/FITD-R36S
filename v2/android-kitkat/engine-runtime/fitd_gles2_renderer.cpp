@@ -12,6 +12,7 @@
  */
 #include "common.h"
 #include "bgfxGlue.h"
+#include "fitd_touch_layout.h"
 #include <SDL.h>
 #include <SDL_opengles2.h>
 #include <vector>
@@ -179,6 +180,7 @@ static GLuint makeProgram(const char*vs,const char*fs,
     }
     return prog;
 }
+extern "C" int fitdAndroidTouchEnabled();
 static void updateViewport(){
     // Render to a compact 4:3 GPU framebuffer, irrespective of the phone's
     // physical resolution. Present/scale in a separate GPU pass.
@@ -575,6 +577,87 @@ static bool presentInterpolatedScene(float phase,int dw,int dh,
                 meshInterpolatedPresents,phase,sceneCommands.size());
     return true;
 }
+
+static void fitdDrawTouchHUD(int dw,int dh,const fitd_touch::Layout& layout) {
+    if(!layout.active)return;
+    auto vertex=[dw,dh](float px,float py,float r,float g,float b,float a)->Vertex {
+        return {px*320.f/dw,py*200.f/dh,0.f,r,g,b,a};
+    };
+    std::vector<Vertex> faces;
+    std::vector<Vertex> labels;
+    const float radiusScale=(float)std::min(dw,dh);
+    const auto triangle=[&](std::vector<Vertex>& dst,
+                           const Vertex& a,const Vertex& b,const Vertex& c){
+        dst.push_back(a);dst.push_back(b);dst.push_back(c);
+    };
+    for(const auto& button:layout.buttons){
+        const float cx=button.x*dw,cy=button.y*dh;
+        const float radius=button.r*radiusScale;
+        const bool dpad=(int)button.id<=fitd_touch::RIGHT;
+        const float red=dpad?0.11f:0.25f;
+        const float green=dpad?0.31f:0.23f;
+        const float blue=dpad?0.44f:0.40f;
+        const float alpha=.72f;
+        const int parts=32;
+        for(int k=0;k<parts;++k){
+            const float a=6.28318530718f*k/parts;
+            const float b=6.28318530718f*(k+1)/parts;
+            const float ax=cx+std::cos(a)*radius,ay=cy+std::sin(a)*radius;
+            const float bx=cx+std::cos(b)*radius,by=cy+std::sin(b)*radius;
+            triangle(faces,vertex(cx,cy,red,green,blue,alpha),
+                           vertex(ax,ay,red,green,blue,alpha),
+                           vertex(bx,by,red,green,blue,alpha));
+            // Narrow bright rim for contrast on a dark screen.
+            triangle(faces,vertex(cx+std::cos(a)*radius*.88f,cy+std::sin(a)*radius*.88f,
+                                  .72f,.78f,.88f,.38f),
+                           vertex(ax,ay,.72f,.78f,.88f,.38f),
+                           vertex(bx,by,.72f,.78f,.88f,.38f));
+        }
+        // A small five-by-seven bitmap glyph, rendered with GLES2 triangles.
+        const unsigned char* pattern=nullptr;
+        static const unsigned char glyphU[]={17,17,17,17,17,17,14};
+        static const unsigned char glyphD[]={30,17,17,17,17,17,30};
+        static const unsigned char glyphL[]={16,16,16,16,16,16,31};
+        static const unsigned char glyphR[]={30,17,17,30,20,18,17};
+        static const unsigned char glyphA[]={14,17,17,31,17,17,17};
+        static const unsigned char glyphB[]={30,17,17,30,17,17,30};
+        static const unsigned char glyphY[]={17,17,10,4,4,4,4};
+        static const unsigned char glyphM[]={17,27,21,21,17,17,17};
+        switch(button.id){
+            case fitd_touch::UP:pattern=glyphU;break;
+            case fitd_touch::DOWN:pattern=glyphD;break;
+            case fitd_touch::LEFT:pattern=glyphL;break;
+            case fitd_touch::RIGHT:pattern=glyphR;break;
+            case fitd_touch::ACTION:pattern=glyphA;break;
+            case fitd_touch::BACK:pattern=glyphB;break;
+            case fitd_touch::CONFIRM:pattern=glyphY;break;
+            case fitd_touch::MENU:pattern=glyphM;break;
+            default:break;
+        }
+        if(!pattern)continue;
+        const float cell=radius*.16f;
+        const float x0=cx-cell*2.5f,y0=cy-cell*3.5f;
+        for(int row=0;row<7;++row)for(int col=0;col<5;++col){
+            if(!(pattern[row]&(1<<(4-col))))continue;
+            const float ax=x0+cell*col,ay=y0+cell*row;
+            const float bx=ax+cell*.82f,by=ay+cell*.82f;
+            const Vertex p=vertex(ax,ay,.96f,.97f,1.f,.98f);
+            const Vertex q=vertex(bx,ay,.96f,.97f,1.f,.98f);
+            const Vertex t=vertex(bx,by,.96f,.97f,1.f,.98f);
+            const Vertex u=vertex(ax,by,.96f,.97f,1.f,.98f);
+            triangle(labels,p,q,t);triangle(labels,p,t,u);
+        }
+    }
+    glViewport(0,0,dw,dh);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_SCISSOR_TEST);
+    glDepthMask(GL_FALSE);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
+    drawVertices(GL_TRIANGLES,faces);
+    drawVertices(GL_TRIANGLES,labels);
+    glDisable(GL_BLEND);
+}
 extern "C" bool fitdAndroidPresentCachedFrame() {
     if(!graphicsReady || !offscreenReady || !cachedFrameReady ||
        !gWindowBGFX)return false;
@@ -591,9 +674,9 @@ extern "C" bool fitdAndroidPresentCachedFrame() {
     glViewport(0,0,dw,dh);
     glClearColor(0.f,0.f,0.f,1.f);
     glClear(GL_COLOR_BUFFER_BIT);
-    int w=dw,h=dw*3/4;
-    if(h>dh){h=dh;w=dh*4/3;}
-    glViewport((dw-w)/2,(dh-h)/2,w,h);
+    const auto touchLayout=fitd_touch::compute(dw,dh,fitdAndroidTouchEnabled()!=0);
+    const int w=touchLayout.w,h=touchLayout.h;
+    glViewport(touchLayout.x,touchLayout.y,w,h);
     const float meshPhase=std::max(0.f,std::min(1.f,
                              (SDL_GetTicks()-lastCaptureTicks)/40.f));
     const bool modelTween=presentInterpolatedScene(meshPhase,dw,dh,w,h);
@@ -624,6 +707,7 @@ extern "C" bool fitdAndroidPresentCachedFrame() {
     glDisableVertexAttribArray(1);
     }
     glActiveTexture(GL_TEXTURE0);
+    fitdDrawTouchHUD(dw,dh,touchLayout);
     const Uint64 before=SDL_GetPerformanceCounter();
     SDL_GL_SwapWindow(gWindowBGFX);
     const Uint64 after=SDL_GetPerformanceCounter();
