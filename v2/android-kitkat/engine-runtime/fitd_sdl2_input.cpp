@@ -8,10 +8,16 @@
 #include "fitd_gamepad_select_sdl2.h"
 #include "fitd_gameplay_input_sdl2.h"
 #include <SDL.h>
+#include "fitd_touch_layout.h"
+#include <map>
+#include <utility>
 
 extern "C" void fitdAndroidRequestExit();
 extern "C" void fitdAndroidOnForeground();
 extern "C" void fitdAndroidSetLifecyclePaused(int paused);
+extern "C" int fitdAndroidTouchEnabled();
+extern SDL_Window* gWindowBGFX;
+static std::map<SDL_FingerID,std::pair<float,float>> touchFingers;
 
 static SDL_GameController* fitdController=nullptr;
 static SDL_Joystick* fitdRawJoystick=nullptr;
@@ -90,11 +96,22 @@ void readKeyboard(void){
                 fitdAndroidSetLifecyclePaused(1);
                 break;
             case SDL_APP_DIDENTERFOREGROUND:
+                touchFingers.clear();
                 fitdAndroidOnForeground();
                 fitdAndroidSetLifecyclePaused(0);
                 wantsNewController=true;
                 break;
+            case SDL_FINGERDOWN:
+            case SDL_FINGERMOTION:
+                if(fitdAndroidTouchEnabled())
+                    touchFingers[event.tfinger.fingerId]=
+                        std::make_pair(event.tfinger.x,event.tfinger.y);
+                break;
+            case SDL_FINGERUP:
+                touchFingers.erase(event.tfinger.fingerId);
+                break;
             case SDL_QUIT:
+                touchFingers.clear();
                 fitdAndroidRequestExit();
                 break;
             case SDL_KEYDOWN:
@@ -119,6 +136,24 @@ void readKeyboard(void){
     findController();
     fitd_android::FitdInputState state=fitd_android::readGameplayInput(fitdController);
     readRawJoystick(state);
+    if(fitdAndroidTouchEnabled() && !touchFingers.empty()){
+        int width=640,height=480;
+        if(gWindowBGFX)SDL_GetWindowSize(gWindowBGFX,&width,&height);
+        for(const auto& contact:touchFingers){
+            const int btn=fitd_touch::hit(width,height,contact.second.first,contact.second.second);
+            switch(btn){
+                case fitd_touch::UP:state.joyD|=1;break;
+                case fitd_touch::DOWN:state.joyD|=2;break;
+                case fitd_touch::LEFT:state.joyD|=4;break;
+                case fitd_touch::RIGHT:state.joyD|=8;break;
+                case fitd_touch::ACTION:state.click=1;break;
+                case fitd_touch::CONFIRM:state.key=0x1C;break;
+                case fitd_touch::BACK:
+                case fitd_touch::MENU:state.key=0x1B;break;
+                default:break;
+            }
+        }
+    }
     if(tvBackPressed){state.key=0x1B;tvBackPressed=false;}
     JoyD=state.joyD;
     Click=static_cast<char>(state.click);
