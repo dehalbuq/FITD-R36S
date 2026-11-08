@@ -11,3 +11,15 @@ extern int FitdInit(int argc,char* argv[]);
 extern "C" __attribute__((visibility("default"))) int SDL_main(int argc,char* argv[]){
     return FitdInit(argc,argv);
 }
+
+#include <jni.h>
+extern "C" void fitdAndroidRequestExit();
+extern "C" void fitdAndroidSetTouchHardware(int enabled);
+extern "C" JNIEXPORT void JNICALL
+Java_org_libsdl_app_FITDTVActivity_nativeSetTouchEnabled(JNIEnv*,jobject,jint enabled){
+    fitdAndroidSetTouchHardware(enabled?1:0);
+}
+extern "C" JNIEXPORT void JNICALL
+Java_org_libsdl_app_FITDTVActivity_nativeRequestExit(JNIEnv*,jobject){
+    fitdAndroidRequestExit();
+}
