@@ -208,7 +208,7 @@ static void openRuntimeLog() {
     const char* root=SDL_AndroidGetExternalStoragePath();
     if(root && strlen(root)<440) {
         char path[512]={};
-        snprintf(path,sizeof(path),"%s/fitd-androidtv-test22-runtime.txt",root);
+        snprintf(path,sizeof(path),"%s/fitd-androidtv-test23-runtime.txt",root);
         externalRuntimeLog=fopen(path,"w");
         if(externalRuntimeLog){
             // Preserve upstream printf()/fprintf(stderr) checkpoints in TXT
@@ -320,11 +320,16 @@ int FitdInit(int argc,char* argv[]) {
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE,0);
     engineWindow=SDL_CreateWindow("Alone in the Dark",SDL_WINDOWPOS_CENTERED,
                       SDL_WINDOWPOS_CENTERED,640,480,
-                      SDL_WINDOW_OPENGL|SDL_WINDOW_FULLSCREEN);
+                      SDL_WINDOW_OPENGL|SDL_WINDOW_FULLSCREEN|SDL_WINDOW_RESIZABLE);
     if(!engineWindow) {
         SDL_Log("FITD-RUNTIME: E_WINDOW %s",SDL_GetError());
         SDL_Quit();return 14;
     }
+    // SDL2 Android orientation: a fixed 640x480 window makes the Java
+    // setOrientationBis() choose landscape even if FULL_USER is configured.
+    // RESIZABLE explicitly lets both portrait and landscape remain available.
+    SDL_SetWindowResizable(engineWindow,SDL_TRUE);
+    SDL_Log("FITD-ROTATION: fullscreen RESIZABLE; allow Android FULL_USER orientation");
     engineContext=SDL_GL_CreateContext(engineWindow);
     if(!engineContext) {
         SDL_Log("FITD-GPU: accelerated visual unavailable; retrying GLES2 default EGL config: %s",SDL_GetError());
