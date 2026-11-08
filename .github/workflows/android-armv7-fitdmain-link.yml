@@ -1,13 +1,14 @@
-name: FITD Android TV ARMv7 TEST20 GLES2 lifecycle + Bluetooth
+name: FITD Android TV ARMv7 TEST21 adaptive touch and back exit
 
 on:
   push:
-    branches: ["port/android-kitkat-api19", "fix/android-armv7-test11-60fps-gles2", "fix/android-armv7-test11-fps-font-save-3d", "fix/android-armv7-test19-60hz-options-slots", "fix/android-armv7-test19-vsync-gles2-cache", "fix/android-armv7-test19-fbo-60fps", "fix/android-armv7-test19-dynamic-gles2-fbo", "fix/android-armv7-test19-60hz-present-loop", "fix/android-armv7-test19-model-interpolation", "fix/android-armv7-test19-engine-60hz", "fix/android-armv7-test19-arm64-rehaunted-ai", "fix/android-armv7-test20-lifecycle-resume", "port/android-tv-armv7-test20"]
+    branches: ["port/android-kitkat-api19", "fix/android-armv7-test11-60fps-gles2", "fix/android-armv7-test11-fps-font-save-3d", "fix/android-armv7-test19-60hz-options-slots", "fix/android-armv7-test19-vsync-gles2-cache", "fix/android-armv7-test19-fbo-60fps", "fix/android-armv7-test19-dynamic-gles2-fbo", "fix/android-armv7-test19-60hz-present-loop", "fix/android-armv7-test19-model-interpolation", "fix/android-armv7-test19-engine-60hz", "fix/android-armv7-test19-arm64-rehaunted-ai", "fix/android-armv7-test20-lifecycle-resume", "port/android-tv-armv7-test20", "feat/android-tv-test21-touch-portrait-confirm-exit"]
     paths:
       - "v2/android-kitkat/engine-runtime/**"
       - "v2/android-kitkat/embedded/**"
       - "v2/android-kitkat/fitd_gamepad_select_sdl2.h"
       - "v2/android-kitkat/android/app/src/main/AndroidManifest.xml"
+      - "v2/android-kitkat/engine-runtime/fitd_touch_layout.h"
       - ".github/workflows/android-armv7-fitdmain-link.yml"
   workflow_dispatch:
 
@@ -138,6 +139,7 @@ jobs:
           mkdir -p "$APP/src/main/java/org/libsdl/app" "$APP/src/main/jniLibs/armeabi-v7a"
           cp -a /tmp/SDL2/android-project/app/src/main/java/. "$APP/src/main/java/"
           cp v2/android-kitkat/embedded/FITDEmbeddedActivity.java "$APP/src/main/java/org/libsdl/app/"
+          cp v2/android-kitkat/embedded/FITDTVActivity.java "$APP/src/main/java/org/libsdl/app/"
           cp /tmp/sdl2-build/libSDL2.so "$APP/src/main/jniLibs/armeabi-v7a/"
           cp /tmp/fitd-runtime-link/libmain.so "$APP/src/main/jniLibs/armeabi-v7a/"
           python3 - <<'PY'
@@ -147,9 +149,9 @@ jobs:
           s=gradle.read_text()
           old="io.github.dehalbuq.fitdkitkatprobe"
           assert s.count(old)==1
-          s=s.replace(old,"io.github.dehalbuq.fitdandroidtv20")
-          s=s.replace("versionCode 1","versionCode 20")
-          s=s.replace("versionName '0.1'","versionName '0.20.1-android-tv'")
+          s=s.replace(old,"io.github.dehalbuq.fitdandroidtv21")
+          s=s.replace("versionCode 1","versionCode 21")
+          s=s.replace("versionName '0.1'","versionName '0.21.0-touch-responsive'")
           gradle.write_text(s)
           m=app/"src/main/AndroidManifest.xml"
           v=m.read_text()
@@ -160,13 +162,13 @@ jobs:
           assert v.count(anchor)==1
           v=v.replace(anchor,
             '        </activity>\n'
-            '        <activity android:name="org.libsdl.app.SDLActivity" '
+            '        <activity android:name="org.libsdl.app.FITDTVActivity" '
             'android:exported="false" android:screenOrientation="landscape" '
             'android:configChanges="layoutDirection|locale|orientation|uiMode|screenLayout|screenSize|smallestScreenSize|keyboard|keyboardHidden|navigation" />\n'
             '    </application>')
           m.write_text(v)
           label=app/"src/main/res/values/strings.xml"
-          label.write_text(label.read_text().replace("FITD GLES2 Test","FITD Android TV TEST20"))
+          label.write_text(label.read_text().replace("FITD GLES2 Test","FITD Android TV TEST21"))
           PY
           # TV launchers require both an icon and a 320x180 banner. Generate
           # original programmatic artwork; no commercial game assets in CI.
@@ -201,7 +203,7 @@ jobs:
           unzip -q /tmp/gradle.zip -d /tmp
           (cd work/fitd-realgame && /tmp/gradle-8.1.1/bin/gradle --no-daemon :app:assembleDebug)
           mkdir -p dist
-          cp work/fitd-realgame/app/build/outputs/apk/debug/app-debug.apk dist/FITD-Android-ARMv7-TV-TEST20-GLES2-API19.apk
+          cp work/fitd-realgame/app/build/outputs/apk/debug/app-debug.apk dist/FITD-Android-ARMv7-TV-TEST21-TOUCH-GLES2-API19.apk
 
       - name: Validate native executable and no proprietary data
         run: |
@@ -223,6 +225,6 @@ jobs:
       - name: Upload real engine experimental APK (no original game files)
         uses: actions/upload-artifact@v4
         with:
-          name: FITD-ANDROID-TV-ARMV7-TEST20-NO-ASSETS
+          name: FITD-ANDROID-TV-ARMV7-TEST21-TOUCH-NO-ASSETS
           path: dist/*
           if-no-files-found: error
