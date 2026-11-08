@@ -163,7 +163,7 @@ jobs:
           v=v.replace(anchor,
             '        </activity>\n'
             '        <activity android:name="org.libsdl.app.FITDTVActivity" '
-            'android:exported="false" android:screenOrientation="landscape" '
+            'android:exported="false" android:screenOrientation="fullSensor" '
             'android:configChanges="layoutDirection|locale|orientation|uiMode|screenLayout|screenSize|smallestScreenSize|keyboard|keyboardHidden|navigation" />\n'
             '    </application>')
           m.write_text(v)
@@ -208,7 +208,7 @@ jobs:
       - name: Validate native executable and no proprietary data
         run: |
           set -euo pipefail
-          apk=dist/FITD-Android-ARMv7-TV-TEST20-GLES2-API19.apk
+          apk=dist/FITD-Android-ARMv7-TV-TEST21-TOUCH-GLES2-API19.apk
           "$ANDROID_HOME/build-tools/34.0.0/aapt" dump badging "$apk" | tee /tmp/fitd-realgame-badging.txt
           grep -Fq "sdkVersion:'19'" /tmp/fitd-realgame-badging.txt
           grep -Fq "native-code: 'armeabi-v7a'" /tmp/fitd-realgame-badging.txt
