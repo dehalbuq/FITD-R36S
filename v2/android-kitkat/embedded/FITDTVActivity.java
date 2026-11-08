@@ -1,6 +1,7 @@
 package org.libsdl.app;
 
 import android.app.AlertDialog;
+import android.content.pm.ActivityInfo;
 import android.content.DialogInterface;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
@@ -21,6 +22,9 @@ public final class FITDTVActivity extends SDLActivity {
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
+        // FULL_USER follows the Android auto-rotate switch. Unlike FULL_SENSOR,
+        // it also respects the user's orientation lock.
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_FULL_USER);
         final PackageManager pm=getPackageManager();
         final boolean touch=pm.hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN)
             || pm.hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN_MULTITOUCH);
@@ -30,6 +34,10 @@ public final class FITDTVActivity extends SDLActivity {
         } catch(UnsatisfiedLinkError e) {
             Log.e(TAG,"FITD-TOUCH JNI not available",e);
         }
+    }
+    @Override protected void onResume() {
+        super.onResume();
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_FULL_USER);
     }
     private void requestExit() {
         if(exitRequested)return;
