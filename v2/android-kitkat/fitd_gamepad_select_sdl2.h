@@ -6,6 +6,8 @@
 #pragma once
 #include <SDL.h>
 #include <cstring>
+#include <string>
+#include <cctype>
 
 namespace fitd_android {
 
@@ -16,10 +18,21 @@ struct GamepadChoice {
     GamepadChoice() : index(-1), score(-1), id(-1) {}
 };
 
+inline std::string lowerName(const char* name) {
+    std::string out=name?name:"";
+    for(char& c:out)c=static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return out;
+}
 inline bool isNonGameInput(const char* name) {
     if (!name) return true;
     // Android system/remote inputs that SDL may mark as GameController due to
     // key mappings; do not let these steal the first physical pad slot.
+    const std::string n=lowerName(name);
+    if(n.find("gpio_ir")!=std::string::npos ||
+       n.find("virtual-search")!=std::string::npos ||
+       n.find("infrared")!=std::string::npos ||
+       n.find("ir remote")!=std::string::npos ||
+       n.find("mtk-kpd")!=std::string::npos)return true;
     return SDL_strcasecmp(name, "gpio_ir_recv") == 0 ||
            SDL_strcasecmp(name, "virtual-search") == 0 ||
            SDL_strcasecmp(name, "Android Accelerometer") == 0 ||
@@ -45,6 +58,14 @@ inline GamepadChoice selectBestPhysicalGamepad() {
         // Physical pads usually have sticks and multiple buttons. Crucially,
         // never assume SDL_IsGameController alone means "physical gamepad".
         int score = 0;
+        const std::string lowered=lowerName(name);
+        // Chanuo A1 exposes its IR receiver as joystick 0. Prefer actual
+        // Bluetooth/HID controllers, including an iPega in keyboard mode.
+        if(lowered.find("pg-9068")!=std::string::npos ||
+           lowered.find("ipega")!=std::string::npos)score+=500;
+        else if(lowered.find("gamepad")!=std::string::npos ||
+                lowered.find("wireless controller")!=std::string::npos ||
+                lowered.find("bluetooth")!=std::string::npos)score+=200;
         if (axes >= 2) score += 100;
         if (axes >= 4) score += 20;
         if (buttons >= 4) score += 50;
