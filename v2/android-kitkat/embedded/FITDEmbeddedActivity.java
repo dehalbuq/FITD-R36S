@@ -139,7 +139,7 @@ public final class FITDEmbeddedActivity extends Activity {
                     if(isFinishing())return;
                     working=false;
                     status.setText("Dados incorporados verificados. Abrindo teste do motor...");
-                    startActivity(new Intent(this,SDLActivity.class));
+                    startActivity(new Intent(this,FITDTVActivity.class));
                     finish();
                 });
             }catch(Exception ex){
@@ -162,7 +162,7 @@ public final class FITDEmbeddedActivity extends Activity {
         root.setPadding(22,22,22,22);
         root.setBackgroundColor(Color.rgb(13,16,31));
         TextView title=new TextView(this);
-        title.setText("ALONE IN THE DARK\\nFITD ANDROID TV - TESTE 20");
+        title.setText("ALONE IN THE DARK\\nFITD ANDROID TV + TOUCH - TESTE 21");
         title.setTextColor(Color.WHITE);
         title.setTextSize(22);
         title.setGravity(Gravity.CENTER);
