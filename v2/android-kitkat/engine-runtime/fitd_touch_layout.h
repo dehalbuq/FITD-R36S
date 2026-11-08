@@ -1,93 +1,106 @@
-// Shared screen-space geometry used by FITD GLES2 HUD and SDL touch input.
-// Normalized coordinates have origin at the TOP-LEFT; preserve the 4:3 game.
+// Shared geometry between SDL2 touch input and the OpenGL ES 2.0 overlay.
+// Screen coordinates are normalized and start at the TOP-LEFT.
+// Keep the actual gameplay in a centered 4:3 viewport without distortion.
 #pragma once
 #include <algorithm>
 #include <array>
 #include <cmath>
 
 namespace fitd_touch {
-enum ButtonId { UP, DOWN, LEFT, RIGHT, ACTION, BACK, CONFIRM, MENU, COUNT };
-struct Button {
-    ButtonId id;
-    float x,y,r; // fractions of screen width/height; r is screen MIN dimension
-    const char* label;
-};
+enum ButtonId { ACTION, BACK, CONFIRM, MENU };
+struct Button { ButtonId id; float x,y,r; const char* label; };
+struct Stick { float x=0.f,y=0.f,r=0.f; };
 struct Layout {
     bool active=false;
     bool portrait=false;
-    int x=0,y=0,w=0,h=0; // game viewport in drawable coords with bottom-left origin
-    std::array<Button,COUNT> buttons{};
+    int x=0,y=0,w=0,h=0; // GL drawable pixels; bottom-left origin
+    Stick stick{};
+    std::array<Button,4> buttons{};
 };
-inline Layout compute(int width,int height,bool touchscreen) {
+inline Layout compute(int width,int height,bool showTouch){
     Layout out;
-    if(width<1 || height<1)return out;
-    out.active=touchscreen;
-    out.portrait=(height>width);
-    float areaW=(float)width;
-    float areaH=(float)height;
-    float regionTop=0.f;
-    if(touchscreen){
+    if(width<=0||height<=0)return out;
+    out.active=showTouch;
+    out.portrait=height>width;
+    float availableW=(float)width;
+    float availableH=(float)height;
+    if(showTouch){
         if(out.portrait){
-            areaW=width*0.97f;
-            areaH=height*0.56f;
-        }else {
-            areaW=width*0.52f;
-            areaH=height*0.94f;
+            availableW=width*.97f;
+            availableH=height*.56f;
+        }else{
+            availableW=width*.52f;
+            availableH=height*.94f;
         }
     }
-    float gameW=std::min(areaW,areaH*4.f/3.f);
-    float gameH=gameW*3.f/4.f;
+    const float gameW=std::min(availableW,availableH*4.f/3.f);
+    const float gameH=gameW*.75f;
     out.w=std::max(1,(int)std::floor(gameW));
     out.h=std::max(1,(int)std::floor(gameH));
     out.x=(width-out.w)/2;
-    const float top=(areaH-gameH)*0.5f+regionTop;
+    // With touch: center game in the upper play area in portrait, centered
+    // horizontally between the controls in landscape. Without touch: center
+    // against the FULL device display, including when in portrait orientation.
+    const float top=(availableH-gameH)*.5f;
     out.y=height-(int)std::floor(top)-out.h;
-    if(!touchscreen)return out;
-    // Keep all hit targets clear of the 4:3 game viewport.
+    if(!showTouch)return out;
     if(out.portrait){
-        const float rad=0.077f;
+        out.stick={.235f,.765f,.165f};
+        const float radius=.068f;
         out.buttons={{
-            {UP, .23f,.682f,rad,"U"},
-            {DOWN,.23f,.834f,rad,"D"},
-            {LEFT,.10f,.758f,rad,"L"},
-            {RIGHT,.36f,.758f,rad,"R"},
-            {ACTION,.77f,.835f,rad,"A"},
-            {BACK,.90f,.758f,rad,"B"},
-            {CONFIRM,.77f,.681f,rad,"Y"},
-            {MENU,.63f,.758f,rad,"M"},
+            {ACTION,.78f,.827f,radius,"A"},
+            {BACK,.90f,.727f,radius,"B"},
+            {CONFIRM,.76f,.632f,radius,"Y"},
+            {MENU,.60f,.738f,radius,"M"},
         }};
     }else{
-        const float rad=0.079f;
-        const float shortRatio=(float)height/(float)width;
-        const float dx=0.127f*shortRatio;
+        out.stick={.128f,.62f,.166f};
+        const float radius=.069f;
+        const float shift=.095f*(float)height/width;
         out.buttons={{
-            {UP,.14f,.446f,rad,"U"},
-            {DOWN,.14f,.714f,rad,"D"},
-            {LEFT,.14f-dx,.58f,rad,"L"},
-            {RIGHT,.14f+dx,.58f,rad,"R"},
-            {ACTION,.86f,.715f,rad,"A"},
-            {BACK,.86f+dx,.58f,rad,"B"},
-            {CONFIRM,.86f,.445f,rad,"Y"},
-            {MENU,.86f-dx,.58f,rad,"M"},
+            {ACTION,.864f,.760f,radius,"A"},
+            {BACK,.864f+shift,.590f,radius,"B"},
+            {CONFIRM,.864f,.425f,radius,"Y"},
+            {MENU,.864f-shift,.590f,radius,"M"},
         }};
     }
     return out;
 }
-inline int hit(int width,int height,float nx,float ny) {
-    const Layout l=compute(width,height,true);
-    // Touch buttons have circular hit areas with slightly generous margins.
-    const float minSize=(float)std::min(width,height);
-    int best=-1;
-    float bestD=1000.f;
-    for(const auto& b:l.buttons){
-        const float dx=(nx-b.x)*width/minSize;
-        const float dy=(ny-b.y)*height/minSize;
-        const float distance=std::sqrt(dx*dx+dy*dy);
-        if(distance<=b.r*1.14f && distance<bestD){
-            best=(int)b.id;
-            bestD=distance;
+inline float clamp1(float v){return std::max(-1.f,std::min(1.f,v));}
+inline bool isStickStart(int width,int height,float nx,float ny){
+    if(width<=0||height<=0)return false;
+    const auto layout=compute(width,height,true);
+    const float size=(float)std::min(width,height);
+    const float dx=(nx-layout.stick.x)*width/size;
+    const float dy=(ny-layout.stick.y)*height/size;
+    return dx*dx+dy*dy<=layout.stick.r*layout.stick.r*1.35f*1.35f;
+}
+inline void stickAxes(int width,int height,float nx,float ny,float& x,float& y){
+    x=y=0.f;
+    if(width<=0||height<=0)return;
+    const auto layout=compute(width,height,true);
+    const float size=(float)std::min(width,height);
+    const float travel=layout.stick.r*size*.72f;
+    if(travel<=0.f)return;
+    x=clamp1((nx-layout.stick.x)*width/travel);
+    y=clamp1((ny-layout.stick.y)*height/travel);
+    const float length=std::sqrt(x*x+y*y);
+    if(length>1.f){x/=length;y/=length;}
+}
+inline int buttonHit(int width,int height,float nx,float ny){
+    if(width<=0||height<=0)return -1;
+    const auto layout=compute(width,height,true);
+    const float size=(float)std::min(width,height);
+    int hit=-1;
+    float best=1000.f;
+    for(const auto& b:layout.buttons){
+        const float dx=(nx-b.x)*width/size;
+        const float dy=(ny-b.y)*height/size;
+        const float dist=std::sqrt(dx*dx+dy*dy);
+        if(dist<=b.r*1.23f && dist<best){
+            best=dist;hit=(int)b.id;
         }
     }
-    return best;
+    return hit;
 }
 } // namespace fitd_touch
