@@ -12,6 +12,7 @@
 #include <map>
 #include <utility>
 #include <atomic>
+#include <cmath>
 
 extern "C" void fitdAndroidRequestExit();
 extern "C" void fitdAndroidOnForeground();
@@ -20,12 +21,50 @@ extern "C" int fitdAndroidTouchEnabled();
 extern "C" void fitdAndroidSetGamepadConnected(int connected);
 extern SDL_Window* gWindowBGFX;
 static std::map<SDL_FingerID,std::pair<float,float>> touchFingers;
+// Running in the 1992 game is triggered by a quick double directional tap.
+// A full deflection on the virtual analog synthesizes two discrete presses
+// and maintains the second one until the thumb returns to neutral.
+static Uint8 runDirection=0;
+static Uint32 runStarted=0;
+static Uint32 lastRunLog=0;
+static Uint8 analogRunPulse(Uint8 held, float sx, float sy, Uint32 now) {
+    const float magnitude=std::sqrt(sx*sx+sy*sy);
+    Uint8 candidate=0;
+    if(magnitude>=.88f){
+        if(std::fabs(sy)>=std::fabs(sx)*1.15f)
+            candidate=sy<0.f?1:2;
+        else if(std::fabs(sx)>=std::fabs(sy)*1.15f)
+            candidate=sx<0.f?4:8;
+    }
+    // Hysteresis prevents accidental retrigger from normal thumb jitter.
+    if(runDirection && magnitude<.72f){
+        runDirection=0;runStarted=0;
+    }
+    if(!runDirection && candidate){
+        runDirection=candidate;runStarted=now?now:1;
+        SDL_Log("FITD-RUN: virtual double-tap START direction=%u",candidate);
+    }else if(runDirection && candidate && candidate!=runDirection){
+        runDirection=candidate;runStarted=now?now:1;
+    }
+    if(!runDirection)return held;
+    const Uint32 elapsed=now-runStarted;
+    if(elapsed<55u)return held|runDirection; // first key down
+    if(elapsed<105u)return held & ~runDirection; // key up between taps
+    if(elapsed<135u && now-lastRunLog>100u){
+        lastRunLog=now;
+        SDL_Log("FITD-RUN: HOLD second press direction=%u elapsed_ms=%u",
+                runDirection,elapsed);
+    }
+    return held|runDirection; // second press is held for continuous running
+}
 static SDL_FingerID stickFinger=-1;
 static float currentStickX=0.f,currentStickY=0.f;
 static std::atomic<float> publishedStickX{0.f},publishedStickY{0.f};
 extern "C" float fitdAndroidTouchStickX(){return publishedStickX.load(std::memory_order_acquire);}
 extern "C" float fitdAndroidTouchStickY(){return publishedStickY.load(std::memory_order_acquire);}
 static void clearTouch(){
+    runDirection=0;
+    runStarted=0;
     touchFingers.clear();
     stickFinger=-1;
     currentStickX=currentStickY=0.f;
@@ -210,6 +249,7 @@ void readKeyboard(void){
             if(sy > threshold)state.joyD|=2;
             if(sx < -threshold)state.joyD|=4;
             if(sx > threshold)state.joyD|=8;
+            state.joyD=analogRunPulse(state.joyD,sx,sy,SDL_GetTicks());
         }
         publishedStickX.store(sx,std::memory_order_release);
         publishedStickY.store(sy,std::memory_order_release);
