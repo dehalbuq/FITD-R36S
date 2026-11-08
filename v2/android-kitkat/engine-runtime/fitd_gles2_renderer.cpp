@@ -578,73 +578,87 @@ static bool presentInterpolatedScene(float phase,int dw,int dh,
     return true;
 }
 
+extern "C" float fitdAndroidTouchStickX();
+extern "C" float fitdAndroidTouchStickY();
 static void fitdDrawTouchHUD(int dw,int dh,const fitd_touch::Layout& layout) {
     if(!layout.active)return;
-    auto vertex=[dw,dh](float px,float py,float r,float g,float b,float a)->Vertex {
+    const auto vertex=[dw,dh](float px,float py,float r,float g,float b,float a)->Vertex {
         return {px*320.f/dw,py*200.f/dh,0.f,r,g,b,a};
     };
-    std::vector<Vertex> faces;
-    std::vector<Vertex> labels;
-    const float radiusScale=(float)std::min(dw,dh);
+    std::vector<Vertex> faces,labels;
+    const float scale=(float)std::min(dw,dh);
     const auto triangle=[&](std::vector<Vertex>& dst,
-                           const Vertex& a,const Vertex& b,const Vertex& c){
+                          const Vertex& a,const Vertex& b,const Vertex& c){
         dst.push_back(a);dst.push_back(b);dst.push_back(c);
     };
+    const auto circle=[&](float cx,float cy,float radius,float red,float green,
+                         float blue,float alpha){
+        const int count=36;
+        for(int i=0;i<count;++i){
+            const float a=6.28318530718f*i/count;
+            const float b=6.28318530718f*(i+1)/count;
+            triangle(faces,
+                vertex(cx,cy,red,green,blue,alpha),
+                vertex(cx+std::cos(a)*radius,cy+std::sin(a)*radius,red,green,blue,alpha),
+                vertex(cx+std::cos(b)*radius,cy+std::sin(b)*radius,red,green,blue,alpha));
+        }
+    };
+    const auto ring=[&](float cx,float cy,float inner,float outer,
+                        float red,float green,float blue,float alpha){
+        const int count=36;
+        for(int i=0;i<count;++i){
+            const float a=6.28318530718f*i/count;
+            const float b=6.28318530718f*(i+1)/count;
+            const Vertex p=vertex(cx+std::cos(a)*inner,cy+std::sin(a)*inner,red,green,blue,alpha);
+            const Vertex q=vertex(cx+std::cos(a)*outer,cy+std::sin(a)*outer,red,green,blue,alpha);
+            const Vertex t=vertex(cx+std::cos(b)*outer,cy+std::sin(b)*outer,red,green,blue,alpha);
+            const Vertex u=vertex(cx+std::cos(b)*inner,cy+std::sin(b)*inner,red,green,blue,alpha);
+            triangle(faces,p,q,t);triangle(faces,p,t,u);
+        }
+    };
+    // Analog thumbstick: drag any direction and keep UP continuously held to run.
+    const float stickCx=layout.stick.x*dw;
+    const float stickCy=layout.stick.y*dh;
+    const float stickRadius=layout.stick.r*scale;
+    circle(stickCx,stickCy,stickRadius,.10f,.15f,.23f,.60f);
+    ring(stickCx,stickCy,stickRadius*.89f,stickRadius,
+         .62f,.74f,.89f,.74f);
+    circle(stickCx,stickCy,stickRadius*.62f,.13f,.20f,.28f,.30f);
+    const float sx=fitd_touch::clamp1(fitdAndroidTouchStickX());
+    const float sy=fitd_touch::clamp1(fitdAndroidTouchStickY());
+    const float knobCx=stickCx+sx*stickRadius*.72f;
+    const float knobCy=stickCy+sy*stickRadius*.72f;
+    circle(knobCx,knobCy,stickRadius*.48f,.23f,.42f,.62f,.90f);
+    ring(knobCx,knobCy,stickRadius*.40f,stickRadius*.48f,
+         .86f,.91f,.97f,.92f);
+    // Four context buttons; the game viewport never overlaps their hit zones.
     for(const auto& button:layout.buttons){
         const float cx=button.x*dw,cy=button.y*dh;
-        const float radius=button.r*radiusScale;
-        const bool dpad=(int)button.id<=fitd_touch::RIGHT;
-        const float red=dpad?0.11f:0.25f;
-        const float green=dpad?0.31f:0.23f;
-        const float blue=dpad?0.44f:0.40f;
-        const float alpha=.72f;
-        const int parts=32;
-        for(int k=0;k<parts;++k){
-            const float a=6.28318530718f*k/parts;
-            const float b=6.28318530718f*(k+1)/parts;
-            const float ax=cx+std::cos(a)*radius,ay=cy+std::sin(a)*radius;
-            const float bx=cx+std::cos(b)*radius,by=cy+std::sin(b)*radius;
-            triangle(faces,vertex(cx,cy,red,green,blue,alpha),
-                           vertex(ax,ay,red,green,blue,alpha),
-                           vertex(bx,by,red,green,blue,alpha));
-            // Narrow bright rim for contrast on a dark screen.
-            triangle(faces,vertex(cx+std::cos(a)*radius*.88f,cy+std::sin(a)*radius*.88f,
-                                  .72f,.78f,.88f,.38f),
-                           vertex(ax,ay,.72f,.78f,.88f,.38f),
-                           vertex(bx,by,.72f,.78f,.88f,.38f));
-        }
-        // A small five-by-seven bitmap glyph, rendered with GLES2 triangles.
-        const unsigned char* pattern=nullptr;
-        static const unsigned char glyphU[]={17,17,17,17,17,17,14};
-        static const unsigned char glyphD[]={30,17,17,17,17,17,30};
-        static const unsigned char glyphL[]={16,16,16,16,16,16,31};
-        static const unsigned char glyphR[]={30,17,17,30,20,18,17};
+        const float radius=button.r*scale;
+        circle(cx,cy,radius,.25f,.23f,.40f,.78f);
+        ring(cx,cy,radius*.90f,radius,.77f,.80f,.93f,.75f);
         static const unsigned char glyphA[]={14,17,17,31,17,17,17};
         static const unsigned char glyphB[]={30,17,17,30,17,17,30};
         static const unsigned char glyphY[]={17,17,10,4,4,4,4};
         static const unsigned char glyphM[]={17,27,21,21,17,17,17};
+        const unsigned char* pattern=nullptr;
         switch(button.id){
-            case fitd_touch::UP:pattern=glyphU;break;
-            case fitd_touch::DOWN:pattern=glyphD;break;
-            case fitd_touch::LEFT:pattern=glyphL;break;
-            case fitd_touch::RIGHT:pattern=glyphR;break;
             case fitd_touch::ACTION:pattern=glyphA;break;
             case fitd_touch::BACK:pattern=glyphB;break;
             case fitd_touch::CONFIRM:pattern=glyphY;break;
             case fitd_touch::MENU:pattern=glyphM;break;
-            default:break;
         }
         if(!pattern)continue;
-        const float cell=radius*.16f;
+        const float cell=radius*.165f;
         const float x0=cx-cell*2.5f,y0=cy-cell*3.5f;
         for(int row=0;row<7;++row)for(int col=0;col<5;++col){
             if(!(pattern[row]&(1<<(4-col))))continue;
             const float ax=x0+cell*col,ay=y0+cell*row;
             const float bx=ax+cell*.82f,by=ay+cell*.82f;
-            const Vertex p=vertex(ax,ay,.96f,.97f,1.f,.98f);
-            const Vertex q=vertex(bx,ay,.96f,.97f,1.f,.98f);
-            const Vertex t=vertex(bx,by,.96f,.97f,1.f,.98f);
-            const Vertex u=vertex(ax,by,.96f,.97f,1.f,.98f);
+            const Vertex p=vertex(ax,ay,.98f,.98f,1.f,.99f);
+            const Vertex q=vertex(bx,ay,.98f,.98f,1.f,.99f);
+            const Vertex t=vertex(bx,by,.98f,.98f,1.f,.99f);
+            const Vertex u=vertex(ax,by,.98f,.98f,1.f,.99f);
             triangle(labels,p,q,t);triangle(labels,p,t,u);
         }
     }
