@@ -1,0 +1,47 @@
+name: FITD Lakka RK322x Kali self-hosted ARMHF (experimental)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: fitd-lakka-kali
+  cancel-in-progress: false
+jobs:
+  compile-kali:
+    if: github.repository == 'dehalbuq/FITD-R36S' && github.ref == 'refs/heads/experimental/lakka-rk322x-gles2'
+    # Install a SEPARATE runner for this repo with this custom label.
+    runs-on: [self-hosted, Linux, X64, fitd-lakka-kali]
+    timeout-minutes: 240
+    env:
+      FITD_BUILD_JOBS: "3"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          clean: false
+          persist-credentials: false
+      - name: Validate build scripts
+        shell: bash
+        run: |
+          bash -n lakka/run_kali_build.sh
+          bash -n lakka/build_lakka_armhf.sh
+          bash -n lakka/container_build.sh
+          python3 -m py_compile lakka/patch_lakka_gles2.py lakka/gen_font_buster.py
+      - name: Build ARMHF GLES2 on Kali CPU with local Docker image and compiler cache
+        shell: bash
+        run: bash lakka/run_kali_build.sh
+      - name: Audit the release package
+        shell: bash
+        run: |
+          ( cd work-lakka && sha256sum -c SHA256SUMS.txt )
+          unzip -t work-lakka/FITD-LAKKA-RK322X-ARMHF-GLES2-NODEBUG.zip | tail -2
+          unzip -p work-lakka/FITD-LAKKA-RK322X-ARMHF-GLES2-NODEBUG.zip fitd-lakka/fitd.armhf > /tmp/fitd-lakka.armhf
+          file /tmp/fitd-lakka.armhf | grep 'ELF 32-bit' | grep ARM
+          ! readelf -SW /tmp/fitd-lakka.armhf | grep -q '\.debug_'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FITD-LAKKA-RK322X-KALI-ARMHF-GLES2-NODEBUG-EXPERIMENTAL
+          path: |
+            work-lakka/FITD-LAKKA-RK322X-ARMHF-GLES2-NODEBUG.zip
+            work-lakka/SHA256SUMS.txt
+          retention-days: 14
+          if-no-files-found: error
