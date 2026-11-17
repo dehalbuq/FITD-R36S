@@ -1,12 +1,6 @@
 name: FITD Lakka RK322x ARMHF GLES2 (experimental)
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - experimental/lakka-rk322x-gles2
-    paths:
-      - lakka/**
-      - .github/workflows/fitd-lakka-rk322x-armhf.yml
 concurrency:
   group: fitd-lakka-rk322x-armhf
   cancel-in-progress: true
