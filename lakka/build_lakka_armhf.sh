@@ -14,7 +14,7 @@ SRC=work-lakka/source
 for patch in patch_upstream.py patch_debug_audio_crash.py patch_library_room_crash.py patch_throw_null_body.py patch_orb_enemy_effects.py patch_worm_camera_orb_audio.py patch_hit_object_rehaunted.py patch_cellar_revolver.py patch_cellar_evalvar.py patch_rehaunted_mask_reptile.py patch_cellar_barrel_stuck.py patch_cellar_wall_recovery.py; do
     python3 "v2/$patch" "$SRC"
 done
-python3 v2/gen_readable_font.py "$SRC"
+python3 lakka/gen_font_buster.py "$SRC"
 python3 v2/patch_readable_font.py "$SRC"
 python3 v2/patch_graphics_regression.py "$SRC"
 python3 v2/test_graphics_profile.py "$SRC"
