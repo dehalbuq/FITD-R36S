@@ -7,6 +7,9 @@ on:
     paths:
       - lakka/**
       - .github/workflows/fitd-lakka-rk322x-armhf.yml
+concurrency:
+  group: fitd-lakka-rk322x-armhf
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -25,11 +28,11 @@ jobs:
       - uses: docker/setup-qemu-action@v3
         with:
           platforms: arm
-      - name: Build optimized ARMHF/GLES2 without debug (glibc 2.28)
+      - name: Build optimized ARMHF/GLES2 without debug (glibc 2.31)
         run: |
           docker run --rm --platform linux/arm/v7 \
             -v "$GITHUB_WORKSPACE:/workspace" -w /workspace \
-            debian:buster bash lakka/container_build.sh
+            debian:bullseye bash lakka/container_build.sh
       - name: Audit ELF and integrity
         run: |
           (cd work-lakka && sha256sum -c SHA256SUMS.txt)

@@ -2,7 +2,7 @@
 # Experimental real ARMHF build from the pinned R36S v1.0.0 gameplay patches.
 set -Eeuo pipefail
 cd "$(dirname "$0")/.."
-[ "$(getconf GNU_LIBC_VERSION)" = "glibc 2.28" ] || { echo "Expected Debian Buster glibc 2.28" >&2; exit 2; }
+[ "$(getconf GNU_LIBC_VERSION)" = "glibc 2.31" ] || { echo "Expected Debian Bullseye glibc 2.31" >&2; exit 2; }
 command -v clang++-11 >/dev/null
 export CC=clang-11 CXX=clang++-11
 mkdir -p work-lakka
@@ -28,7 +28,6 @@ cmake -S "$SRC" -B work-lakka/build -G Ninja \
   -DCMAKE_C_FLAGS='-DFITD_R36S=1 -DBGFX_CONFIG_MULTITHREADED=0 -DBGFX_CONFIG_RENDERER_OPENGL=0 -DBGFX_CONFIG_RENDERER_OPENGLES=20' \
   -DCMAKE_CXX_FLAGS='-DFITD_R36S=1 -DBGFX_CONFIG_MULTITHREADED=0 -DBGFX_CONFIG_RENDERER_OPENGL=0 -DBGFX_CONFIG_RENDERER_OPENGLES=20' \
   -DCMAKE_C_FLAGS_RELEASE="$OPTS" -DCMAKE_CXX_FLAGS_RELEASE="$OPTS" \
-  -DCMAKE_CXX_STANDARD_LIBRARIES=-lstdc++fs \
   -DCMAKE_EXE_LINKER_FLAGS='-Wl,--gc-sections -Wl,--as-needed' \
   -DSDL_KMSDRM=ON -DSDL_SHARED=OFF -DSDL_STATIC=ON
 cmake --build work-lakka/build --target Fitd --parallel 2
@@ -39,6 +38,17 @@ mkdir -p work-lakka/stage/fitd-lakka/data work-lakka/stage/fitd-lakka/libs.armhf
 cp "$BIN" work-lakka/stage/fitd-lakka/fitd.armhf
 strip --strip-unneeded work-lakka/stage/fitd-lakka/fitd.armhf
 ! readelf -SW work-lakka/stage/fitd-lakka/fitd.armhf | grep -q '\.debug_'
+# The Lakka 4.4 RK322x runtime was reported with glibc 2.32.
+python3 - <<'PY'
+import re, subprocess
+from pathlib import Path
+for elf in [Path('work-lakka/stage/fitd-lakka/fitd.armhf'), *Path('work-lakka/stage/fitd-lakka/libs.armhf').glob('*.so*')]:
+    out=subprocess.check_output(['readelf','-W','-V',str(elf)],text=True)
+    vers=[tuple(map(int,x.split('.'))) for x in re.findall(r'GLIBC_([0-9]+(?:\.[0-9]+)+)',out)]
+    if vers and max(vers)>(2,32):
+        raise SystemExit('Lakka GLIBC ABI too new for {}: {}'.format(elf,max(vers)))
+print('GLIBC ABI compatible with Lakka 2.32')
+PY
 for lib in libstdc++.so.6 libgcc_s.so.1 libatomic.so.1; do
     path=$(ldconfig -p | awk -v name="$lib" '$1==name {print $NF;exit}')
     [ -f "$path" ] && cp -L "$path" "work-lakka/stage/fitd-lakka/libs.armhf/$lib" || true
