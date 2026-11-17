@@ -9,6 +9,13 @@ printf '%s\n' \
  > /etc/apt/sources.list
 rm -f /etc/apt/sources.list.d/*.list
 apt-get -o Acquire::Check-Valid-Until=false update
+# Align Docker's newer security-patched base with the archived development packages.
+# These downgrades occur ONLY inside a disposable CI container.
+apt-get -y --allow-downgrades --no-install-recommends install \
+  libc6=2.31-13+deb11u11 \
+  libsepol1=3.1-1 \
+  libudev1=247.3-7+deb11u5 \
+  perl-base=5.32.1-4+deb11u3
 apt-get -y --no-install-recommends install \
   ca-certificates git python3 python3-pil fonts-dejavu-core \
   cmake clang-11 ninja-build build-essential pkg-config make \
