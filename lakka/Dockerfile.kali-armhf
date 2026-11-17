@@ -1,0 +1,9 @@
+# Build this with: docker build --platform linux/arm/v7 -f lakka/Dockerfile.kali-armhf ...
+# Keep the ARMHF toolchain cached as a local Docker image on the user's Kali VM.
+FROM debian:bullseye
+WORKDIR /workspace
+COPY lakka/container_build.sh /tmp/fitd-dependencies.sh
+COPY lakka/gen_font_buster.py /workspace/lakka/gen_font_buster.py
+RUN FITD_DEPS_ONLY=1 bash /tmp/fitd-dependencies.sh
+ENV CCACHE_COMPILERCHECK=content CCACHE_BASEDIR=/workspace CCACHE_DIR=/ccache
+CMD ["bash","lakka/build_lakka_armhf.sh"]
