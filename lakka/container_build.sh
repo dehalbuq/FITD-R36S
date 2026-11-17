@@ -17,7 +17,7 @@ apt-get -y --allow-downgrades --no-install-recommends install \
   libudev1=247.3-7+deb11u5 \
   perl-base=5.32.1-4+deb11u3
 apt-get -y --no-install-recommends install \
-  ca-certificates git python3 python3-pil fonts-dejavu-core \
+  ca-certificates git python3 python3-pil fonts-dejavu-core fonts-dejavu-extra \
   cmake clang-11 ninja-build build-essential pkg-config make \
   file binutils zip unzip \
   libasound2-dev libpulse-dev libudev-dev \
@@ -29,5 +29,10 @@ apt-get -y --no-install-recommends install \
 cmake --version | head -1
 clang++-11 --version | head -1
 python3 -c 'from PIL import Image; print("Pillow OK:",Image.__version__)'
+# Catch font-resource errors before cloning the large FITD source tree.
+mkdir -p /tmp/fitd-font-smoke/FitdLib
+python3 lakka/gen_font_buster.py /tmp/fitd-font-smoke
+test -s /tmp/fitd-font-smoke/FitdLib/r36sReadableFontData.h
+echo 'FITD Lakka font preflight PASS'
 test "$(getconf GNU_LIBC_VERSION)" = "glibc 2.31"
 bash lakka/build_lakka_armhf.sh
