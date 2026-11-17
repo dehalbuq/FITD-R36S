@@ -6,10 +6,19 @@ cd "$(dirname "$0")/.."
 command -v clang++-11 >/dev/null
 export CC=clang-11 CXX=clang++-11
 mkdir -p work-lakka
-rm -rf work-lakka/source work-lakka/build work-lakka/stage
-git clone --recursive https://github.com/yaz0r/FITD.git work-lakka/source
-git -C work-lakka/source checkout --detach 543e22bc78b64405537ae545ecd382dcdf2c12b2
+UPSTREAM_SHA=543e22bc78b64405537ae545ecd382dcdf2c12b2
+if [ "${FITD_KEEP_SOURCE:-0}" = "1" ] && [ -d work-lakka/source/.git ]; then
+    echo "[CACHE] Reusing pinned FITD checkout and submodules"
+    git -C work-lakka/source reset --hard "$UPSTREAM_SHA"
+    git -C work-lakka/source clean -fdx
+    git -C work-lakka/source submodule foreach --recursive 'git reset --hard; git clean -fdx'
+else
+    rm -rf work-lakka/source
+    git clone --recursive https://github.com/yaz0r/FITD.git work-lakka/source
+    git -C work-lakka/source checkout --detach "$UPSTREAM_SHA"
+fi
 git -C work-lakka/source submodule update --init --recursive
+rm -rf work-lakka/build work-lakka/stage
 SRC=work-lakka/source
 for patch in patch_upstream.py patch_debug_audio_crash.py patch_library_room_crash.py patch_throw_null_body.py patch_orb_enemy_effects.py patch_worm_camera_orb_audio.py patch_hit_object_rehaunted.py patch_cellar_revolver.py patch_cellar_evalvar.py patch_rehaunted_mask_reptile.py patch_cellar_barrel_stuck.py patch_cellar_wall_recovery.py; do
     python3 "v2/$patch" "$SRC"
@@ -29,8 +38,12 @@ cmake -S "$SRC" -B work-lakka/build -G Ninja \
   -DCMAKE_CXX_FLAGS='-DFITD_R36S=1 -DBGFX_CONFIG_MULTITHREADED=0 -DBGFX_CONFIG_RENDERER_OPENGL=0 -DBGFX_CONFIG_RENDERER_OPENGLES=20' \
   -DCMAKE_C_FLAGS_RELEASE="$OPTS" -DCMAKE_CXX_FLAGS_RELEASE="$OPTS" \
   -DCMAKE_EXE_LINKER_FLAGS='-Wl,--gc-sections -Wl,--as-needed' \
+  -DCMAKE_C_COMPILER_LAUNCHER="${FITD_COMPILER_LAUNCHER:-}" \
+  -DCMAKE_CXX_COMPILER_LAUNCHER="${FITD_COMPILER_LAUNCHER:-}" \
   -DSDL_KMSDRM=ON -DSDL_SHARED=OFF -DSDL_STATIC=ON
-cmake --build work-lakka/build --target Fitd --parallel 2
+case "${FITD_BUILD_JOBS:-2}" in ''|*[!0-9]*) echo "FITD_BUILD_JOBS must be a positive integer" >&2; exit 9;; esac
+echo "[BUILD] ARMHF workers: ${FITD_BUILD_JOBS:-2}  ccache: ${FITD_COMPILER_LAUNCHER:-off}"
+cmake --build work-lakka/build --target Fitd --parallel "${FITD_BUILD_JOBS:-2}"
 BIN=$(find work-lakka/build -type f -name Fitd -perm /111 -print -quit)
 test -n "$BIN"
 file "$BIN" | grep -E 'ELF 32-bit.*ARM'
