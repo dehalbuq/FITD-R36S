@@ -29,7 +29,7 @@ static const bgfx::Memory* lakkaPackIndexes(const uint8_t* indexed,size_t n) {
 '''
 s=s.replace(anchor,helper+anchor,1)
 assert s.count('bgfx::TextureFormat::R8U')==5, 'Expected 5 indexed GPU textures'
-s=s.replace('bgfx::TextureFormat::R8U','bgfx::TextureFormat::BGRA8')
+s=s.replace('bgfx::TextureFormat::R8U','bgfx::TextureFormat::RGBA8')
 uploads={
 'bgfx::copy(RGB_Pal, 256 * 3)': ('lakkaPackIndexes((const uint8_t*)RGB_Pal,256 * 3)',2),
 'bgfx::copy(uiLayer.data(), 320 * 200)': ('lakkaPackIndexes(uiLayer.data(),320 * 200)',1),
