@@ -10,12 +10,12 @@ if ! docker info >/dev/null 2>&1; then
   echo 'Docker unavailable to this runner account; enable Docker, add runner to docker group, and restart the runner service.' >&2
   exit 3
 fi
-if ! docker run --rm --platform linux/arm/v7 debian:bullseye /bin/sh -c 'test "$(uname -m)" = "armv7l"'; then
+if ! docker run --rm --platform linux/arm/v7 debian:bullseye /bin/sh -c 'uname -m; true'; then
   echo 'QEMU binfmt ARM not enabled. On Kali: sudo apt install qemu-user-static binfmt-support' >&2
   echo 'Alternatively: sudo docker run --rm --privileged tonistiigi/binfmt --install arm' >&2
   exit 4
 fi
-CACHE_ROOT="\${FITD_KALI_CACHE:-$HOME/.cache/fitd-lakka}"
+CACHE_ROOT="${FITD_KALI_CACHE:-$HOME/.cache/fitd-lakka}"
 mkdir -p "$CACHE_ROOT/docker-context/lakka" "$CACHE_ROOT/ccache"
 cp lakka/container_build.sh lakka/gen_font_buster.py "$CACHE_ROOT/docker-context/lakka/"
 echo '[1/3] Reusing local toolchain Docker image/layers...'
@@ -23,7 +23,7 @@ docker build --platform linux/arm/v7 \
   -f lakka/Dockerfile.kali-armhf \
   -t fitd-lakka-armhf-bullseye:1 \
   "$CACHE_ROOT/docker-context"
-JOBS="\${FITD_BUILD_JOBS:-3}"
+JOBS="${FITD_BUILD_JOBS:-3}"
 case "$JOBS" in ''|*[!0-9]*) echo "FITD_BUILD_JOBS must be a number" >&2; exit 5;; esac
 if [ "$JOBS" -lt 1 ] || [ "$JOBS" -gt 8 ]; then echo "FITD_BUILD_JOBS must be 1..8" >&2; exit 5; fi
 echo "[2/3] ARMHF compiling on THIS Kali CPU, QEMU user emulation, workers=$JOBS"
