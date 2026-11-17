@@ -1,0 +1,47 @@
+name: FITD Lakka RK322x ARMHF GLES2 (experimental)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - experimental/lakka-rk322x-gles2
+    paths:
+      - lakka/**
+      - .github/workflows/fitd-lakka-rk322x-armhf.yml
+permissions:
+  contents: read
+jobs:
+  build-lakka-armhf:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - name: Static syntax checks
+        run: |
+          bash -n lakka/container_build.sh
+          bash -n lakka/build_lakka_armhf.sh
+          sh -n lakka/FITD-LAKKA.sh
+          sh -n lakka/diagnostico_lakka.sh
+          python3 -m py_compile lakka/patch_lakka_gles2.py
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm
+      - name: Build optimized ARMHF/GLES2 without debug (glibc 2.28)
+        run: |
+          docker run --rm --platform linux/arm/v7 \
+            -v "$GITHUB_WORKSPACE:/workspace" -w /workspace \
+            debian:buster bash lakka/container_build.sh
+      - name: Audit ELF and integrity
+        run: |
+          (cd work-lakka && sha256sum -c SHA256SUMS.txt)
+          unzip -t work-lakka/FITD-LAKKA-RK322X-ARMHF-GLES2-NODEBUG.zip | tail -2
+          unzip -p work-lakka/FITD-LAKKA-RK322X-ARMHF-GLES2-NODEBUG.zip fitd-lakka/fitd.armhf > /tmp/fitd.armhf
+          file /tmp/fitd.armhf | grep 'ELF 32-bit' | grep 'ARM'
+          ! readelf -SW /tmp/fitd.armhf | grep -q '\.debug_'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FITD-LAKKA-RK322X-ARMHF-GLES2-NODEBUG-EXPERIMENTAL
+          path: |
+            work-lakka/FITD-LAKKA-RK322X-ARMHF-GLES2-NODEBUG.zip
+            work-lakka/SHA256SUMS.txt
+          retention-days: 30
+          if-no-files-found: error
