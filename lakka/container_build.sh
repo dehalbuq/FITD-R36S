@@ -18,7 +18,7 @@ apt-get -y --allow-downgrades --no-install-recommends install \
   perl-base=5.32.1-4+deb11u3
 apt-get -y --no-install-recommends install \
   ca-certificates git python3 python3-pil fonts-dejavu-core fonts-dejavu-extra \
-  cmake clang-11 ninja-build build-essential pkg-config make \
+  cmake clang-11 ninja-build ccache build-essential pkg-config make \
   file binutils zip unzip \
   libasound2-dev libpulse-dev libudev-dev \
   libx11-dev libxext-dev libxrandr-dev \
@@ -35,4 +35,8 @@ python3 lakka/gen_font_buster.py /tmp/fitd-font-smoke
 test -s /tmp/fitd-font-smoke/FitdLib/r36sReadableFontData.h
 echo 'FITD Lakka font preflight PASS'
 test "$(getconf GNU_LIBC_VERSION)" = "glibc 2.31"
+if [ "${FITD_DEPS_ONLY:-0}" = "1" ]; then
+  echo "ARMHF toolchain image prepared; skipping source compilation."
+  exit 0
+fi
 bash lakka/build_lakka_armhf.sh
