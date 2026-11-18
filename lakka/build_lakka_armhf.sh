@@ -13,6 +13,12 @@ if [ "${FITD_RESUME_LINK:-0}" = "1" ]; then
     [ -f work-lakka/build/build.ninja ] || { echo "Existing Ninja build missing" >&2; exit 22; }
     echo "[RESUME] Preserve all ARMHF build outputs; fix and relink only"
     python3 lakka/patch_hqr_reset_body.py "$SRC"
+if [ "${FITD_RESUME_SHADERS:-0}" = "1" ]; then
+    echo "[RESUME] Change BGFX embedded shaders to GLSL ES 1.00; preserve object cache"
+    python3 lakka/patch_lakka_gles2.py "$SRC" --profile-only
+    # Force shader regeneration without deleting unrelated ARMHF build outputs.
+    find "$SRC/FitdLib/shaders/generated/essl" -maxdepth 1 -type f -name '*.h' -delete 2>/dev/null || true
+fi
 else
 UPSTREAM_SHA=543e22bc78b64405537ae545ecd382dcdf2c12b2
 if [ "${FITD_KEEP_SOURCE:-0}" = "1" ] && [ -d work-lakka/source/.git ]; then
