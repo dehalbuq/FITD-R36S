@@ -15,6 +15,8 @@ if [ "${FITD_RESUME_LINK:-0}" = "1" ]; then
     python3 lakka/patch_hqr_reset_body.py "$SRC"
 python3 lakka/patch_lakka_fps.py "$SRC"
 python3 lakka/patch_lakka_audio.py "$SRC"
+python3 lakka/patch_lakka_sdl3_backend.py "$SRC"
+python3 lakka/patch_lakka_perf.py "$SRC"
 if [ "${FITD_RESUME_SHADERS:-0}" = "1" ]; then
     echo "[RESUME] Change BGFX embedded shaders to GLSL ES 1.00; preserve object cache"
     python3 lakka/patch_lakka_gles2.py "$SRC" --profile-only
@@ -49,6 +51,8 @@ python3 v2/patch_cxx20_format_portmaster.py "$SRC"
 python3 v2/prepare_release_arm64.py "$SRC"
 python3 lakka/patch_hqr_reset_body.py "$SRC"
 python3 lakka/patch_lakka_audio.py "$SRC"
+python3 lakka/patch_lakka_sdl3_backend.py "$SRC"
+python3 lakka/patch_lakka_perf.py "$SRC"
 python3 lakka/patch_lakka_gles2.py "$SRC"
 OPTS='-O2 -g0 -DNDEBUG -DFITD_R36S=1 -DFITD_R36S_RELEASE=1 -march=armv7-a -mfpu=neon -mfloat-abi=hard -fno-strict-aliasing -fwrapv -ffunction-sections -fdata-sections'
 cmake -S "$SRC" -B work-lakka/build -G Ninja \
