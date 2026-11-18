@@ -46,14 +46,44 @@ fi
 export LD_LIBRARY_PATH="$GAME/libs.armhf${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-kmsdrm}"
 export SDL_AUDIODRIVER="${SDL_AUDIODRIVER:-alsa}"
+# SDL3 uses this hint for default ALSA playback; AUDIODEV alone is not enough.
+export SDL_AUDIO_ALSA_DEFAULT_PLAYBACK_DEVICE="${SDL_AUDIO_ALSA_DEFAULT_PLAYBACK_DEVICE:-plughw:2,0}"
 export SDL_VIDEO_FORCE_EGL=1
 export FITD_FPS_LIMIT="${FITD_FPS_LIMIT:-60}"
 export FITD_R36S_TIMEBASE="${FITD_R36S_TIMEBASE:-legacy}"
 export FITD_VSYNC="${FITD_VSYNC:-0}"
 export FITD_DEBUG=0 FITD_VIDEO_TEST=0 FITD_RELEASE_LOG=0
-unset FITD_DEEP_TRACE FITD_GDB FITD_AI_TRACE FITD_PERF_TRACE
+# Hide the unnecessary desktop ImGui bar, retaining in-game UI.
+export FITD_LAKKA_HIDE_IMGUI_BAR="${FITD_LAKKA_HIDE_IMGUI_BAR:-1}"
+# Runtime measurements distinguish real FPS from the FPS limiter.
+export FITD_PERF_TRACE="${FITD_PERF_TRACE:-1}"
+unset FITD_DEEP_TRACE FITD_GDB FITD_AI_TRACE
+
+# Optional CPU performance governor while playing; restore it on exit.
+GOV_STATE="/tmp/fitd-lakka-governors.$"
+restore_governors() {
+    if [ -f "$GOV_STATE" ]; then
+        while read -r govpath original; do
+            [ -n "$govpath" ] || continue
+            [ -w "$govpath" ] && printf '%s\n' "$original" > "$govpath" 2>/dev/null || true
+        done < "$GOV_STATE"
+        rm -f "$GOV_STATE"
+    fi
+}
+if [ "${FITD_CPU_PERFORMANCE:-1}" = "1" ]; then
+    : > "$GOV_STATE"
+    for govpath in /sys/devices/system/cpu/cpu[0-9]*/cpufreq/scaling_governor; do
+        [ -r "$govpath" ] && [ -w "$govpath" ] || continue
+        original="$(cat "$govpath")"
+        [ "$original" = "performance" ] && continue
+        if printf '%s\n' performance > "$govpath" 2>/dev/null; then
+            printf '%s %s\n' "$govpath" "$original" >> "$GOV_STATE"
+        fi
+    done
+    trap 'restore_governors' EXIT
+fi
 cd "$DATA" || fail 7 "Cannot cd into game data directory $DATA"
-note "[FITD-LAKKA] Launching; SDL=$SDL_VIDEODRIVER FPS=$FITD_FPS_LIMIT"
+note "[FITD-LAKKA] Launching; video=$SDL_VIDEODRIVER audio=$SDL_AUDIODRIVER ALSA=$SDL_AUDIO_ALSA_DEFAULT_PLAYBACK_DEVICE fps_limit=$FITD_FPS_LIMIT"
 "$BIN" >> "$LOG" 2>&1
 code=$?
 note "[FITD-LAKKA] Exit: $code; log=$LOG"
