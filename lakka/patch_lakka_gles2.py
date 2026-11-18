@@ -3,7 +3,8 @@
 from pathlib import Path
 import sys
 
-root=Path(sys.argv[1]).resolve() if len(sys.argv)==2 else None
+profile_only = len(sys.argv) == 3 and sys.argv[2] == '--profile-only'
+root=Path(sys.argv[1]).resolve() if len(sys.argv) in (2,3) else None
 if not root or not (root/'FitdLib/rendererBGFX.cpp').is_file():
     raise SystemExit('usage: patch_lakka_gles2.py PATCHED_FITD_SOURCE')
 # bgfx.cmake defaults to ESSL 300, which generates GLSL 3 vertex 'in'/
@@ -12,13 +13,20 @@ if not root or not (root/'FitdLib/rendererBGFX.cpp').is_file():
 shaderc_cmake=root/'ThirdParty/bgfx.cmake/cmake/bgfxToolUtils.cmake'
 cm=shaderc_cmake.read_text()
 profile_anchor='set(PROFILES 120 300_es spirv)'
-assert cm.count(profile_anchor)==1, 'bgfx shader profile list changed'
+if cm.count(profile_anchor) == 0 and cm.count('set(PROFILES 120 100_es spirv)') == 1:
+    print('[LAKKA-GLES2] shaderc profile already set to 100_es')
+    if profile_only:
+        sys.exit(0)
+else:
+    assert cm.count(profile_anchor)==1, 'bgfx shader profile list changed'
 cm=cm.replace(profile_anchor,'set(PROFILES 120 100_es spirv)',1)
 for anchor_profile in ('string(REPLACE 300_es essl PROFILE ${PROFILE})',):
     assert cm.count(anchor_profile)==2, 'bgfx ESSL output mappings changed'
     cm=cm.replace(anchor_profile,'string(REPLACE 100_es essl PROFILE ${PROFILE})')
 shaderc_cmake.write_text(cm)
 print('[LAKKA-GLES2] shaderc profile 100_es -> embedded /essl/ headers')
+if profile_only:
+    sys.exit(0)
 osys=root/'FitdLib/osystemSDL.cpp'
 s=osys.read_text()
 old='SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);'
