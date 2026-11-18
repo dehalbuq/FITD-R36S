@@ -13,6 +13,7 @@ if [ "${FITD_RESUME_LINK:-0}" = "1" ]; then
     [ -f work-lakka/build/build.ninja ] || { echo "Existing Ninja build missing" >&2; exit 22; }
     echo "[RESUME] Preserve all ARMHF build outputs; fix and relink only"
     python3 lakka/patch_hqr_reset_body.py "$SRC"
+python3 lakka/patch_lakka_fps.py "$SRC"
 if [ "${FITD_RESUME_SHADERS:-0}" = "1" ]; then
     echo "[RESUME] Change BGFX embedded shaders to GLSL ES 1.00; preserve object cache"
     python3 lakka/patch_lakka_gles2.py "$SRC" --profile-only
