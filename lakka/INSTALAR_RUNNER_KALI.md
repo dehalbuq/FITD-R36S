@@ -107,3 +107,23 @@ elevadas dentro da VM, por isso a instância deve ser dedicada à compilação.
 
 O Lakka/TV Box não é alterado pelo registro deste runner.
 O FITD ainda precisa compilar e passar no teste real no RK3229.
+
+## Corrigir erro final de link HQR_Reset<sBody> sem recompilar 945 etapas
+
+Se a compilação anterior avançou até \u0060[945/945] Linking CXX executable Fitd/Fitd\u0060,
+rode no mesmo checkout Kali (sem apagar a pasta work-lakka):
+
+    cd ~/FITD-LAKKA
+    git pull --ff-only origin experimental/lakka-rk322x-gles2
+    sudo bash lakka/run_kali_build.sh --resume
+
+Use o mesmo usuário/permissão utilizado na compilação anterior. Se o build
+foi feito sem sudo e seu usuário já acessa Docker, omita sudo.
+
+O modo --resume preserva o diretório Ninja anterior, injeta a instanciação
+explícita HQR_Reset<sBody> faltante no hqr.cpp, recompila esse arquivo e
+refaz o link e a criação do ZIP. Não baixa nem recompila todas as bibliotecas.
+Se o cache anterior foi apagado, execute o build completo sem --resume.
+
+O aviso BGFX_CONFIG_MULTITHREADED macro redefined é não-fatal e não causou
+o erro de link; não estamos alterando as flags que poderiam invalidar o cache.
