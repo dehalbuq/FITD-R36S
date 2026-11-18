@@ -55,6 +55,7 @@ docker run --rm --platform linux/arm/v7 \
   -e FITD_COMPILER_LAUNCHER=ccache \
   -e FITD_KEEP_SOURCE=1 \
   -e FITD_RESUME_LINK="$RESUME" \
+  -e FITD_RESUME_SHADERS="$RESUME" \
   -e FITD_BUILD_JOBS="$JOBS" \
   -w /workspace \
   fitd-lakka-armhf-bullseye:1 bash lakka/build_lakka_armhf.sh
