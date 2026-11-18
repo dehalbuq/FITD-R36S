@@ -761,7 +761,7 @@ replace_one("FitdLib/bgfxGlue.cpp",
     const char* r36sFps = SDL_getenv("FITD_FPS_LIMIT");
     if (r36sFps) {
         int value = SDL_atoi(r36sFps);
-        if (value >= 20 && value <= 35) gFrameLimit = value;
+        if (value >= 20 && value <= 120) gFrameLimit = value;
     }
     fprintf(stderr, "[FITD-R36S] FPS limit=%d\\n", gFrameLimit);''')
 print("R36S controls/options, quiet GPU diagnostics and optional FPS mode installed")
