@@ -127,3 +127,15 @@ Se o cache anterior foi apagado, execute o build completo sem --resume.
 
 O aviso BGFX_CONFIG_MULTITHREADED macro redefined é não-fatal e não causou
 o erro de link; não estamos alterando as flags que poderiam invalidar o cache.
+
+## Regra permanente para instalar executáveis no Lakka
+
+O usuário confirmou que, no Lakka RK322x, **todo arquivo que deverá ser executado** precisa ter permissão de execução após ser copiado para o dispositivo. Isso inclui scripts `.sh` e binários ARMHF.
+
+Após instalar ou atualizar os arquivos de Ports, verificar e aplicar:
+
+    chmod 755 /storage/roms/ports/FITD-LAKKA.sh
+    chmod 755 /storage/roms/ports/fitd-lakka/fitd.armhf
+    chmod 755 /storage/roms/ports/fitd-lakka/diagnostico_lakka.sh
+
+Ajustar os caminhos aos diretórios reais do Lakka. Não aplicar permissão executável indiscriminadamente a ROMs, `.PAK`, logs, imagens, ou dados. Confirmar também que a partição não está montada com `noexec`, caso o erro persista. Incluir esse passo por padrão em futuros scripts de instalação de ports para o Lakka.
