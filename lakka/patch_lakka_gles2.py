@@ -6,6 +6,19 @@ import sys
 root=Path(sys.argv[1]).resolve() if len(sys.argv)==2 else None
 if not root or not (root/'FitdLib/rendererBGFX.cpp').is_file():
     raise SystemExit('usage: patch_lakka_gles2.py PATCHED_FITD_SOURCE')
+# bgfx.cmake defaults to ESSL 300, which generates GLSL 3 vertex 'in'/
+# fragment 'out' qualifiers. Mali-400 GLES2 requires ESSL 100 instead.
+# Keep output path /essl/ and C symbol *_essl to match embeddedShaders.cpp.
+shaderc_cmake=root/'ThirdParty/bgfx.cmake/cmake/bgfxToolUtils.cmake'
+cm=shaderc_cmake.read_text()
+profile_anchor='set(PROFILES 120 300_es spirv)'
+assert cm.count(profile_anchor)==1, 'bgfx shader profile list changed'
+cm=cm.replace(profile_anchor,'set(PROFILES 120 100_es spirv)',1)
+for anchor_profile in ('string(REPLACE 300_es essl PROFILE ${PROFILE})',):
+    assert cm.count(anchor_profile)==2, 'bgfx ESSL output mappings changed'
+    cm=cm.replace(anchor_profile,'string(REPLACE 100_es essl PROFILE ${PROFILE})')
+shaderc_cmake.write_text(cm)
+print('[LAKKA-GLES2] shaderc profile 100_es -> embedded /essl/ headers')
 osys=root/'FitdLib/osystemSDL.cpp'
 s=osys.read_text()
 old='SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);'
