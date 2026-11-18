@@ -19,10 +19,13 @@ if cm.count(profile_anchor) == 0 and cm.count('set(PROFILES 120 100_es spirv)') 
         sys.exit(0)
 else:
     assert cm.count(profile_anchor)==1, 'bgfx shader profile list changed'
-cm=cm.replace(profile_anchor,'set(PROFILES 120 100_es spirv)',1)
+if cm.count(profile_anchor) == 1:
+    cm=cm.replace(profile_anchor,'set(PROFILES 120 100_es spirv)',1)
 for anchor_profile in ('string(REPLACE 300_es essl PROFILE ${PROFILE})',):
-    assert cm.count(anchor_profile)==2, 'bgfx ESSL output mappings changed'
-    cm=cm.replace(anchor_profile,'string(REPLACE 100_es essl PROFILE ${PROFILE})')
+    if cm.count(anchor_profile) == 2:
+        cm=cm.replace(anchor_profile,'string(REPLACE 100_es essl PROFILE ${PROFILE})')
+    else:
+        assert cm.count('string(REPLACE 100_es essl PROFILE ${PROFILE})') == 2, 'bgfx ESSL output mappings changed'
 shaderc_cmake.write_text(cm)
 print('[LAKKA-GLES2] shaderc profile 100_es -> embedded /essl/ headers')
 if profile_only:
