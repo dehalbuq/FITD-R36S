@@ -6,6 +6,14 @@ cd "$(dirname "$0")/.."
 command -v clang++-11 >/dev/null
 export CC=clang-11 CXX=clang++-11
 mkdir -p work-lakka
+# Rapidly resume the previous 944/945 successful ARMHF build without CMake reconfigure.
+if [ "${FITD_RESUME_LINK:-0}" = "1" ]; then
+    SRC=work-lakka/source
+    [ -f "$SRC/FitdLib/hqr.cpp" ] || { echo "Existing FITD source missing" >&2; exit 21; }
+    [ -f work-lakka/build/build.ninja ] || { echo "Existing Ninja build missing" >&2; exit 22; }
+    echo "[RESUME] Preserve all ARMHF build outputs; fix and relink only"
+    python3 lakka/patch_hqr_reset_body.py "$SRC"
+else
 UPSTREAM_SHA=543e22bc78b64405537ae545ecd382dcdf2c12b2
 if [ "${FITD_KEEP_SOURCE:-0}" = "1" ] && [ -d work-lakka/source/.git ]; then
     echo "[CACHE] Reusing pinned FITD checkout and submodules"
@@ -18,7 +26,8 @@ else
     git -C work-lakka/source checkout --detach "$UPSTREAM_SHA"
 fi
 git -C work-lakka/source submodule update --init --recursive
-rm -rf work-lakka/build work-lakka/stage
+# Keep existing CMake/Ninja outputs for incremental builds (ccache remains enabled).
+rm -rf work-lakka/stage
 SRC=work-lakka/source
 for patch in patch_upstream.py patch_debug_audio_crash.py patch_library_room_crash.py patch_throw_null_body.py patch_orb_enemy_effects.py patch_worm_camera_orb_audio.py patch_hit_object_rehaunted.py patch_cellar_revolver.py patch_cellar_evalvar.py patch_rehaunted_mask_reptile.py patch_cellar_barrel_stuck.py patch_cellar_wall_recovery.py; do
     python3 "v2/$patch" "$SRC"
@@ -30,6 +39,7 @@ python3 v2/test_graphics_profile.py "$SRC"
 python3 v2/patch_startup_splash.py "$SRC"
 python3 v2/patch_cxx20_format_portmaster.py "$SRC"
 python3 v2/prepare_release_arm64.py "$SRC"
+python3 lakka/patch_hqr_reset_body.py "$SRC"
 python3 lakka/patch_lakka_gles2.py "$SRC"
 OPTS='-O2 -g0 -DNDEBUG -DFITD_R36S=1 -DFITD_R36S_RELEASE=1 -march=armv7-a -mfpu=neon -mfloat-abi=hard -fno-strict-aliasing -fwrapv -ffunction-sections -fdata-sections'
 cmake -S "$SRC" -B work-lakka/build -G Ninja \
@@ -41,6 +51,7 @@ cmake -S "$SRC" -B work-lakka/build -G Ninja \
   -DCMAKE_C_COMPILER_LAUNCHER="${FITD_COMPILER_LAUNCHER:-}" \
   -DCMAKE_CXX_COMPILER_LAUNCHER="${FITD_COMPILER_LAUNCHER:-}" \
   -DSDL_KMSDRM=ON -DSDL_SHARED=OFF -DSDL_STATIC=ON
+fi # FITD_RESUME_LINK / full rebuild
 case "${FITD_BUILD_JOBS:-2}" in ''|*[!0-9]*) echo "FITD_BUILD_JOBS must be a positive integer" >&2; exit 9;; esac
 echo "[BUILD] ARMHF workers: ${FITD_BUILD_JOBS:-2}  ccache: ${FITD_COMPILER_LAUNCHER:-off}"
 cmake --build work-lakka/build --target Fitd --parallel "${FITD_BUILD_JOBS:-2}"
