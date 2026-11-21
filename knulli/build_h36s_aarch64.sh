@@ -63,7 +63,9 @@ cmake --build "$BUILD" --target Fitd --parallel "${FITD_BUILD_JOBS:-2}"
 BIN="$(find "$BUILD" -type f -name Fitd -perm /111 -print -quit)"
 [ -n "$BIN" ] || { echo "[H36S] Executable missing"; exit 6; }
 file "$BIN" | grep -E 'ELF 64-bit.*ARM aarch64|ELF 64-bit.*ARM64'
-mkdir -p "$STAGE/fitd-h36s/data" "$STAGE/fitd-h36s/libs.aarch64"
+mkdir -p "$STAGE/fitd-h36s/data" "$STAGE/fitd-h36s/libs.aarch64" "$STAGE/fitd-h36s/licenses"
+cp "$SRC/LICENSE" "$STAGE/fitd-h36s/licenses/FITD-GPL.txt"
+cp "$WORK/handkit/LICENSE" "$STAGE/fitd-h36s/licenses/HANDKIT-MIT.txt"
 cp "$BIN" "$STAGE/fitd-h36s/fitd.aarch64"
 strip --strip-unneeded "$STAGE/fitd-h36s/fitd.aarch64"
 ! readelf -SW "$STAGE/fitd-h36s/fitd.aarch64" | grep -q '\.debug_'
