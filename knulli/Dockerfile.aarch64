@@ -1,0 +1,8 @@
+# H36S A133P / PowerVR GE8300. ARM64 native executable built on Kali x86-64 via QEMU.
+FROM debian:bullseye
+WORKDIR /workspace
+COPY lakka/container_build.sh /tmp/fitd-dependencies.sh
+COPY lakka/gen_font_buster.py /workspace/lakka/gen_font_buster.py
+RUN FITD_DEPS_ONLY=1 bash /tmp/fitd-dependencies.sh
+ENV CCACHE_COMPILERCHECK=content CCACHE_BASEDIR=/workspace CCACHE_DIR=/ccache
+CMD ["bash","knulli/build_h36s_aarch64.sh"]
